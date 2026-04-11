@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Texas Event REI Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --panel:#ffffff;
+      --line:#dfe5ef;
+      --text:#0f172a;
+      --muted:#5f7189;
+      --accent:#0f766e;
+      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --radius:20px;
+      --blue:#1d4ed8;
+      --selected:#f97316;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size:40px;
+    }
+    .app{
+      display:grid;
+      grid-template-columns:minmax(460px,1fr) minmax(900px,3fr) minmax(460px,1fr);
+      gap:16px;
+      min-height:100vh;
+      padding:16px;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      max-height:calc(100vh - 32px);
+      display:flex;
+      flex-direction:column;
+    }
+    .left-panel,.right-panel{overflow-y:auto}
+    .left-panel::-webkit-scrollbar,
+    .right-panel::-webkit-scrollbar,
+    .card-list::-webkit-scrollbar{width:10px}
+    .left-panel::-webkit-scrollbar-thumb,
+    .right-panel::-webkit-scrollbar-thumb,
+    .card-list::-webkit-scrollbar-thumb{background:#c9d4e3;border-radius:999px}
+    .left-panel::-webkit-scrollbar-track,
+    .right-panel::-webkit-scrollbar-track,
+    .card-list::-webkit-scrollbar-track{background:#f8fafc;border-radius:999px}
+    .section{padding:28px 28px 0 28px}
+    .section:last-child{padding-bottom:28px}
+    .topbar{
+      padding:30px 28px 26px 28px;
+      background:linear-gradient(135deg,#0f172a 0%, #1f2f4a 62%, #334155 100%);
+      color:white;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .title{
+      font-size:104px;
+      font-weight:800;
+      letter-spacing:-.03em;
+      line-height:1.02;
+      margin:0;
+    }
+    .subtitle{
+      margin:14px 0 0 0;
+      font-size:52px;
+      line-height:1.6;
+      color:rgba(255,255,255,.84);
+    }
+    .chips{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      margin-top:22px;
+    }
+    .chip{
+      background:rgba(255,255,255,.11);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:22px;
+      padding:20px;
+    }
+    .chip-label{
+      font-size:44px;
+      line-height:1.35;
+      color:rgba(255,255,255,.78);
+    }
+    .chip-value{
+      margin-top:8px;
+      font-size:76px;
+      font-weight:800;
+      letter-spacing:-.02em;
+    }
+    .side-title{
+      font-size:68px;
+      font-weight:800;
+      letter-spacing:-.02em;
+      margin:0 0 14px 0;
+    }
+    .field{margin-bottom:20px}
+    .field label{
+      display:block;
+      font-size:44px;
+      font-weight:700;
+      margin-bottom:8px;
+    }
+    .field input,.field select{
+      width:100%;
+      padding:18px 18px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      color:var(--text);
+      font-size:52px;
+    }
+    .grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+    .inline{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+      font-size:40px;
+      line-height:1.45;
+    }
+    .toggle{
+      appearance:none;
+      width:74px;
+      height:42px;
+      background:#cbd5e1;
+      border-radius:999px;
+      position:relative;
+      cursor:pointer;
+      border:none;
+      outline:none;
+      transition:background .2s ease;
+      flex:0 0 auto;
+    }
+    .toggle::after{
+      content:"";
+      width:32px;
+      height:32px;
+      background:white;
+      border-radius:999px;
+      position:absolute;
+      top:5px;
+      left:5px;
+      transition:transform .2s ease;
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+    }
+    .toggle:checked{background:#14b8a6}
+    .toggle:checked::after{transform:translateX(32px)}
+    .divider{height:1px;background:var(--line);margin:24px 0}
+    .range-value,.small{
+      font-size:40px;
+      line-height:1.55;
+      color:var(--muted);
+      margin-top:8px;
+    }
+    .btn{
+      width:100%;
+      border:none;
+      border-radius:20px;
+      background:var(--accent);
+      color:white;
+      padding:18px 20px;
+      font-size:56px;
+      font-weight:800;
+      cursor:pointer;
+      margin-top:8px;
+    }
+    .btn:hover{background:#115e59}
+    .help{
+      border:1px solid #bfdbfe;
+      background:#eff6ff;
+      border-radius:20px;
+      padding:18px;
+      font-size:40px;
+      line-height:1.65;
+    }
+    .help b{display:block;margin-bottom:4px}
+    .map-wrap{
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+    }
+    .map-toolbar{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .pill{
+      border:1px solid var(--line);
+      background:#fff;
+      color:var(--text);
+      border-radius:999px;
+      padding:12px 18px;
+      font-size:40px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .pill.active{
+      background:#0f172a;
+      color:white;
+      border-color:#0f172a;
+    }
+    #map{
+      width:100%;
+      height:calc(100vh - 32px);
+      min-height:760px;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .legend{
+      background:rgba(255,255,255,.97);
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:18px;
+      min-width:340px;
+      box-shadow:0 10px 24px rgba(15,23,42,.1);
+    }
+    .legend-title{
+      font-size:44px;
+      font-weight:800;
+      margin-bottom:6px;
+    }
+    .legend-desc{
+      font-size:32px;
+      color:var(--muted);
+      line-height:1.45;
+      margin-bottom:10px;
+    }
+    .legend-scale{
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:6px;
+      align-items:end;
+    }
+    .legend-box{height:18px;border-radius:10px}
+    .legend-lab{margin-top:8px;font-size:30px;text-align:center;color:var(--muted)}
+    .muted{
+      color:var(--muted);
+      font-size:42px;
+      line-height:1.55;
+    }
+    .detail-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    .detail-box{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:18px;
+    }
+    .detail-box .k{
+      font-size:36px;
+      color:var(--muted);
+    }
+    .detail-box .v{
+      font-size:68px;
+      font-weight:800;
+      margin-top:4px;
+      letter-spacing:-.02em;
+    }
+    .note-list{
+      margin:0;
+      padding-left:28px;
+    }
+    .note-list li{
+      margin-bottom:14px;
+      color:var(--text);
+      line-height:1.6;
+      font-size:38px; /* Slightly smaller for a denser dictionary list */
+    }
+    .note-list b {
+      color: var(--accent); /* Give the field names a subtle accent color */
+    }
+    .card-list{
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      max-height:46vh;
+      overflow-y:auto;
+      padding-right:4px;
+    }
+    .hotspot{
+      border:1px solid var(--line);
+      border-radius:22px;
+      padding:18px;
+      background:white;
+      cursor:pointer;
+      transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .hotspot:hover{
+      transform:translateY(-1px);
+      box-shadow:0 8px 20px rgba(15,23,42,.08);
+      border-color:#cbd5e1;
+    }
+    .hotspot.active{
+      border-color:#fb923c;
+      box-shadow:0 0 0 3px rgba(249,115,22,.14);
+      background:#fff7ed;
+    }
+    .hotspot-top{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+    }
+    .hotspot-title{
+      font-size:40px;
+      font-weight:800;
+      color:var(--text);
+    }
+    .tag{
+      font-size:36px;
+      background:#f1f5f9;
+      color:#334155;
+      border-radius:999px;
+      padding:6px 10px;
+      white-space:nowrap;
+    }
+    .sticky-help{
+      position:sticky;
+      top:0;
+      z-index:10;
+      background:linear-gradient(180deg, rgba(255,255,255,1) 84%, rgba(255,255,255,.92) 100%);
+      padding-top:2px;
+    }
+
+    @media (max-width:1600px){
+      .app{grid-template-columns:400px minmax(760px,3fr) 400px}
+      #map{min-height:720px}
+    }
+    @media (max-width:1280px){
+      .app{grid-template-columns:1fr}
+      .right-panel{grid-column:1 / -1;max-height:none}
+      .left-panel{max-height:none}
+      #map{height:62vh;min-height:620px}
+    }
+    @media (max-width:860px){
+      .app{grid-template-columns:1fr}
+      .left-panel,.right-panel{max-height:none}
+      #map{height:56vh;min-height:500px}
+      .title{font-size:72px}
+      .subtitle{font-size:40px}
+      .field input,.field select{font-size:44px}
+      .note-list li{font-size:36px}
+      .muted{font-size:36px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="panel left-panel">
+      <div class="topbar">
+        <h1 class="title">SPTC</h1>
+        
+        <div class="chips">
+          <div class="chip"><div class="chip-label">Sections loaded</div><div class="chip-value" id="chipCount">-</div></div>
+          <div class="chip"><div class="chip-label">Mean EVENT_REI</div><div class="chip-value" id="chipMean">-</div></div>
+          <div class="chip"><div class="chip-label">Max EVENT_REI</div><div class="chip-value" id="chipMax">-</div></div>
+          <div class="chip"><div class="chip-label">Top threshold</div><div class="chip-value" id="chipTop">10%</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="side-title">Scenario controls</h2>
+
+        <div class="field">
+          <label for="hazardType">Hazard type</label>
+          <select id="hazardType">
+            <option value="cold_wave" selected>Cold wave</option>
+            <option value="heavy_rain">Heavy rain</option>
+            <option value="extreme_heat">Extreme heat</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="region">Region</label>
+          <select id="region">
+            <option value="texas" selected>Texas</option>
+            <option value="east_texas">East Texas</option>
+            <option value="statewide_hotspots">Statewide hotspots</option>
+          </select>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="startDate">Start date</label>
+            <input id="startDate" type="date" value="2026-01-22" />
+          </div>
+          <div class="field">
+            <label for="endDate">End date</label>
+            <input id="endDate" type="date" value="2026-01-27" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="mapLayer">Primary layer</label>
+          <select id="mapLayer">
+            <option value="EVENT_REI" selected>Final EVENT_REI</option>
+            <option value="WEATHER_REI">Tier 1 · WEATHER_REI</option>
+            <option value="NETRISK_LITE">Tier 2-lite · NETRISK_LITE</option>
+            <option value="CONSEQ_LITE">Tier 2-lite · CONSEQ_LITE</option>
+            <option value="REDUND_LITE">Tier 2-lite · REDUND_LITE</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="basemap">Basemap</label>
+          <select id="basemap">
+            <option value="carto_light" selected>Carto Light</option>
+            <option value="carto_dark">Carto Dark</option>
+            <option value="osm">OpenStreetMap</option>
+            <option value="terrain">Topo</option>
+          </select>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="inline">
+          <span>Show metric dictionary</span>
+          <input id="toggleGlossary" type="checkbox" class="toggle" checked />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="field">
+          <label for="topPct">Priority threshold</label>
+          <input id="topPct" type="range" min="5" max="30" step="5" value="10" style="width:100%;" />
+          <div class="range-value">Top <span id="topPctLabel">10</span>% highest EVENT_REI sections</div>
+          <div class="small">This threshold controls both the hotspot list and map highlighting. Segments above the cutoff stay vivid; the rest are dimmed for context.</div>
+        </div>
+
+        <button class="btn" id="runBtn">Run demo scenario</button>
+
+        <div class="divider"></div>
+        
+      </div>
+    </div>
+
+    <div class="map-wrap">
+      <div class="map-toolbar">
+        <button class="pill active" data-layer="EVENT_REI">Final REI</button>
+        <button class="pill" data-layer="WEATHER_REI">Tier 1</button>
+        <button class="pill" data-layer="NETRISK_LITE">Tier 2</button>
+        <button class="pill" data-layer="CONSEQ_LITE">Consequence</button>
+        <button class="pill" data-layer="REDUND_LITE">Redundancy</button>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="panel right-panel">
+      <div class="section sticky-help">
+        <h2 class="side-title">Selected segment</h2>
+        
+        <div id="selectedPanel" style="display:none;">
+          <div style="font-size:72px;font-weight:800;letter-spacing:-.02em;" id="selRoute">-</div>
+          <div class="muted" id="selId">-</div>
+          <div class="divider"></div>
+          <div class="detail-grid">
+            <div class="detail-box"><div class="k">EVENT_REI</div><div class="v" id="selEvent">-</div></div>
+            <div class="detail-box"><div class="k">AADT</div><div class="v" id="selAadt">-</div></div>
+            <div class="detail-box"><div class="k">WEATHER_REI</div><div class="v" id="selWeather">-</div></div>
+            <div class="detail-box"><div class="k">NETRISK_LITE</div><div class="v" id="selNet">-</div></div>
+            <div class="detail-box"><div class="k">CONSEQ_LITE</div><div class="v" id="selConseq">-</div></div>
+            <div class="detail-box"><div class="k">REDUND_LITE</div><div class="v" id="selRedund">-</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" id="glossarySection">
+        <h2 class="side-title">Metric dictionary</h2>
+        <ul class="note-list">
+          <li><b>EVENT_REI:</b> Event-specific screening score for the selected hazard-window.</li>
+          <li><b>AADT:</b> Annual Average Daily Traffic.</li>
+          <li><b>WEATHER_REI:</b> Weather-driven exposure score adjusted by surface type.</li>
+          <li><b>NETRISK_LITE:</b> Traffic-weighted network risk (consequence + redundancy).</li>
+          <li><b>CONSEQ_LITE:</b> Local structural importance and traffic consequence proxy.</li>
+          <li><b>REDUND_LITE:</b> Availability of alternative routes in a 1 km neighborhood.</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2 class="side-title">Top hotspots</h2>
+        <div class="small" style="margin-bottom:12px;">These are the highest-scoring road sections under the current EVENT_REI ranking. Clicking a row immediately zooms to the segment and highlights it on the map.</div>
+        <div id="hotspotList" class="card-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const layerMeta = {
+      EVENT_REI: { label: "Final EVENT_REI", desc: "Event-specific screening score for the selected hazard-window.", colors: ["#440154","#3b528b","#21918c","#5ec962","#fde725"] },
+      WEATHER_REI: { label: "Tier 1 · WEATHER_REI", desc: "Weather-driven exposure adjusted by surface type.", colors: ["#440154","#3b528b","#21918c","#5ec962","#fde725"] },
+      NETRISK_LITE: { label: "Tier 2-lite · NETRISK_LITE", desc: "Traffic-weighted structural importance plus local redundancy.", colors: ["#440154","#3b528b","#21918c","#5ec962","#fde725"] },
+      CONSEQ_LITE: { label: "Tier 2-lite · CONSEQ_LITE", desc: "Local structural consequence proxy.", colors: ["#440154","#3b528b","#21918c","#5ec962","#fde725"] },
+      REDUND_LITE: { label: "Tier 2-lite · REDUND_LITE", desc: "Local alternative-route availability.", colors: ["#440154","#3b528b","#21918c","#5ec962","#fde725"] }
+    };
+
+    const basemaps = {
+      carto_light: { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+      carto_dark: { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+      osm: { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+      terrain: { url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenTopoMap contributors" }
+    };
+
+    let map;
+    let currentBaseLayer;
+    let geojsonLayer;
+    let geojsonData = null;
+    let hotspotRows = [];
+    let currentField = "EVENT_REI";
+    let currentCutoff = null;
+    let selectedCtrlSect = null;
+    let layerIndex = {};
+
+    function normalizeId(value) {
+      if (value === null || value === undefined) return "";
+      let s = String(value).trim().replace(/^["']|["']$/g, "");
+      if (/^-?\d+(\.0+)?$/.test(s)) {
+        s = String(parseInt(Number(s), 10));
+      }
+      return s;
+    }
+
+    function initMap() {
+      map = L.map("map", { zoomControl: true }).setView([31.0, -99.2], 6);
+      setBasemap("carto_light");
+
+      const legend = L.control({ position: "bottomleft" });
+      legend.onAdd = function() {
+        const div = L.DomUtil.create("div", "legend");
+        div.id = "legendBox";
+        updateLegend();
+        return div;
+      };
+      legend.addTo(map);
+    }
+
+    function setBasemap(key) {
+      if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+      const bm = basemaps[key];
+      currentBaseLayer = L.tileLayer(bm.url, { attribution: bm.attribution, maxZoom: 18 });
+      currentBaseLayer.addTo(map);
+    }
+
+    function getColor(value, colors) {
+      if (value === null || value === undefined || isNaN(value)) return "#94a3b8";
+      if (value <= 0.2) return colors[0];
+      if (value <= 0.4) return colors[1];
+      if (value <= 0.6) return colors[2];
+      if (value <= 0.8) return colors[3];
+      return colors[4];
+    }
+
+    function computeCutoff() {
+      if (!geojsonData) return null;
+      const values = geojsonData.features
+        .map(f => Number(f.properties.EVENT_REI))
+        .filter(v => !isNaN(v))
+        .sort((a, b) => b - a);
+
+      if (!values.length) return null;
+
+      const topPct = Number(document.getElementById("topPct").value);
+      const topN = Math.max(1, Math.round((topPct / 100) * values.length));
+      currentCutoff = values[Math.min(topN - 1, values.length - 1)];
+      return currentCutoff;
+    }
+
+    function isAboveThreshold(props) {
+      if (currentCutoff === null) return true;
+      const v = Number(props.EVENT_REI);
+      return !isNaN(v) && v >= currentCutoff;
+    }
+
+    function styleFeature(feature) {
+      const props = feature.properties || {};
+      const val = Number(props[currentField]);
+      const baseColor = getColor(val, layerMeta[currentField].colors);
+      const isTop = isAboveThreshold(props);
+      const isSelected = String(props.CTRL_SECT_) === String(selectedCtrlSect);
+
+      if (isSelected) {
+        return {
+          color: "#ef4444",
+          weight: 12,
+          opacity: 1
+        };
+      }
+
+      return {
+        color: baseColor,
+        weight: isTop ? (currentField === "EVENT_REI" ? 5.5 : 4.8) : 2.2,
+        opacity: isTop ? 0.95 : 0.18
+      };
+    }
+
+    function updateLegend() {
+      const meta = layerMeta[currentField];
+      const box = document.getElementById("legendBox");
+      if (!box) return;
+
+      box.innerHTML = `
+        <div class="legend-title">${meta.label}</div>
+        <div class="legend-desc">${meta.desc}</div>
+        <div class="legend-scale">
+          ${meta.colors.map((c, i) => `
+            <div>
+              <div class="legend-box" style="background:${c}"></div>
+              <div class="legend-lab">${["0-0.2","0.2-0.4","0.4-0.6","0.6-0.8","0.8-1.0"][i]}</div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function formatNum(x, digits = 2) {
+      if (x === null || x === undefined || x === "") return "-";
+      const n = Number(x);
+      if (isNaN(n)) return String(x);
+      return n.toFixed(digits);
+    }
+
+    function formatInt(x) {
+      if (x === null || x === undefined || x === "") return "-";
+      const n = Number(x);
+      if (isNaN(n)) return String(x);
+      return Math.round(n).toLocaleString();
+    }
+
+    function selectFeature(props) {
+      selectedCtrlSect = normalizeId(props.CTRL_SECT_);
+      
+      const panel = document.getElementById("selectedPanel");
+      if (panel) panel.style.display = "block";
+
+      document.getElementById("selRoute").textContent = props.ROUTE_KEY || props.RTE_NM || "Unnamed segment";
+      document.getElementById("selId").textContent = `CTRL_SECT_: ${props.CTRL_SECT_ ?? "-"}`;
+      document.getElementById("selEvent").textContent = formatNum(props.EVENT_REI);
+      document.getElementById("selAadt").textContent = formatInt(props.AADT_CS);
+      document.getElementById("selWeather").textContent = formatNum(props.WEATHER_REI);
+      document.getElementById("selNet").textContent = formatNum(props.NETRISK_LITE);
+      document.getElementById("selConseq").textContent = formatNum(props.CONSEQ_LITE);
+      document.getElementById("selRedund").textContent = formatNum(props.REDUND_LITE);
+      
+      setActiveHotspot(selectedCtrlSect);
+      redrawStyles();
+    }
+
+    function setActiveHotspot(ctrlSect) {
+      document.querySelectorAll(".hotspot").forEach(card => {
+        card.classList.toggle("active", normalizeId(card.dataset.ctrl) === normalizeId(ctrlSect));
+      });
+    }
+
+    function openByCtrlSect(ctrlSect, shouldFit = true) {
+      const key = normalizeId(ctrlSect);
+
+      if (normalizeId(selectedCtrlSect) === key) {
+        selectedCtrlSect = null;
+        const panel = document.getElementById("selectedPanel");
+        if (panel) panel.style.display = "none";
+        
+        document.querySelectorAll(".hotspot").forEach(card => card.classList.remove("active"));
+        redrawStyles();
+        return;
+      }
+
+      let layer = layerIndex[key];
+
+      if (!layer && geojsonLayer) {
+        geojsonLayer.eachLayer(l => {
+          if (!layer && l.feature && normalizeId(l.feature.properties.CTRL_SECT_) === key) {
+            layer = l;
+          }
+        });
+      }
+
+      if (!layer) {
+        console.warn("Hotspot click failed: CTRL_SECT_ not found in GeoJSON.", ctrlSect);
+        alert(`Hotspot link failed: CTRL_SECT_ ${ctrlSect} was not found in the map layer.`);
+        return;
+      }
+
+      const props = layer.feature.properties;
+      selectFeature(props);
+
+      setTimeout(() => {
+        try {
+          redrawStyles();
+          if (layer.bringToFront) layer.bringToFront();
+          if (layer.openPopup) layer.openPopup();
+        } catch (e) {}
+      }, 50);
+
+      if (shouldFit) {
+        try {
+          if (map.stop) map.stop();
+          map.invalidateSize(true);
+
+          if (layer.getBounds) {
+            const bounds = layer.getBounds();
+            if (bounds && bounds.isValid && bounds.isValid()) {
+              console.log("Zooming to CTRL_SECT_:", key);
+              map.flyToBounds(bounds, {
+                padding: [80, 80],
+                maxZoom: 13,
+                duration: 1.2
+              });
+            }
+          } else if (layer.getLatLng) {
+            map.flyTo(layer.getLatLng(), 13, { duration: 1.2 });
+          }
+        } catch (e) {
+          console.warn("Zoom-to-hotspot failed:", e);
+        }
+      }
+    }
+
+    function redrawStyles() {
+      if (!geojsonLayer) return;
+
+      geojsonLayer.eachLayer(layer => {
+        if (layer.setStyle && layer.feature) {
+          layer.setStyle(styleFeature(layer.feature));
+        }
+      });
+
+      if (selectedCtrlSect && layerIndex[normalizeId(selectedCtrlSect)]) {
+        const selectedLayer = layerIndex[normalizeId(selectedCtrlSect)];
+        if (selectedLayer && selectedLayer.bringToFront) {
+          selectedLayer.bringToFront();
+        }
+      }
+    }
+
+    function drawGeoJSON() {
+      if (!geojsonData) return;
+      computeCutoff();
+
+      if (geojsonLayer) map.removeLayer(geojsonLayer);
+      layerIndex = {};
+
+      geojsonLayer = L.geoJSON(geojsonData, {
+        style: styleFeature,
+        onEachFeature: function(feature, layer) {
+          const p = feature.properties || {};
+          const route = p.ROUTE_KEY || p.RTE_NM || "Unnamed segment";
+
+          if (p.CTRL_SECT_ !== undefined && p.CTRL_SECT_ !== null) {
+            layerIndex[normalizeId(p.CTRL_SECT_)] = layer;
+          }
+
+          const popup = `
+            <div style="font-size:26px;line-height:1.5;">
+              <b>${route}</b><br/>
+              CTRL_SECT_: ${p.CTRL_SECT_ ?? "-"}<br/>
+              EVENT_REI: ${formatNum(p.EVENT_REI)}<br/>
+              WEATHER_REI: ${formatNum(p.WEATHER_REI)}<br/>
+              NETRISK_LITE: ${formatNum(p.NETRISK_LITE)}<br/>
+              AADT: ${formatInt(p.AADT_CS)}
+            </div>
+          `;
+          layer.bindPopup(popup);
+
+          layer.on({
+            click: function() {
+              openByCtrlSect(normalizeId(p.CTRL_SECT_), false);
+            },
+            mouseover: function() {
+              if (String(p.CTRL_SECT_) !== String(selectedCtrlSect)) {
+                layer.setStyle({ weight: 7, opacity: 1 });
+              }
+            },
+            mouseout: function() {
+              redrawStyles();
+            }
+          });
+        }
+      }).addTo(map);
+
+      if (!selectedCtrlSect) {
+        try {
+          map.fitBounds(geojsonLayer.getBounds(), { padding: [24, 24] });
+        } catch (e) {}
+      } else {
+        openByCtrlSect(selectedCtrlSect, false);
+      }
+
+      updateLegend();
+    }
+
+    function updateLayer(field) {
+      currentField = field;
+      document.getElementById("mapLayer").value = field;
+      document.querySelectorAll(".pill").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.layer === field);
+      });
+      drawGeoJSON();
+    }
+
+    function updateStatsFromGeoJSON() {
+      if (!geojsonData) return;
+      const vals = geojsonData.features
+        .map(f => Number(f.properties.EVENT_REI))
+        .filter(v => !isNaN(v));
+
+      const count = vals.length;
+      const mean = vals.reduce((a, b) => a + b, 0) / count;
+      const max = Math.max(...vals);
+
+      document.getElementById("chipCount").textContent = count.toLocaleString();
+      document.getElementById("chipMean").textContent = mean.toFixed(2);
+      document.getElementById("chipMax").textContent = max.toFixed(2);
+    }
+
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (!lines.length) return [];
+      const headers = lines[0].split(",");
+      return lines.slice(1).map(line => {
+        const cells = line.split(",");
+        const row = {};
+        headers.forEach((h, i) => row[h] = cells[i]);
+        return row;
+      });
+    }
+
+    function renderHotspots() {
+      const list = document.getElementById("hotspotList");
+      const topPct = Number(document.getElementById("topPct").value);
+      document.getElementById("chipTop").textContent = `${topPct}%`;
+      document.getElementById("topPctLabel").textContent = `${topPct}`;
+
+      let rows = [];
+      if (geojsonData && geojsonData.features && geojsonData.features.length) {
+        rows = geojsonData.features
+          .map(f => f.properties || {})
+          .filter(p => !isNaN(Number(p.EVENT_REI)))
+          .sort((a, b) => Number(b.EVENT_REI) - Number(a.EVENT_REI));
+      } else {
+        rows = hotspotRows.slice();
+      }
+
+      if (currentCutoff !== null) {
+        rows = rows.filter(r => Number(r.EVENT_REI) >= currentCutoff);
+      }
+
+      if (!rows.length) {
+        list.innerHTML = `<div class="small">No hotspots available for the current threshold.</div>`;
+        return;
+      }
+
+      list.innerHTML = rows.map((r, idx) => `
+        <div class="hotspot ${normalizeId(r.CTRL_SECT_) === normalizeId(selectedCtrlSect) ? "active" : ""}" data-ctrl="${normalizeId(r.CTRL_SECT_)}">
+          <div class="hotspot-top">
+            <div class="hotspot-title">#${idx + 1} · ${r.ROUTE_KEY || r.RTE_NM || "-"}</div>
+            <div class="tag">REI ${formatNum(r.EVENT_REI)}</div>
+          </div>
+          <div class="muted" style="margin-top:6px;">CTRL_SECT_: ${r.CTRL_SECT_ || "-"}</div>
+          <div class="muted" style="margin-top:6px;">AADT ${formatInt(r.AADT_CS)}</div>
+        </div>
+      `).join("");
+
+      list.onclick = (ev) => {
+        const card = ev.target.closest(".hotspot");
+        if (!card) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const ctrl = normalizeId(card.dataset.ctrl);
+        openByCtrlSect(ctrl, true);
+      };
+    }
+
+    async function loadData() {
+      try {
+        const geoResp = await fetch("./event_rei_texas_demo.geojson");
+        if (!geoResp.ok) throw new Error("GeoJSON not found");
+        geojsonData = await geoResp.json();
+        updateStatsFromGeoJSON();
+        drawGeoJSON();
+        renderHotspots();
+      } catch (err) {
+        alert("Failed to load event_rei_texas_demo.geojson. Make sure it is in the same folder as this HTML file and run it through a local server.");
+        console.error(err);
+      }
+
+      try {
+        const csvResp = await fetch("./event_rei_top100.csv");
+        if (csvResp.ok) {
+          const txt = await csvResp.text();
+          hotspotRows = parseCSV(txt); 
+          computeCutoff();
+          renderHotspots();
+        }
+      } catch (err) {
+        console.warn("Hotspot CSV not loaded:", err);
+      }
+    }
+
+    function wireUI() {
+      document.getElementById("mapLayer").addEventListener("change", e => updateLayer(e.target.value));
+      document.querySelectorAll(".pill").forEach(btn => {
+        btn.addEventListener("click", () => updateLayer(btn.dataset.layer));
+      });
+
+      document.getElementById("basemap").addEventListener("change", e => setBasemap(e.target.value));
+
+      document.getElementById("topPct").addEventListener("input", e => {
+        document.getElementById("topPctLabel").textContent = e.target.value;
+        computeCutoff();
+        renderHotspots();
+        redrawStyles();
+      });
+
+      // 替换为新的字典面板开关
+      document.getElementById("toggleGlossary").addEventListener("change", e => {
+        document.getElementById("glossarySection").style.display = e.target.checked ? "block" : "none";
+      });
+
+      document.getElementById("runBtn").addEventListener("click", () => {
+        alert("This is a frontend prototype. The current demo reuses the same Texas event dataset and updates the display controls.");
+        computeCutoff();
+        renderHotspots();
+        drawGeoJSON();
+      });
+    }
+
+    initMap();
+    wireUI();
+    loadData();
+  </script>
+</body>
+</html>
