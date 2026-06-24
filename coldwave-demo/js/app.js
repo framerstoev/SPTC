@@ -5,6 +5,24 @@ const CURVE_STATUS_URL = "./data/curve_data_status.json";
 const scoreRamp = ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"];
 const timeRamp = ["#d9f0a3", "#78c679", "#41b6c4", "#2c7fb8", "#54278f"];
 
+const gapCategories = {
+  highHigh: "Consistently high resilience",
+  lowLow: "Consistently low resilience / priority concern",
+  observedBetter: "Observed better than potential / potential risk overestimated",
+  observedWorse: "Observed worse than potential / hidden vulnerability",
+  mixed: "Mixed / moderate agreement",
+  noSupport: "No observed support"
+};
+
+const gapCategoryColors = {
+  [gapCategories.highHigh]: "#2166ac",
+  [gapCategories.lowLow]: "#b2182b",
+  [gapCategories.observedBetter]: "#1a9850",
+  [gapCategories.observedWorse]: "#d73027",
+  [gapCategories.mixed]: "#fdae61",
+  [gapCategories.noSupport]: "#d1d5db"
+};
+
 const methodLabels = {
   Hybrid_potential_observed: "Hybrid: potential + observed",
   Potential_only: "Potential-only"
@@ -18,9 +36,10 @@ const evidenceLabels = {
 
 const layerConfig = {
   Cold_Wave_Resilience_Score: {
-    label: "Cold-Wave Resilience Score",
+    label: "Composite Resilience Score",
     type: "score",
-    description: "Higher = more resilient.",
+    description: "Higher = more resilient. Composite score combines Tier 1/2 potential resilience and Tier 3 observed performance when observed support is available.",
+    notes: ["Potential-only sections use Tier 1/2 potential resilience only."],
     ramp: scoreRamp,
     min: 0,
     max: 1
@@ -28,18 +47,23 @@ const layerConfig = {
   Potential_Resilience_Score: {
     label: "Potential Resilience Score",
     type: "score",
-    description: "Tier 1/2 potential resilience; higher = better.",
+    description: "Tier 1/2 potential resilience for all control sections. Higher = lower potential disruption risk / more resilient.",
     ramp: scoreRamp,
     min: 0,
     max: 1
   },
   Observed_Resilience_ImpactFocused: {
-    label: "Observed Resilience, Impact-focused",
+    label: "Observed Resilience Score",
     type: "score",
-    description: "Observed resistance, absorption, and recovery where NPMRDS support exists.",
+    description: "Tier 3 observed event/recovery performance where direct NPMRDS support exists. Gray = no observed support.",
     ramp: scoreRamp,
     min: 0,
     max: 1
+  },
+  Potential_Observed_Gap_Category: {
+    label: "Potential-Observed Gap Category",
+    type: "category",
+    colors: gapCategoryColors
   },
   Observed_Recovery_Capacity_Score_v2: {
     label: "Recovery Capacity Score",
@@ -87,10 +111,40 @@ function numberOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function firstNumber(props, candidates) {
+  for (const field of candidates) {
+    const n = numberOrNull(props[field]);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+function compositeScore(props) {
+  return firstNumber(props, ["Cold_Wave_Resilience_Score"]);
+}
+
+function potentialScore(props) {
+  return firstNumber(props, ["Potential_Resilience_Score"]);
+}
+
+function observedScore(props) {
+  return firstNumber(props, [
+    "Observed_Resilience_ImpactFocused",
+    "Observed_Resilience_Balanced",
+    "Observed_Resilience_RecoveryFocused"
+  ]);
+}
+
 function fmt(value, digits = 3) {
   const n = numberOrNull(value);
   if (n === null) return "-";
   return n.toFixed(digits);
+}
+
+function fmtSigned(value, digits = 3) {
+  const n = numberOrNull(value);
+  if (n === null) return "N/A";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
 }
 
 function fmtHours(value) {
@@ -113,6 +167,17 @@ function displayEvidence(value) {
   return evidenceLabels[value] || value || "-";
 }
 
+function displayGapCategory(value) {
+  return value || gapCategories.noSupport;
+}
+
+function displayLayerCategory(field, value) {
+  if (field === "Score_Evidence_Level") return displayEvidence(value);
+  if (field === "Cold_Wave_Resilience_Score_Method") return displayMethod(value);
+  if (field === "Potential_Observed_Gap_Category") return displayGapCategory(value);
+  return value || "-";
+}
+
 function displayCounty(props) {
   const raw = props.county_name ?? props.county ?? props.COUNTY ?? "Unknown";
   const text = String(raw || "Unknown").trim();
@@ -125,6 +190,31 @@ function hasObservedSupport(props) {
   return props.Observed_Data_Available === "Yes"
     && props.Cold_Wave_Resilience_Score_Method !== "Potential_only"
     && props.Score_Evidence_Level !== "C_potential_only_no_observed_support";
+}
+
+function categorizeGap(potential, observed) {
+  const gap = observed - potential;
+  if (potential >= 0.6 && observed >= 0.6) return gapCategories.highHigh;
+  if (potential < 0.4 && observed < 0.4) return gapCategories.lowLow;
+  if (gap >= 0.25) return gapCategories.observedBetter;
+  if (gap <= -0.25) return gapCategories.observedWorse;
+  return gapCategories.mixed;
+}
+
+function deriveGapFields() {
+  (geojsonData.features || []).forEach(feature => {
+    const props = feature.properties || {};
+    const potential = potentialScore(props);
+    const observed = observedScore(props);
+    if (hasObservedSupport(props) && potential !== null && observed !== null) {
+      const gap = observed - potential;
+      props.Potential_Observed_Gap = Number(gap.toFixed(6));
+      props.Potential_Observed_Gap_Category = categorizeGap(potential, observed);
+    } else {
+      props.Potential_Observed_Gap = null;
+      props.Potential_Observed_Gap_Category = gapCategories.noSupport;
+    }
+  });
 }
 
 function fmtObserved(props, field, digits = 3) {
@@ -210,6 +300,9 @@ function getFeatureColor(props) {
   if (cfg.type === "category") {
     return cfg.colors[props[activeLayer]] || "#cbd5e1";
   }
+  if ((activeLayer.startsWith("Observed_") || activeLayer.startsWith("Time_To_")) && !hasObservedSupport(props)) {
+    return "#cbd5e1";
+  }
   const value = numberOrNull(props[activeLayer]);
   if (value === null) return "#cbd5e1";
   const range = layerRanges[activeLayer] || { min: cfg.min ?? 0, max: cfg.max ?? 1 };
@@ -235,9 +328,9 @@ function updateLegend() {
     legend.innerHTML = `
       <div class="legend-title">${cfg.label}</div>
       ${Object.entries(cfg.colors).map(([label, color]) => `
-        <div class="legend-row"><span class="swatch" style="background:${color}"></span><span>${activeLayer === "Score_Evidence_Level" ? displayEvidence(label) : displayMethod(label)}</span></div>
+        <div class="legend-row"><span class="swatch" style="background:${color}"></span><span>${displayLayerCategory(activeLayer, label)}</span></div>
       `).join("")}
-      ${activeLayer === "Score_Evidence_Level" ? `<div class="legend-row">Potential-only does not mean low resilience.</div>` : ""}
+      ${activeLayer === "Score_Evidence_Level" || activeLayer === "Potential_Observed_Gap_Category" ? `<div class="legend-row">Potential-only does not mean low resilience.</div>` : ""}
     `;
     return;
   }
@@ -247,25 +340,28 @@ function updateLegend() {
     <div class="legend-row">${cfg.description || ""}</div>
     <div class="ramp" style="background:linear-gradient(to right, ${cfg.ramp.join(",")})"></div>
     <div class="ramp-labels"><span>${fmt(range.min, cfg.type === "time" ? 1 : 2)}</span><span>${fmt(range.max, cfg.type === "time" ? 1 : 2)}</span></div>
+    ${activeLayer === "Observed_Resilience_ImpactFocused" ? `<div class="legend-row"><span class="swatch" style="background:#cbd5e1"></span><span>No observed support</span></div>` : ""}
+    ${(cfg.notes || []).map(note => `<div class="legend-row">${note}</div>`).join("")}
   `;
 }
 
 function popupHtml(props) {
   const observed = hasObservedSupport(props);
   const note = observed && props.curve_file
-    ? "Observed curve is available in the side panel."
+    ? "Observed Q(t) curve is available in the side panel."
     : observed
       ? "Observed summary support is available; no hourly curve is available for this section."
-      : "No direct NPMRDS observed support. This section is scored using Tier 1/2 potential resilience only.";
+      : "No direct NPMRDS observed support.";
   const observedLine = observed
-    ? `<div>Observed Impact-focused: ${fmtObserved(props, "Observed_Resilience_ImpactFocused")}</div>`
+    ? `<div>Observed score: ${fmtObserved(props, "Observed_Resilience_ImpactFocused")}</div>
+      <div>Gap category: ${displayGapCategory(props.Potential_Observed_Gap_Category)}</div>`
     : "";
   return `
     <div>
       <div class="popup-title">${props.ROUTE_KEY || props.road || "Control section"}</div>
       <div>CTRL_SECT_: ${props.CTRL_SECT_ ?? "-"}</div>
       <div>County: ${displayCounty(props)}</div>
-      <div>Cold-Wave Score: ${fmt(props.Cold_Wave_Resilience_Score)}</div>
+      <div>Composite score: ${fmt(props.Cold_Wave_Resilience_Score)}</div>
       <div>Potential Resilience: ${fmt(props.Potential_Resilience_Score)}</div>
       ${observedLine}
       <div>Evidence: ${displayEvidence(props.Score_Evidence_Level)}</div>
@@ -309,19 +405,62 @@ function metricText(label, value, full = false) {
   return `<div class="metric ${full ? "full" : ""}"><span>${label}</span><strong>${value}</strong></div>`;
 }
 
+function gapInterpretation(category) {
+  if (category === gapCategories.observedBetter) {
+    return "Observed performance was better than Tier 1/2 potential score suggested. This may indicate overestimated potential risk for this event.";
+  }
+  if (category === gapCategories.observedWorse) {
+    return "Observed performance was worse than Tier 1/2 potential score suggested. This may indicate hidden vulnerability.";
+  }
+  if (category === gapCategories.highHigh) {
+    return "Potential and observed scores both indicate high resilience.";
+  }
+  if (category === gapCategories.lowLow) {
+    return "Potential and observed scores both indicate low resilience / priority concern.";
+  }
+  return "Potential and observed scores show partial agreement.";
+}
+
+function gapCardHtml(props) {
+  if (!hasObservedSupport(props)) {
+    return `
+      <h3>Potential vs Observed</h3>
+      <p class="gap-text">Observed comparison is not available because this section has no direct NPMRDS support.</p>
+    `;
+  }
+  const potential = potentialScore(props);
+  const observed = observedScore(props);
+  const gap = numberOrNull(props.Potential_Observed_Gap);
+  const category = displayGapCategory(props.Potential_Observed_Gap_Category);
+  return `
+    <h3>Potential vs Observed</h3>
+    <div class="gap-metrics">
+      <div><span>Potential</span><strong>${fmt(potential)}</strong></div>
+      <div><span>Observed</span><strong>${fmt(observed)}</strong></div>
+      <div><span>Gap</span><strong>${fmtSigned(gap)}</strong></div>
+    </div>
+    <div class="gap-category">${category}</div>
+    <p class="gap-text">${gapInterpretation(category)}</p>
+  `;
+}
+
 function updateSelectedPanel(props) {
   document.getElementById("selectedTitle").textContent = props.ROUTE_KEY || props.road || "Control section";
   document.getElementById("selectedSub").textContent = `CTRL_SECT_: ${props.CTRL_SECT_ ?? "-"} | County: ${displayCounty(props)}`;
-  document.getElementById("metricGrid").innerHTML = [
-    metric("Cold-Wave Score", props.Cold_Wave_Resilience_Score),
+  document.getElementById("scoreGrid").innerHTML = [
+    metric("Composite", props.Cold_Wave_Resilience_Score),
     metric("Potential", props.Potential_Resilience_Score),
-    metricText("Observed", fmtObserved(props, "Observed_Resilience_ImpactFocused")),
+    metricText("Observed", fmtObserved(props, "Observed_Resilience_ImpactFocused"))
+  ].join("");
+  document.getElementById("gapCard").innerHTML = gapCardHtml(props);
+  document.getElementById("componentGrid").innerHTML = [
     metricText("Resistance", fmtObserved(props, "Observed_Resistance_Score")),
     metricText("Absorptive", fmtObserved(props, "Observed_Absorptive_Capacity_Score")),
     metricText("Recovery v2", fmtObserved(props, "Observed_Recovery_Capacity_Score_v2")),
     metricText("Time to 80%", fmtObservedHours(props, "Time_To_80pct_Baseline_Hours")),
     metricText("Time to 90%", fmtObservedHours(props, "Time_To_90pct_Baseline_Hours"))
   ].join("");
+  document.getElementById("componentSection").classList.add("is-visible");
   document.getElementById("methodCard").innerHTML = `
     <div class="badge-row">
       <span>Score method</span>
@@ -368,9 +507,90 @@ function phaseColor(phase) {
   return "#116466";
 }
 
+function phaseColorRaw(phase) {
+  if (phase === "event") return "rgba(200,75,75,0.42)";
+  if (phase === "recovery") return "rgba(43,140,190,0.42)";
+  return "rgba(17,100,102,0.42)";
+}
+
 function formatTimestampLabel(timestamp) {
   if (!timestamp) return "";
   return `${timestamp.slice(5, 10)} ${timestamp.slice(11, 13)}h`;
+}
+
+function median(values) {
+  const clean = values.filter(v => Number.isFinite(v)).sort((a, b) => a - b);
+  if (!clean.length) return null;
+  const mid = Math.floor(clean.length / 2);
+  return clean.length % 2 ? clean[mid] : (clean[mid - 1] + clean[mid]) / 2;
+}
+
+function mean(values) {
+  const clean = values.filter(v => Number.isFinite(v));
+  if (!clean.length) return null;
+  return clean.reduce((sum, value) => sum + value, 0) / clean.length;
+}
+
+function percentBelow(values, threshold) {
+  const clean = values.filter(v => Number.isFinite(v));
+  if (!clean.length) return null;
+  return clean.filter(value => value < threshold).length / clean.length;
+}
+
+function rollingMedian(series, hours = 6) {
+  const millis = hours * 60 * 60 * 1000;
+  const dated = series.map(point => ({ ...point, timeValue: Date.parse(point.timestamp) }));
+  return dated.map((point, index) => {
+    let windowValues = [];
+    if (Number.isFinite(point.timeValue)) {
+      windowValues = dated
+        .filter(other => Number.isFinite(other.timeValue) && other.timeValue <= point.timeValue && other.timeValue >= point.timeValue - millis)
+        .map(other => other.q);
+    } else {
+      windowValues = dated.slice(Math.max(0, index - hours + 1), index + 1).map(other => other.q);
+    }
+    return { ...point, qSmooth: median(windowValues) ?? point.q };
+  });
+}
+
+function curveSummary(series) {
+  const eventValues = series.filter(point => point.phase === "event").map(point => point.q);
+  const recoveryValues = series.filter(point => point.phase === "recovery").map(point => point.q);
+  if (!eventValues.length && !recoveryValues.length) return null;
+  return {
+    eventMean: mean(eventValues),
+    eventMin: eventValues.length ? Math.min(...eventValues) : null,
+    eventBelow80: percentBelow(eventValues, 0.8),
+    eventBelow90: percentBelow(eventValues, 0.9),
+    recoveryMean: mean(recoveryValues),
+    recoveryBelow90: percentBelow(recoveryValues, 0.9)
+  };
+}
+
+function fmtPct(value) {
+  const n = numberOrNull(value);
+  if (n === null) return "N/A";
+  return `${Math.round(n * 100)}%`;
+}
+
+function renderCurveSummary(summary) {
+  const summaryGrid = document.getElementById("qtSummaryGrid");
+  if (!summaryGrid || !summary) {
+    if (summaryGrid) {
+      summaryGrid.classList.remove("is-visible");
+      summaryGrid.innerHTML = "";
+    }
+    return;
+  }
+  summaryGrid.innerHTML = [
+    ["Event mean Q", fmt(summary.eventMean, 3)],
+    ["Event min Q", fmt(summary.eventMin, 3)],
+    ["Event < 0.8", fmtPct(summary.eventBelow80)],
+    ["Event < 0.9", fmtPct(summary.eventBelow90)],
+    ["Recovery mean Q", fmt(summary.recoveryMean, 3)],
+    ["Recovery < 0.9", fmtPct(summary.recoveryBelow90)]
+  ].map(([label, value]) => `<div class="qt-summary-item"><span>${label}</span><strong>${value}</strong></div>`).join("");
+  summaryGrid.classList.add("is-visible");
 }
 
 function prepareSeries(rawSeries) {
@@ -415,29 +635,39 @@ function renderCurve(curve) {
   const canvas = document.getElementById("curveChart");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  const series = prepareSeries(curve.series || []);
+  const series = rollingMedian(prepareSeries(curve.series || []));
   if (!series.length) {
     document.getElementById("chartCard").style.display = "none";
+    renderCurveSummary(null);
     return;
   }
   document.getElementById("chartCard").style.display = "block";
   const phases = Array.from(new Set(series.map(d => d.phase))).filter(Boolean);
   document.getElementById("curvePhaseBadges").innerHTML = phases.map(phase => `<span class="phase-badge ${phase}">${phase}</span>`).join("");
+  renderCurveSummary(curveSummary(series));
   curveChart = new Chart(ctx, {
     type: "line",
     data: {
       labels: series.map(d => formatTimestampLabel(d.timestamp)),
       datasets: [{
-        label: "Q(t)",
+        label: "Raw hourly Q(t)",
         data: series.map(d => d.q),
-        borderColor: "#116466",
-        backgroundColor: "rgba(17,100,102,0.12)",
+        borderColor: "rgba(17,100,102,0.42)",
+        backgroundColor: "rgba(17,100,102,0.05)",
         pointRadius: 0,
-        borderWidth: 2,
-        tension: 0.12,
+        borderWidth: 1.1,
+        tension: 0.08,
         segment: {
-          borderColor: ctx => phaseColor(series[ctx.p1DataIndex]?.phase)
+          borderColor: ctx => phaseColorRaw(series[ctx.p1DataIndex]?.phase)
         }
+      }, {
+        label: "Smoothed Q(t)",
+        data: series.map(d => d.qSmooth),
+        borderColor: "#17202a",
+        backgroundColor: "rgba(23,32,42,0.08)",
+        pointRadius: 0,
+        borderWidth: 2.4,
+        tension: 0.18
       }]
     },
     options: {
@@ -473,7 +703,8 @@ function renderCurve(curve) {
             },
             label(item) {
               const point = series[item.dataIndex];
-              return `Q=${fmt(point.q, 3)} | ${point.phase}`;
+              const value = item.datasetIndex === 1 ? point.qSmooth : point.q;
+              return `${item.dataset.label}: ${fmt(value, 3)} | ${point.phase}`;
             }
           }
         }
@@ -488,27 +719,30 @@ async function loadCurve(props) {
     clearChart();
     document.getElementById("chartCard").style.display = "none";
     document.getElementById("curvePhaseBadges").innerHTML = "";
+    renderCurveSummary(null);
     note.className = "support-note";
     note.textContent = hasObservedSupport(props)
       ? "No direct NPMRDS hourly curve available for this control section. Score uses available observed summary metrics."
-      : "No direct NPMRDS hourly support is available. Observed performance components are not available for this section. The Cold-Wave Score is based on Tier 1/2 potential resilience only.";
+      : "No direct NPMRDS hourly support is available. Observed performance components are not available for this section. The composite score is based on Tier 1/2 potential resilience only.";
     return;
   }
   clearChart();
   document.getElementById("chartCard").style.display = "none";
+  renderCurveSummary(null);
   note.className = "support-note ok";
-  note.textContent = "Loading curve...";
+  note.textContent = "Loading observed Q(t) curve...";
   try {
     const resp = await fetch(props.curve_file);
     if (!resp.ok) throw new Error("Curve file not found");
     const curve = await resp.json();
-    note.className = "support-note ok";
-    note.textContent = "Direct NPMRDS hourly support is available. The curve shows normalized speed performance relative to the baseline profile.";
+    note.className = "support-note";
+    note.textContent = "";
     renderCurve(curve);
   } catch (err) {
     clearChart();
     document.getElementById("chartCard").style.display = "none";
     document.getElementById("curvePhaseBadges").innerHTML = "";
+    renderCurveSummary(null);
     note.className = "support-note";
     note.textContent = "Curve data could not be loaded for this section.";
     console.warn(err);
@@ -551,6 +785,7 @@ async function init() {
   if (summaryResp.ok) updateSummary(await summaryResp.json());
   if (!geoResp.ok) throw new Error("Failed to load coldwave_resilience_map.geojson");
   geojsonData = await geoResp.json();
+  deriveGapFields();
   computeRanges();
   drawMap();
 

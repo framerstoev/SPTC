@@ -55,28 +55,28 @@ body {
 }
 
 .hero {
-  padding: 18px;
+  padding: 15px 16px;
   background: #16202a;
   color: #fff;
 }
 
 .hero h1 {
-  margin: 5px 0 8px;
-  font-size: 27px;
-  line-height: 1.12;
+  margin: 4px 0 7px;
+  font-size: 25px;
+  line-height: 1.08;
 }
 
 .hero p {
   margin: 0;
   color: rgba(255, 255, 255, 0.76);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.38;
 }
 
 .eyebrow {
   margin: 0;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 800;
@@ -85,8 +85,8 @@ body {
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px;
+  gap: 7px;
+  padding: 10px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -94,35 +94,35 @@ body {
 .metric {
   border: 1px solid var(--line);
   background: #f8fafb;
-  padding: 10px;
+  padding: 9px;
 }
 
 .stats-grid span,
 .metric span {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.25;
 }
 
 .stats-grid strong,
 .metric strong {
   display: block;
-  margin-top: 5px;
-  font-size: 22px;
+  margin-top: 4px;
+  font-size: 21px;
   line-height: 1.1;
 }
 
 .control-section,
 .notes,
 .selected {
-  padding: 14px;
+  padding: 12px;
 }
 
 label {
   display: block;
   font-weight: 800;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 
 select {
@@ -130,15 +130,22 @@ select {
   border: 1px solid var(--line);
   background: #fff;
   color: var(--text);
-  padding: 10px 12px;
-  font-size: 15px;
+  padding: 9px 10px;
+  font-size: 14px;
 }
 
 .legend {
-  margin-top: 12px;
-  padding: 10px;
+  margin-top: 10px;
+  padding: 9px;
   border: 1px solid var(--line);
   background: #f8fafb;
+}
+
+.layer-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .legend-title {
@@ -175,20 +182,20 @@ select {
 }
 
 .notes h2 {
-  margin: 0 0 8px;
-  font-size: 17px;
+  margin: 0 0 7px;
+  font-size: 16px;
 }
 
 .notes ul {
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
-  line-height: 1.5;
-  font-size: 14px;
+  line-height: 1.42;
+  font-size: 13px;
 }
 
 .notes li {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .compact-note {
@@ -196,7 +203,27 @@ select {
 }
 
 .compact-note li {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
+}
+
+.qt-help {
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  background: #f8fafb;
+  padding: 8px 9px;
+}
+
+.qt-help summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.qt-help p {
+  margin: 7px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .map-shell {
@@ -216,20 +243,28 @@ select {
 }
 
 .selected h2 {
-  margin: 8px 0 4px;
-  font-size: 23px;
+  margin: 6px 0 3px;
+  font-size: 21px;
+  line-height: 1.15;
 }
 
 #selectedSub {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: var(--muted);
-  line-height: 1.4;
+  line-height: 1.35;
+  font-size: 13px;
 }
 
-.metric-grid {
+.metric-grid,
+.score-grid,
+.component-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.score-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .metric.full {
@@ -240,18 +275,81 @@ select {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .method-card:empty,
+.gap-card:empty,
 .support-note:empty {
   display: none;
+}
+
+.gap-card {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  background: #f8fafb;
+  padding: 9px;
+}
+
+.gap-card h3 {
+  margin: 0 0 7px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.gap-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.gap-metrics div {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 7px;
+}
+
+.gap-metrics span,
+.qt-summary-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.gap-metrics strong,
+.qt-summary-item strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.gap-category {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #17202a;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.gap-text {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .badge-row {
   border: 1px solid var(--line);
   background: #f8fafb;
-  padding: 10px;
+  padding: 9px;
 }
 
 .badge-row span {
@@ -267,9 +365,9 @@ select {
   max-width: 100%;
   align-items: center;
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 6px 9px;
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
   white-space: normal;
@@ -290,12 +388,13 @@ select {
 }
 
 .support-note {
-  margin-top: 12px;
-  padding: 10px;
+  margin-top: 10px;
+  padding: 9px;
   background: #fff7ed;
   border: 1px solid #fed7aa;
   color: #8a4b10;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.38;
 }
 
 .support-note.ok {
@@ -306,17 +405,18 @@ select {
 
 .chart-card {
   display: none;
-  margin-top: 12px;
+  margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px;
+  padding: 9px;
   background: #fff;
   min-height: 0;
 }
 
 .chart-title {
   font-weight: 800;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  font-size: 14px;
 }
 
 .chart-subtitle {
@@ -326,25 +426,17 @@ select {
   margin-bottom: 10px;
 }
 
-.schematic-block {
-  border: 1px solid var(--line);
-  background: #f8fafb;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-}
-
-.schematic-title {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.25;
-  margin-bottom: 4px;
-}
-
 .schematic-svg {
   display: block;
   width: 100%;
   height: 78px;
   max-height: 78px;
+}
+
+.schematic-svg.compact {
+  height: 64px;
+  max-height: 64px;
+  margin-top: 4px;
 }
 
 .schematic-qline {
@@ -384,6 +476,24 @@ select {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
+  margin-top: 6px;
+}
+
+.qt-summary-grid {
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.qt-summary-grid.is-visible {
+  display: grid;
+}
+
+.qt-summary-item {
+  border: 1px solid var(--line);
+  background: #f8fafb;
+  padding: 7px;
 }
 
 .phase-badges {
@@ -418,9 +528,9 @@ select {
 .curve-chart-wrap {
   position: relative;
   width: 100%;
-  height: 248px;
-  min-height: 248px;
-  max-height: 248px;
+  height: 232px;
+  min-height: 232px;
+  max-height: 232px;
   overflow: hidden;
 }
 
@@ -428,7 +538,22 @@ select {
   display: block;
   width: 100% !important;
   height: 100% !important;
-  max-height: 248px !important;
+  max-height: 232px !important;
+}
+
+.component-section {
+  display: none;
+  margin-top: 10px;
+}
+
+.component-section.is-visible {
+  display: block;
+}
+
+.component-section h3 {
+  margin: 0 0 7px;
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .leaflet-popup-content {
@@ -459,13 +584,13 @@ select {
   }
 
   .curve-chart-wrap {
-    height: 260px;
-    min-height: 260px;
-    max-height: 260px;
+    height: 248px;
+    min-height: 248px;
+    max-height: 248px;
   }
 
   .curve-chart-wrap canvas {
-    max-height: 260px !important;
+    max-height: 248px !important;
   }
 }
 
@@ -474,7 +599,14 @@ select {
     grid-template-columns: 290px minmax(480px, 1fr) 350px;
   }
 
-  .metric-grid {
+  .score-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .metric-grid,
+  .component-grid,
+  .gap-metrics,
+  .qt-summary-grid {
     grid-template-columns: 1fr;
   }
 }

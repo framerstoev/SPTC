@@ -14,16 +14,24 @@
 - `js/app.js`
 - `QA_NOTES.md`
 
-## Chart Behavior
+## Selected Panel and Chart Behavior
 
-- Chart container height is fixed at 240px on desktop and 200px on small screens.
+- The selected-section panel was reordered so the header, top score cards, method/evidence badges, and observed Q(t) curve appear before detailed observed component cards.
+- The score cards now distinguish Composite, Potential, and Observed scores so users do not read the composite map as the same thing as the observed Q(t) curve.
+- A compact Potential vs Observed card was added for every selected section.
+- Hybrid sections show the potential score, observed score, observed-minus-potential gap, gap category, and a short interpretation.
+- Potential-only sections show that observed comparison is unavailable because there is no direct NPMRDS support.
+- The Q(t) chart now appears above Resistance, Absorptive Capacity, Recovery v2, and time-to-recovery details.
+- Chart container height is fixed at 232px on normal desktop screens, 248px on wide screens, and 200px on small screens.
 - `maintainAspectRatio` is set to `false`.
 - Previous Chart.js instances are destroyed before rendering a newly selected section.
 - The app keeps one canvas in the side panel and updates it; it does not append duplicate canvases.
 - Curve points are sorted by timestamp, duplicate timestamps are averaged, missing `q` values are filtered out, and display series are downsampled to at most 300 points.
-- A compact schematic resilience curve was added above the measured Q(t) chart.
-- The measured Q(t) chart remains the primary observed-data chart.
-- A baseline reference note explains that Q(t) is normalized by the baseline speed profile and that baseline-period raw rows are not plotted in this prototype.
+- The Q(t) chart now displays raw hourly Q(t) plus a 6-hour rolling median smoothed Q(t) trend line.
+- Compact Q(t) summary metrics were added: event mean Q, event min Q, event percent below 0.8, event percent below 0.9, recovery mean Q, and recovery percent below 0.9.
+- The conceptual resilience schematic was moved out of the per-section chart card and into a compact collapsible global help section in the left sidebar.
+- The measured Q(t) chart is the only section-specific curve shown in the selected-section panel.
+- A baseline reference note explains that Q(t) is normalized by the baseline speed profile, that baseline-period raw rows are not plotted in this prototype, and that measured Q(t) can fluctuate because hourly speeds vary with congestion, probe sample size, incidents, and baseline-profile differences.
 
 ## Data Loading
 
@@ -34,6 +42,23 @@
 
 ## UI Polish
 
+- Dashboard interpretation was clarified by separating map layers for:
+  - Composite Resilience Score
+  - Potential Resilience Score
+  - Observed Resilience Score
+  - Potential-Observed Gap Category
+  - Evidence Level
+  - Score Method
+- The default map layer label was renamed from Cold-Wave Resilience Score to Composite Resilience Score.
+- A layer-selector note now says that map color reflects the selected layer and the Q(t) curve shows observed speed performance only.
+- Gap category logic is derived in browser memory at GeoJSON load time; the source GeoJSON and curve JSON files were not regenerated.
+- Gap categories use transparent thresholds:
+  - potential >= 0.6 and observed >= 0.6: consistently high resilience
+  - potential < 0.4 and observed < 0.4: consistently low resilience / priority concern
+  - observed - potential >= 0.25: observed better than potential / potential risk overestimated
+  - observed - potential <= -0.25: observed worse than potential / hidden vulnerability
+  - all other hybrid sections: mixed / moderate agreement
+  - potential-only sections: no observed support
 - Responsive layout was updated for the deployed GitHub Pages version:
   - desktop columns now use clamp-based side-panel widths
   - large screens allocate wider left/right panels
@@ -41,8 +66,10 @@
   - small screens stack panels and allow normal page scrolling
 - Compact desktop layout was applied after wide-screen review:
   - side panels use `clamp(300px, 18vw, 360px)` and `clamp(360px, 23vw, 460px)`
-  - left header and panel spacing were reduced
-  - KPI card padding and numeric type were tightened
+  - left header title is 25px with compact line height
+  - sidebar padding, section spacing, and legend spacing were reduced
+  - KPI card padding is 9px and numeric type is 21px
+  - selected-section score cards use a compact top grid, with observed component cards below the chart
   - map line weight was reduced to keep statewide control sections from looking too heavy
   - map fit padding was increased so Texas fits with more breathing room at 100% browser zoom
 - Evidence and score-method raw codes are mapped to dashboard labels:
@@ -53,6 +80,7 @@
   - Potential-only
 - Potential-only sections explicitly state that no direct NPMRDS hourly support is available.
 - Potential-only KPI cards show Cold-Wave Score and Potential normally, while Observed, Resistance, Absorptive Capacity, Recovery v2, and time-to-recovery fields show `N/A`.
+- Potential-only selected sections do not show a Q(t) chart.
 - Leaflet popups do not show observed metrics for potential-only sections.
 - County display now uses `county_name`, then `county`, then `COUNTY`, and falls back to `Unknown` rather than `-`.
 - Control-section counties were reassigned from geometry using Texas county polygons, so potential-only sections no longer depend on TMC county metadata.
@@ -80,6 +108,9 @@ http://localhost:8001/coldwave-demo/
 - Local endpoint checks used the deployed subfolder path `http://localhost:8001/coldwave-demo/`.
 - Static viewport tuning was implemented for wide/medium/small breakpoints; visual browser checks at 1280, 1440, 1920, and 2560 px still need a human browser pass.
 - Compact layout should be checked at 100% browser zoom for 1440, 1920, and 2560 px widths.
+- Selected-section layout should be checked at 100% browser zoom to confirm the measured Q(t) curve is visible soon after a hybrid section is clicked.
+- The conceptual schematic should appear only in the left global help section, not inside each selected section.
+- Potential-only N/A behavior was preserved in the display logic.
 - Node.js is not installed in this environment, so `node --check` could not be run.
 - Browser console inspection still needs a human browser pass after opening the local preview URL.
 - Curves are still lazy-loaded only when a selected feature has `curve_file`.

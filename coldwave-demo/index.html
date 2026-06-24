@@ -26,14 +26,16 @@
       <section class="control-section">
         <label for="layerSelect">Map layer</label>
         <select id="layerSelect">
-          <option value="Cold_Wave_Resilience_Score">Cold-Wave Resilience Score</option>
+          <option value="Cold_Wave_Resilience_Score">Composite Resilience Score</option>
           <option value="Potential_Resilience_Score">Potential Resilience Score</option>
-          <option value="Observed_Resilience_ImpactFocused">Observed Resilience, Impact-focused</option>
+          <option value="Observed_Resilience_ImpactFocused">Observed Resilience Score</option>
+          <option value="Potential_Observed_Gap_Category">Potential-Observed Gap Category</option>
           <option value="Observed_Recovery_Capacity_Score_v2">Recovery Capacity v2</option>
           <option value="Time_To_90pct_Baseline_Hours">Time to 90% Baseline</option>
-          <option value="Cold_Wave_Resilience_Score_Method">Score Method</option>
           <option value="Score_Evidence_Level">Evidence Level</option>
+          <option value="Cold_Wave_Resilience_Score_Method">Score Method</option>
         </select>
+        <p class="layer-note">Map color reflects the selected layer. The Q(t) curve shows observed speed performance only.</p>
 
         <div class="legend" id="legend"></div>
       </section>
@@ -52,12 +54,27 @@
       <section class="notes compact-note">
         <h2>How to read this panel</h2>
         <ul>
-          <li><b>Cold-Wave Score:</b> higher = more resilient.</li>
+          <li><b>Composite score:</b> higher = more resilient.</li>
           <li><b>Hybrid score:</b> 0.5 * potential resilience + 0.5 * observed resilience.</li>
           <li><b>Potential-only:</b> Tier 1/2 potential resilience only.</li>
           <li><b>Evidence level:</b> direct NPMRDS observed support status.</li>
           <li><b>Observed curve:</b> available only with direct NPMRDS support.</li>
         </ul>
+        <details class="qt-help">
+          <summary>How to read Q(t)</summary>
+          <p>Conceptual resilience pattern: performance may drop during an event and recover afterward. This schematic is for interpretation only; section-specific observed data are shown in the Q(t) chart.</p>
+          <svg class="schematic-svg compact" viewBox="0 0 420 76" role="img" aria-label="Schematic baseline, event impact, recovery curve">
+            <line x1="34" y1="20" x2="392" y2="20" class="schematic-qline" />
+            <text x="6" y="23" class="schematic-label">Q = 1</text>
+            <path d="M42 20 L128 20 C150 21 160 44 178 56 C202 70 238 56 266 40 C298 25 338 21 384 20" class="schematic-curve" />
+            <line x1="142" y1="16" x2="142" y2="64" class="schematic-divider event" />
+            <line x1="240" y1="16" x2="240" y2="64" class="schematic-divider recovery" />
+            <text x="56" y="72" class="schematic-label">Baseline</text>
+            <text x="154" y="72" class="schematic-label">Event</text>
+            <text x="276" y="72" class="schematic-label">Recovery</text>
+          </svg>
+          <p>Measured Q(t) curves may fluctuate because hourly speeds vary with congestion, sample size, incidents, and baseline-profile differences. The observed resilience score summarizes overall event/recovery behavior rather than requiring a perfectly smooth decline-and-recovery shape.</p>
+        </details>
       </section>
     </aside>
 
@@ -71,36 +88,32 @@
         <h2 id="selectedTitle">No section selected</h2>
         <p id="selectedSub">Click a control section on the map.</p>
 
-        <div class="metric-grid" id="metricGrid"></div>
+        <div class="score-grid" id="scoreGrid"></div>
         <div class="method-card" id="methodCard"></div>
+        <div class="gap-card" id="gapCard"></div>
         <div class="support-note" id="supportNote"></div>
 
         <div class="chart-card" id="chartCard">
-          <div class="chart-title">Normalized Speed Performance Q(t)</div>
+          <div class="chart-title">Observed normalized speed performance Q(t)</div>
           <div class="chart-subtitle">
-            Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance; Q = 0.8 means 80% of baseline speed.
-          </div>
-          <div class="schematic-block">
-            <div class="schematic-title">Classic resilience concept: performance drops during the event and recovers afterward.</div>
-            <svg class="schematic-svg" viewBox="0 0 420 86" role="img" aria-label="Schematic baseline, event impact, recovery curve">
-              <line x1="34" y1="22" x2="392" y2="22" class="schematic-qline" />
-              <text x="6" y="25" class="schematic-label">Q = 1</text>
-              <path d="M42 22 L128 22 C150 23 160 50 178 62 C202 78 238 62 266 45 C298 27 338 23 384 22" class="schematic-curve" />
-              <line x1="142" y1="18" x2="142" y2="72" class="schematic-divider event" />
-              <line x1="240" y1="18" x2="240" y2="72" class="schematic-divider recovery" />
-              <text x="56" y="78" class="schematic-label">Baseline reference</text>
-              <text x="154" y="78" class="schematic-label">Event impact</text>
-              <text x="276" y="78" class="schematic-label">Recovery</text>
-            </svg>
-            <div class="chart-data-note">Schematic only; measured event/recovery values are shown in the chart below.</div>
+            Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance.
           </div>
           <div class="phase-badges" id="curvePhaseBadges"></div>
           <div class="curve-chart-wrap">
             <canvas id="curveChart"></canvas>
           </div>
+          <div class="qt-summary-grid" id="qtSummaryGrid"></div>
           <div class="chart-data-note">
             Event and recovery observations are plotted from hourly NPMRDS data. Baseline is used as the normalization reference; baseline-period raw observations are not shown as plotted points in this prototype. Dashed lines indicate 80% and 90% baseline speed thresholds.
           </div>
+          <div class="chart-data-note">
+            Measured Q(t) may fluctuate because hourly traffic speeds vary with congestion, probe sample size, incidents, and baseline-profile differences. The observed score summarizes overall event/recovery behavior rather than requiring a perfectly smooth decline-and-recovery shape.
+          </div>
+        </div>
+
+        <div class="component-section" id="componentSection">
+          <h3>Observed components</h3>
+          <div class="component-grid" id="componentGrid"></div>
         </div>
       </section>
     </aside>
