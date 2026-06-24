@@ -286,6 +286,10 @@ function drawMap() {
     }
   }).addTo(map);
   map.fitBounds(geojsonLayer.getBounds(), { padding: [24, 24] });
+  setTimeout(() => {
+    map.invalidateSize();
+    map.fitBounds(geojsonLayer.getBounds(), { padding: [20, 20] });
+  }, 100);
   updateLegend();
 }
 

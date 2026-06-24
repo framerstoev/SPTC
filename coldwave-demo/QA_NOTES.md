@@ -34,6 +34,11 @@
 
 ## UI Polish
 
+- Responsive layout was updated for the deployed GitHub Pages version:
+  - desktop columns now use clamp-based side-panel widths
+  - large screens allocate wider left/right panels
+  - medium screens tighten columns and use single-column KPI cards
+  - small screens stack panels and allow normal page scrolling
 - Evidence and score-method raw codes are mapped to dashboard labels:
   - A: Hybrid + high-quality observed support
   - B: Hybrid + lower-quality observed support
@@ -50,21 +55,24 @@
 
 ## Local Preview
 
-From the project root:
+From the GitHub Pages repo root:
 
 ```powershell
-python -m http.server 8000 -d data/front-end/coldwave-demo
+cd E:\Projects\PhD\SPTC\data\front-end\sptc-demo
+python -m http.server 8001
 ```
 
 Open:
 
 ```text
-http://localhost:8000/
+http://localhost:8001/coldwave-demo/
 ```
 
 ## Verification Notes
 
-- HTTP checks passed for the main page, summary JSON, and map GeoJSON.
+- HTTP checks passed for the main page, CSS, JS, summary JSON, map GeoJSON, and a sample lazy-loaded curve JSON.
+- Local endpoint checks used the deployed subfolder path `http://localhost:8001/coldwave-demo/`.
+- Static viewport tuning was implemented for wide/medium/small breakpoints; visual browser checks at 1280, 1440, 1920, and 2560 px still need a human browser pass.
 - Node.js is not installed in this environment, so `node --check` could not be run.
 - Browser console inspection still needs a human browser pass after opening the local preview URL.
 - Curves are still lazy-loaded only when a selected feature has `curve_file`.
