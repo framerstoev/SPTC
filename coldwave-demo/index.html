@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cold-Wave Roadway Resilience Dashboard Pilot</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="panel left-panel">
+      <header class="hero">
+        <p class="eyebrow">Jan. 2026 Texas winter event</p>
+        <h1>Cold-Wave Roadway Resilience Dashboard Pilot</h1>
+        <p>Control-section resilience score and observed performance support</p>
+      </header>
+
+      <section class="stats-grid">
+        <div><span>Total sections</span><strong id="totalSections">-</strong></div>
+        <div><span>Hybrid support</span><strong id="hybridSections">-</strong></div>
+        <div><span>Potential-only</span><strong id="potentialOnlySections">-</strong></div>
+        <div><span>Mean score</span><strong id="meanScore">-</strong></div>
+      </section>
+
+      <section class="control-section">
+        <label for="layerSelect">Map layer</label>
+        <select id="layerSelect">
+          <option value="Cold_Wave_Resilience_Score">Cold-Wave Resilience Score</option>
+          <option value="Potential_Resilience_Score">Potential Resilience Score</option>
+          <option value="Observed_Resilience_ImpactFocused">Observed Resilience, Impact-focused</option>
+          <option value="Observed_Recovery_Capacity_Score_v2">Recovery Capacity v2</option>
+          <option value="Time_To_90pct_Baseline_Hours">Time to 90% Baseline</option>
+          <option value="Cold_Wave_Resilience_Score_Method">Score Method</option>
+          <option value="Score_Evidence_Level">Evidence Level</option>
+        </select>
+
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <section class="notes">
+        <h2>Interpretation</h2>
+        <ul>
+          <li>Cold-Wave Score higher = more resilient.</li>
+          <li>Hybrid score uses potential + observed performance.</li>
+          <li>Potential-only score uses Tier 1/2 only.</li>
+          <li>Evidence level shows observed support behind each score.</li>
+          <li>NPMRDS2 2025 volume is profile demand weight, not actual event-day volume.</li>
+        </ul>
+      </section>
+
+      <section class="notes compact-note">
+        <h2>How to read this panel</h2>
+        <ul>
+          <li><b>Cold-Wave Score:</b> higher = more resilient.</li>
+          <li><b>Hybrid score:</b> 0.5 * potential resilience + 0.5 * observed resilience.</li>
+          <li><b>Potential-only:</b> Tier 1/2 potential resilience only.</li>
+          <li><b>Evidence level:</b> direct NPMRDS observed support status.</li>
+          <li><b>Observed curve:</b> available only with direct NPMRDS support.</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="map-shell">
+      <div id="map"></div>
+    </main>
+
+    <aside class="panel right-panel">
+      <section class="selected">
+        <p class="eyebrow">Selected control section</p>
+        <h2 id="selectedTitle">No section selected</h2>
+        <p id="selectedSub">Click a control section on the map.</p>
+
+        <div class="metric-grid" id="metricGrid"></div>
+        <div class="method-card" id="methodCard"></div>
+        <div class="support-note" id="supportNote"></div>
+
+        <div class="chart-card" id="chartCard">
+          <div class="chart-title">Normalized Speed Performance Q(t)</div>
+          <div class="chart-subtitle">
+            Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance; Q = 0.8 means 80% of baseline speed.
+          </div>
+          <div class="schematic-block">
+            <div class="schematic-title">Classic resilience concept: performance drops during the event and recovers afterward.</div>
+            <svg class="schematic-svg" viewBox="0 0 420 86" role="img" aria-label="Schematic baseline, event impact, recovery curve">
+              <line x1="34" y1="22" x2="392" y2="22" class="schematic-qline" />
+              <text x="6" y="25" class="schematic-label">Q = 1</text>
+              <path d="M42 22 L128 22 C150 23 160 50 178 62 C202 78 238 62 266 45 C298 27 338 23 384 22" class="schematic-curve" />
+              <line x1="142" y1="18" x2="142" y2="72" class="schematic-divider event" />
+              <line x1="240" y1="18" x2="240" y2="72" class="schematic-divider recovery" />
+              <text x="56" y="78" class="schematic-label">Baseline reference</text>
+              <text x="154" y="78" class="schematic-label">Event impact</text>
+              <text x="276" y="78" class="schematic-label">Recovery</text>
+            </svg>
+            <div class="chart-data-note">Schematic only; measured event/recovery values are shown in the chart below.</div>
+          </div>
+          <div class="phase-badges" id="curvePhaseBadges"></div>
+          <div class="curve-chart-wrap">
+            <canvas id="curveChart"></canvas>
+          </div>
+          <div class="chart-data-note">
+            Event and recovery observations are plotted from hourly NPMRDS data. Baseline is used as the normalization reference; baseline-period raw observations are not shown as plotted points in this prototype. Dashed lines indicate 80% and 90% baseline speed thresholds.
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
