@@ -39,6 +39,12 @@
   - large screens allocate wider left/right panels
   - medium screens tighten columns and use single-column KPI cards
   - small screens stack panels and allow normal page scrolling
+- Compact desktop layout was applied after wide-screen review:
+  - side panels use `clamp(300px, 18vw, 360px)` and `clamp(360px, 23vw, 460px)`
+  - left header and panel spacing were reduced
+  - KPI card padding and numeric type were tightened
+  - map line weight was reduced to keep statewide control sections from looking too heavy
+  - map fit padding was increased so Texas fits with more breathing room at 100% browser zoom
 - Evidence and score-method raw codes are mapped to dashboard labels:
   - A: Hybrid + high-quality observed support
   - B: Hybrid + lower-quality observed support
@@ -73,6 +79,7 @@ http://localhost:8001/coldwave-demo/
 - HTTP checks passed for the main page, CSS, JS, summary JSON, map GeoJSON, and a sample lazy-loaded curve JSON.
 - Local endpoint checks used the deployed subfolder path `http://localhost:8001/coldwave-demo/`.
 - Static viewport tuning was implemented for wide/medium/small breakpoints; visual browser checks at 1280, 1440, 1920, and 2560 px still need a human browser pass.
+- Compact layout should be checked at 100% browser zoom for 1440, 1920, and 2560 px widths.
 - Node.js is not installed in this environment, so `node --check` could not be run.
 - Browser console inspection still needs a human browser pass after opening the local preview URL.
 - Curves are still lazy-loaded only when a selected feature has `curve_file`.

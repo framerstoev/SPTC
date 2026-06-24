@@ -222,8 +222,8 @@ function styleFeature(feature) {
   const selected = selectedLayer && selectedLayer.feature && selectedLayer.feature.properties.CTRL_SECT_ === props.CTRL_SECT_;
   return {
     color: selected ? "#111827" : getFeatureColor(props),
-    weight: selected ? 6.5 : 3.2,
-    opacity: selected ? 1 : 0.88
+    weight: selected ? 3.8 : 1.25,
+    opacity: selected ? 1 : 0.72
   };
 }
 
@@ -281,14 +281,14 @@ function drawMap() {
     onEachFeature(feature, layer) {
       layer.bindPopup(popupHtml(feature.properties || {}));
       layer.on("click", () => selectFeature(layer));
-      layer.on("mouseover", () => layer.setStyle({ weight: 5.5, opacity: 1 }));
+      layer.on("mouseover", () => layer.setStyle({ weight: 2.4, opacity: 0.95 }));
       layer.on("mouseout", () => refreshStyles());
     }
   }).addTo(map);
-  map.fitBounds(geojsonLayer.getBounds(), { padding: [24, 24] });
+  map.fitBounds(geojsonLayer.getBounds(), { padding: [35, 35] });
   setTimeout(() => {
     map.invalidateSize();
-    map.fitBounds(geojsonLayer.getBounds(), { padding: [20, 20] });
+    map.fitBounds(geojsonLayer.getBounds(), { padding: [35, 35] });
   }, 100);
   updateLegend();
 }
