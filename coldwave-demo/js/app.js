@@ -593,7 +593,7 @@ function renderCurveSummary(summary) {
   summaryGrid.classList.add("is-visible");
 }
 
-function prepareSeries(rawSeries) {
+function prepareFullSeries(rawSeries) {
   const grouped = new Map();
   (rawSeries || []).forEach(point => {
     const q = numberOrNull(point.q);
@@ -607,7 +607,7 @@ function prepareSeries(rawSeries) {
     grouped.set(key, existing);
   });
 
-  let series = Array.from(grouped.values())
+  return Array.from(grouped.values())
     .map(item => {
       const phase = Object.entries(item.phaseCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "unknown";
       return {
@@ -617,34 +617,43 @@ function prepareSeries(rawSeries) {
       };
     })
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-  const maxPoints = 300;
-  if (series.length > maxPoints) {
-    const sampled = [];
-    const step = (series.length - 1) / (maxPoints - 1);
-    for (let i = 0; i < maxPoints; i += 1) {
-      sampled.push(series[Math.round(i * step)]);
-    }
-    series = sampled;
-  }
-  return series;
 }
 
+function downsampleSeries(series, maxPoints = 300) {
+  if (series.length <= maxPoints) return series;
+  const sampled = [];
+  const step = (series.length - 1) / (maxPoints - 1);
+  for (let i = 0; i < maxPoints; i += 1) {
+    sampled.push(series[Math.round(i * step)]);
+  }
+  return sampled;
+}
+
+function chartSeriesFromFullSeries(fullSeries) {
+  const fullSeriesWithSmooth = rollingMedian(fullSeries);
+  return downsampleSeries(fullSeriesWithSmooth);
+}
+
+/*
+  Summary metrics are computed from the full deduplicated hourly series before
+  chart downsampling. Downsampling is used only for visualization performance.
+*/
 function renderCurve(curve) {
   clearChart();
   const canvas = document.getElementById("curveChart");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  const series = rollingMedian(prepareSeries(curve.series || []));
-  if (!series.length) {
+  const fullSeriesForSummary = prepareFullSeries(curve.series || []);
+  if (!fullSeriesForSummary.length) {
     document.getElementById("chartCard").style.display = "none";
     renderCurveSummary(null);
     return;
   }
+  const series = chartSeriesFromFullSeries(fullSeriesForSummary);
   document.getElementById("chartCard").style.display = "block";
-  const phases = Array.from(new Set(series.map(d => d.phase))).filter(Boolean);
+  const phases = Array.from(new Set(fullSeriesForSummary.map(d => d.phase))).filter(Boolean);
   document.getElementById("curvePhaseBadges").innerHTML = phases.map(phase => `<span class="phase-badge ${phase}">${phase}</span>`).join("");
-  renderCurveSummary(curveSummary(series));
+  renderCurveSummary(curveSummary(fullSeriesForSummary));
   curveChart = new Chart(ctx, {
     type: "line",
     data: {

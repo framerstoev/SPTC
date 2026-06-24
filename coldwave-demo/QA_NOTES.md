@@ -26,9 +26,12 @@
 - `maintainAspectRatio` is set to `false`.
 - Previous Chart.js instances are destroyed before rendering a newly selected section.
 - The app keeps one canvas in the side panel and updates it; it does not append duplicate canvases.
-- Curve points are sorted by timestamp, duplicate timestamps are averaged, missing `q` values are filtered out, and display series are downsampled to at most 300 points.
+- Curve points are sorted by timestamp, duplicate timestamps are averaged, and missing `q` values are filtered out before charting or summary calculation.
+- Q(t) summary metrics are now computed from the full deduplicated hourly series before chart downsampling.
+- Chart rendering can still downsample the display series to at most 300 points for performance.
 - The Q(t) chart now displays raw hourly Q(t) plus a 6-hour rolling median smoothed Q(t) trend line.
 - Compact Q(t) summary metrics were added: event mean Q, event min Q, event percent below 0.8, event percent below 0.9, recovery mean Q, and recovery percent below 0.9.
+- Known audit mismatch `CS_549936` was fixed: Event min Q should display as `0.687`, matching raw event min Q `0.6868` after rounding.
 - The conceptual resilience schematic was moved out of the per-section chart card and into a compact collapsible global help section in the left sidebar.
 - The measured Q(t) chart is the only section-specific curve shown in the selected-section panel.
 - A baseline reference note explains that Q(t) is normalized by the baseline speed profile, that baseline-period raw rows are not plotted in this prototype, and that measured Q(t) can fluctuate because hourly speeds vary with congestion, probe sample size, incidents, and baseline-profile differences.
