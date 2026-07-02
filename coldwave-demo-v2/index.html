@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Experimental Data-Driven Resilience Curve Prototype</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="panel left-panel">
+      <header class="hero">
+        <p class="eyebrow">Jan. 2026 Texas cold-wave case</p>
+        <h1>Experimental Data-Driven Resilience Curve Prototype</h1>
+        <p>Candidate B phase detection for control-section Q(t) curves</p>
+      </header>
+
+      <section class="summary-grid">
+        <div><span>Total CS</span><strong id="totalSections">-</strong></div>
+        <div><span>Curve support</span><strong id="curveSections">-</strong></div>
+        <div><span>Valid phases</span><strong id="validDetections">-</strong></div>
+        <div><span>Censored recovery</span><strong id="censoredCount">-</strong></div>
+      </section>
+
+      <section class="control-block">
+        <label for="csSearch">Find control section</label>
+        <div class="search-row">
+          <input id="csSearch" type="search" autocomplete="off" placeholder="Search CS_5998, FM_1541_, Randall..." />
+          <button id="clearSearch" type="button" aria-label="Clear search">Clear</button>
+        </div>
+        <div class="search-results" id="searchResults" aria-live="polite"></div>
+      </section>
+
+      <section class="control-block">
+        <label for="layerSelect">Map layer</label>
+        <select id="layerSelect">
+          <option value="observed_curve_resilience_score_v0">Observed Curve Resilience Score v0</option>
+          <option value="q_min">Q_min</option>
+          <option value="loss_depth">Loss Depth</option>
+          <option value="resilience_loss_area">Resilience Loss Area</option>
+          <option value="recovery_duration_hours">Recovery Duration</option>
+          <option value="recovery_slope">Recovery Slope</option>
+          <option value="detection_status">Detection Status / Warning</option>
+          <option value="total_detected_phase_delay_proxy">Supplemental Delay Burden</option>
+          <option value="Potential_Resilience_Score">Tier 1/2 Potential Resilience</option>
+          <option value="WEATHER_REI">WEATHER_REI</option>
+          <option value="NETRISK_LITE">NETRISK_LITE</option>
+          <option value="EVENT_REI">EVENT_REI</option>
+        </select>
+        <p class="layer-note" id="layerNote"></p>
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <section class="notes">
+        <h2>Method</h2>
+        <p>This v2 prototype is experimental. It uses a data-driven resilience-curve method rather than predefined event/recovery windows.</p>
+        <ul>
+          <li>Q(t) = speed / baseline speed profile; Q = 1 means baseline-level speed performance.</li>
+          <li>Candidate B: dominant sustained performance drop.</li>
+          <li>6-hour centered rolling median.</li>
+          <li>Threshold = 0.90 x Q0.</li>
+          <li>k = 3 consecutive observations.</li>
+          <li>Tier 3 metrics are observed operational labels.</li>
+          <li>Tier 1/2 variables are predictor/context layers.</li>
+          <li>Score classes are experimental v0 quantile classes.</li>
+        </ul>
+      </section>
+
+      <section class="notes compact">
+        <h2>Caveats</h2>
+        <ul>
+          <li>Do not treat this as the stable dashboard score.</li>
+          <li>Delay burden is supplemental user-impact information.</li>
+          <li>Profile volume is not observed event-day volume.</li>
+          <li>Phase detection is sensitive to smoothing, threshold, and noise.</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="map-shell">
+      <div id="map"></div>
+    </main>
+
+    <aside class="panel right-panel">
+      <section class="selected">
+        <p class="eyebrow">Selected control section</p>
+        <h2 id="selectedTitle">No section selected</h2>
+        <p id="selectedSub">Click a control section on the map.</p>
+
+        <div class="badge-row" id="statusBadges"></div>
+        <div class="metric-grid top-grid" id="topMetrics"></div>
+
+        <div class="warning-card" id="warningCard"></div>
+
+        <div class="curve-card" id="curveCard">
+          <div class="section-heading">
+            <h3>Full-window Q(t) curve</h3>
+            <p>Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance.</p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="curveChart"></canvas>
+          </div>
+          <div class="phase-marker-legend" id="phaseMarkerLegend"></div>
+          <div class="chart-note" id="curveNote"></div>
+        </div>
+
+        <div class="detail-block">
+          <h3>Data-driven observed curve metrics</h3>
+          <div class="metric-grid" id="curveMetrics"></div>
+        </div>
+
+        <div class="detail-block">
+          <h3>Supplemental impact</h3>
+          <p class="muted">Vehicle-hours delay is a proxy using profile demand weighting, not real observed event-day total delay.</p>
+          <div class="metric-grid" id="impactMetrics"></div>
+        </div>
+
+        <div class="detail-block">
+          <h3>Tier 1/2 predictor context</h3>
+          <p class="muted">These variables are not part of the observed curve score. They are potential predictors/context layers for future modeling.</p>
+          <div class="metric-grid" id="tierMetrics"></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
