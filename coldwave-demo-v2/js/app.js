@@ -1,5 +1,11 @@
 const MAP_URL = "./data/data_driven_resilience_map_v0.geojson";
 const SUMMARY_URL = "./data/summary.json";
+const ASSISTANT_API_URL = null;
+
+const controlRenderer = L.canvas({
+  padding: 0.5,
+  tolerance: 8
+});
 
 const scoreRamp = ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"];
 const riskRamp = ["#f7fbff", "#c6dbef", "#6baed6", "#fdae61", "#b2182b"];
@@ -129,6 +135,7 @@ let layerByCtrl = new Map();
 let featureByCtrl = new Map();
 let curveChart = null;
 let phaseOverlayState = null;
+let curveRequestId = 0;
 
 function numberOrNull(value) {
   if (value === null || value === undefined) return null;
@@ -317,9 +324,19 @@ function featureStyle(feature) {
     : cfg.type === "scoreClass"
       ? Boolean(scoreClassInfo(props)) || isNoSustainedDrop(props)
       : numberOrNull(props[activeLayer]) !== null;
+  const zoom = map ? map.getZoom() : 6;
+  let valueWeight = 1.1;
+  let missingWeight = 0.7;
+  if (zoom >= 11) {
+    valueWeight = 2.2;
+    missingWeight = 1.3;
+  } else if (zoom >= 8) {
+    valueWeight = 1.6;
+    missingWeight = 1.0;
+  }
   return {
     color: featureColor(props),
-    weight: hasValue ? 1.15 : 0.75,
+    weight: hasValue ? valueWeight : missingWeight,
     opacity: hasValue ? 0.78 : 0.22,
     lineCap: "round"
   };
@@ -327,9 +344,11 @@ function featureStyle(feature) {
 
 function applySelectedStyle() {
   if (!selectedLeafletLayer) return;
+  const zoom = map ? map.getZoom() : 6;
+  const selectedWeight = zoom >= 11 ? 6 : (zoom >= 8 ? 5.5 : 5);
   selectedLeafletLayer.setStyle({
     color: "#111827",
-    weight: 4,
+    weight: selectedWeight,
     opacity: 1
   });
   if (selectedLeafletLayer.bringToFront) selectedLeafletLayer.bringToFront();
@@ -368,17 +387,22 @@ function updateLegend() {
   `;
 }
 
-function makePopup(props) {
-  const status = statusLabel(statusKey(props));
-  const cls = scoreClassInfo(props);
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function makeTooltip(props) {
+  const route = escapeHtml(props.ROUTE_KEY || "Route unknown");
+  const controlSection = escapeHtml(props.CTRL_SECT_ || props.CTRL_SECT_NORM || "N/A");
+  const county = escapeHtml(props.county_name || props.county || "County unknown");
   return `
-    <div class="popup-title">${props.ROUTE_KEY || "Route unknown"} | CS ${props.CTRL_SECT_ || props.CTRL_SECT_NORM}</div>
-    <div>${props.county_name || props.county || "County unknown"}</div>
-    <div class="popup-row"><span>v0 class</span><strong>${cls ? cls.label : "N/A"}</strong></div>
-    <div class="popup-row"><span>Curve score</span><strong>${fmt(props.observed_curve_resilience_score_v0)}</strong></div>
-    <div class="popup-row"><span>Q_min</span><strong>${fmt(props.q_min)}</strong></div>
-    <div class="popup-row"><span>Status</span><strong>${status}</strong></div>
-    <div class="popup-row"><span>Curve</span><strong>${hasCurve(props) ? "Available in panel" : "No curve"}</strong></div>
+    <strong>${route} | CS ${controlSection}</strong><br />
+    <span>${county}</span>
   `;
 }
 
@@ -433,10 +457,9 @@ async function selectByKey(key) {
   if (!layer || !feature) return;
   const bounds = layer.getBounds ? layer.getBounds() : null;
   if (bounds && bounds.isValid()) {
-    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 11 });
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 12 });
   }
   await selectFeature(feature, layer);
-  layer.openPopup();
 }
 
 function setupSearch() {
@@ -494,9 +517,10 @@ function renderMetrics(props) {
   ].filter(Boolean).join("");
 
   document.getElementById("topMetrics").innerHTML = [
-    metricCard("Experimental class", cls ? `${cls.label} (${fmtRange(cls.low, cls.high)})` : "N/A", "", "v0 quantile class, not an official resilience category."),
-    metricCard("Score v0", noSustained ? "N/A" : fmt(props.observed_curve_resilience_score_v0), "", "Experimental score based primarily on normalized detected-phase loss area."),
-    metricCard("Q_min", noSustained ? "N/A" : fmt(props.q_min), "", "Minimum detected normalized speed performance.")
+    metricCard("Score v0", noSustained ? "N/A" : fmt(props.observed_curve_resilience_score_v0), "", "Experimental event/method-specific summary."),
+    metricCard("Minimum performance", noSustained ? "N/A" : fmt(props.q_min), "", "Share of baseline speed performance."),
+    metricCard("Loss area", phaseValue(props, "resilience_loss_area"), "", "Detected depth-duration performance loss."),
+    metricCard("Recovery duration", `${phaseValue(props, "recovery_duration_hours", fmtHours)}${censored ? " flagged" : ""}`, "", "Minimum-to-recovery duration; censored values are flagged.")
   ].join("");
 
   const warning = document.getElementById("warningCard");
@@ -543,6 +567,247 @@ function renderMetrics(props) {
     metricCard("AADT", fmtInt(props.AADT_CS), "", "Control-section traffic context where available."),
     metricCard("Data density", props.data_density_summary || "N/A", "", "NPMRDS data-density summary for matched observations.")
   ].join("");
+}
+
+function buildAssistantContext(props) {
+  if (!props) return null;
+  const cls = scoreClassInfo(props);
+  const status = statusKey(props);
+  let warning = null;
+  if (status === "no_sustained_drop") {
+    warning = "No sustained drop was detected under the current v0 rule.";
+  } else if (status === "recovery_endpoint_censored") {
+    warning = "Sustained recovery was not fully observed within the available analysis window.";
+  } else if (!hasCurve(props)) {
+    warning = "No direct NPMRDS Q(t) curve is available for this control section.";
+  }
+  return {
+    route: props.ROUTE_KEY || props.road || null,
+    control_section: props.CTRL_SECT_ || props.CTRL_SECT_NORM || props.CTRL_SECT_KEY || null,
+    county: props.county_name || props.county || null,
+    detection_status: status,
+    score_v0: isNoSustainedDrop(props) ? null : numberOrNull(props.observed_curve_resilience_score_v0),
+    score_class: cls ? cls.label : null,
+    q0: numberOrNull(props.q0),
+    q_min: isNoSustainedDrop(props) ? null : numberOrNull(props.q_min),
+    loss_depth: isNoSustainedDrop(props) ? null : numberOrNull(props.loss_depth),
+    loss_depth_pct: isNoSustainedDrop(props) ? null : numberOrNull(props.loss_depth_pct),
+    resilience_loss_area: isNoSustainedDrop(props) ? null : numberOrNull(props.resilience_loss_area),
+    recovery_duration_hours: isNoSustainedDrop(props) ? null : numberOrNull(props.recovery_duration_hours),
+    recovery_slope: isNoSustainedDrop(props) ? null : numberOrNull(props.recovery_slope),
+    onset_time: props.onset_time || null,
+    min_time: props.min_time || null,
+    recovery_end_time: props.recovery_end_time || null,
+    Potential_Resilience_Score: numberOrNull(props.Potential_Resilience_Score),
+    WEATHER_REI: numberOrNull(props.WEATHER_REI),
+    NETRISK_LITE: numberOrNull(props.NETRISK_LITE),
+    EVENT_REI: numberOrNull(props.EVENT_REI),
+    AADT_CS: numberOrNull(props.AADT_CS),
+    data_density_summary: props.data_density_summary || null,
+    matched_tmc_count: numberOrNull(props.matched_tmc_count),
+    warning
+  };
+}
+
+function assistantMetric(value, digits = 3) {
+  return value === null ? "N/A" : Number(value).toFixed(digits);
+}
+
+function assistantPercent(value) {
+  return value === null ? "N/A" : `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function assistantHours(value) {
+  return value === null ? "N/A" : `${Number(value).toFixed(1)} hours`;
+}
+
+function assistantSectionName(context) {
+  const route = context.route || "Route unavailable";
+  const controlSection = context.control_section || "control section unavailable";
+  return `${route} | ${controlSection}`;
+}
+
+function planningContextSentence(context) {
+  if (context.Potential_Resilience_Score === null) {
+    return "The planning-level Potential Resilience value is unavailable for this selection; Tier 1/2 context remains separate from the observed curve score.";
+  }
+  return `The planning-level Potential Resilience value is ${assistantMetric(context.Potential_Resilience_Score)}; it is a separate Tier 1/2 context variable and is not part of the observed curve score.`;
+}
+
+function buildInitialAssistantInterpretation(context) {
+  if (context.detection_status === "no_sustained_drop") {
+    return "No sustained below-threshold speed-performance drop was detected under the current v0 rule. This does not prove that the section was unaffected. Short disruptions, smoothing, the selected threshold, or data coverage may influence this result. Phase-dependent curve metrics are therefore shown as unavailable.";
+  }
+
+  if (context.detection_status === "no_observed_support") {
+    return "This control section does not have direct NPMRDS curve support in the current v0 dataset. Tier 1/2 planning context may still be available, but no observed Q(t)-based performance interpretation is provided.";
+  }
+
+  if (context.detection_status === "recovery_endpoint_censored") {
+    return `A sustained speed-performance decline was detected during the analysis window, but sustained recovery was not fully observed within the available analysis window. Minimum performance reached approximately ${assistantPercent(context.q_min)} of baseline. The displayed recovery duration and recovery slope should be interpreted as censored or lower-confidence values. ${planningContextSentence(context)}`;
+  }
+
+  if (context.q_min === null) {
+    return `Direct NPMRDS curve support is present, but phase-dependent metrics are unavailable under the current ${statusLabel(context.detection_status).toLowerCase()} status. No Q(t)-based phase interpretation is generated for unavailable values.`;
+  }
+
+  return `A sustained speed-performance decline was detected during the analysis window under the current v0 method. Minimum performance reached approximately ${assistantPercent(context.q_min)} of the baseline level, representing a detected loss depth of ${assistantPercent(context.loss_depth_pct)}. The loss area was ${assistantMetric(context.resilience_loss_area)}; this metric combines the depth and persistence of the detected decline. The detected recovery endpoint occurred approximately ${assistantHours(context.recovery_duration_hours)} after the minimum point. ${planningContextSentence(context)}`;
+}
+
+function buildWarningAssistantResponse(context) {
+  if (context.detection_status === "no_sustained_drop") {
+    return "The current warning means that no sustained below-threshold drop met the v0 detection rule. It does not establish that the section was unaffected; short disruptions, smoothing, threshold selection, or data coverage may influence this status.";
+  }
+  if (context.detection_status === "recovery_endpoint_censored") {
+    return `The current warning means sustained recovery was not fully observed within the available analysis window. The displayed recovery duration of ${assistantHours(context.recovery_duration_hours)} and recovery slope of ${assistantMetric(context.recovery_slope)} are therefore censored or lower-confidence values.`;
+  }
+  if (context.detection_status === "no_observed_support") {
+    return "The current status means this control section has no direct NPMRDS Q(t) curve in the v0 common-support dataset. Tier 1/2 planning context may be displayed, but observed curve metrics are unavailable.";
+  }
+  if (context.detection_status === "detected") {
+    return "The current status is a detected phase pattern. No no-sustained-drop or censored-recovery warning is attached to this section under the current v0 method.";
+  }
+  return `The current section status is ${statusLabel(context.detection_status)}. No additional warning interpretation is encoded in the displayed dashboard properties.`;
+}
+
+function buildPotentialComparisonResponse(context) {
+  const observedText = context.score_v0 === null
+    ? "The observed curve score v0 is unavailable."
+    : `The observed curve score v0 is ${assistantMetric(context.score_v0)}${context.score_class ? `, in the ${context.score_class} runtime class` : ""}; Q_min is ${assistantMetric(context.q_min)}.`;
+  return `The Tier 3 observed curve metrics describe speed performance measured during the event analysis window. The Potential Resilience value summarizes Tier 1/2 weather and network context. They measure different concepts and should not be expected to match. ${observedText} The selected Potential Resilience value is ${assistantMetric(context.Potential_Resilience_Score)}, WEATHER_REI is ${assistantMetric(context.WEATHER_REI)}, NETRISK_LITE is ${assistantMetric(context.NETRISK_LITE)}, and EVENT_REI is ${assistantMetric(context.EVENT_REI)}. No causal relationship is assigned by this comparison.`;
+}
+
+function buildCurveSummaryResponse(context) {
+  if (context.detection_status === "no_observed_support") {
+    return "No direct NPMRDS Q(t) curve is available for this control section in the current v0 dataset, so an observed curve summary cannot be generated.";
+  }
+  if (context.detection_status === "no_sustained_drop") {
+    return "The available Q(t) series did not contain a sustained below-threshold drop that met the current v0 rule. Phase onset, minimum, loss area, and recovery metrics are therefore unavailable under this detection result.";
+  }
+  if (context.q_min === null) {
+    return `A Q(t) curve is available, but phase metrics are unavailable under the ${statusLabel(context.detection_status)} status. The prototype does not infer missing onset, minimum, or recovery values.`;
+  }
+  const phaseTiming = `Detected onset: ${context.onset_time || "N/A"}; minimum point: ${context.min_time || "N/A"}; recovery endpoint: ${context.recovery_end_time || "N/A"}.`;
+  const recoveryText = context.detection_status === "recovery_endpoint_censored"
+    ? "The recovery endpoint is censored at the available analysis-window boundary."
+    : `The detected recovery duration was ${assistantHours(context.recovery_duration_hours)}.`;
+  return `Q0 was ${assistantMetric(context.q0)} and Q_min was ${assistantMetric(context.q_min)}, with a loss depth of ${assistantMetric(context.loss_depth)} (${assistantPercent(context.loss_depth_pct)}). The detected loss area was ${assistantMetric(context.resilience_loss_area)}. ${phaseTiming} ${recoveryText}`;
+}
+
+function buildReviewNote(context) {
+  const observed = context.score_v0 === null
+    ? `Observed curve score and phase-dependent metrics are unavailable under the ${statusLabel(context.detection_status)} status.`
+    : `Under the current v0 method, the observed curve score is ${assistantMetric(context.score_v0)}, Q_min is ${assistantMetric(context.q_min)}, loss depth is ${assistantPercent(context.loss_depth_pct)}, loss area is ${assistantMetric(context.resilience_loss_area)}, and recovery duration is ${assistantHours(context.recovery_duration_hours)}.`;
+  const limitation = context.warning
+    ? context.warning
+    : "No no-sustained-drop or censored-recovery warning is attached under the current v0 method.";
+  return `Section\n${assistantSectionName(context)}, ${context.county || "county unavailable"}. The section has ${context.matched_tmc_count === null ? "N/A" : Math.round(context.matched_tmc_count)} matched TMCs and a data-density summary of ${context.data_density_summary || "N/A"}.\n\nObserved performance\n${observed} These values describe normalized speed performance during the analysis window and do not identify a cause.\n\nPlanning context\nPotential Resilience is ${assistantMetric(context.Potential_Resilience_Score)}, WEATHER_REI is ${assistantMetric(context.WEATHER_REI)}, NETRISK_LITE is ${assistantMetric(context.NETRISK_LITE)}, EVENT_REI is ${assistantMetric(context.EVENT_REI)}, and AADT is ${context.AADT_CS === null ? "N/A" : Math.round(context.AADT_CS).toLocaleString()}. Tier 1/2 context is separate from the observed score.\n\nData/status limitation\n${limitation} Score v0 and its runtime class are experimental and event/method-specific.`;
+}
+
+function generatePrototypeAssistantResponse(question, props) {
+  const context = buildAssistantContext(props);
+  if (!context) {
+    return "Select a control section first. The prototype assistant only summarizes metrics attached to the current selection.";
+  }
+
+  const normalizedQuestion = String(question || "").trim().toLowerCase();
+  if (normalizedQuestion.includes("warning")) {
+    return buildWarningAssistantResponse(context);
+  }
+
+  if (normalizedQuestion.includes("compare") || normalizedQuestion.includes("potential")) {
+    return buildPotentialComparisonResponse(context);
+  }
+
+  if (normalizedQuestion.includes("q(t)") || normalizedQuestion.includes("curve")) {
+    return buildCurveSummaryResponse(context);
+  }
+
+  if (normalizedQuestion.includes("review") || normalizedQuestion.includes("note")) {
+    return buildReviewNote(context);
+  }
+
+  return buildInitialAssistantInterpretation(context);
+}
+
+function renderAssistantMessage(role, text) {
+  const messages = document.getElementById("assistantMessages");
+  const message = document.createElement("div");
+  message.className = `assistant-message ${role === "user" ? "user" : "assistant"}`;
+  message.textContent = text;
+  messages.appendChild(message);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function resetAssistantForSelection(props) {
+  const messages = document.getElementById("assistantMessages");
+  messages.replaceChildren();
+  document.getElementById("assistantInput").value = "";
+  document.getElementById("assistantStatus").textContent = "Assistant Preview";
+  if (!props) {
+    renderAssistantMessage("assistant", "Select a control section to ground the assistant context.");
+    messages.scrollTop = 0;
+    return;
+  }
+  const context = buildAssistantContext(props);
+  renderAssistantMessage("assistant", buildInitialAssistantInterpretation(context));
+  messages.scrollTop = 0;
+}
+
+async function submitAssistantQuestion(question) {
+  const cleanQuestion = String(question || "").trim();
+  if (!cleanQuestion) return;
+  renderAssistantMessage("user", cleanQuestion);
+
+  if (!selectedProps) {
+    renderAssistantMessage("assistant", generatePrototypeAssistantResponse(cleanQuestion, null));
+    return;
+  }
+
+  if (ASSISTANT_API_URL === null) {
+    renderAssistantMessage("assistant", generatePrototypeAssistantResponse(cleanQuestion, selectedProps));
+    return;
+  }
+
+  const status = document.getElementById("assistantStatus");
+  status.textContent = "Backend request pending";
+  try {
+    const response = await fetch(ASSISTANT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: cleanQuestion, context: buildAssistantContext(selectedProps) })
+    });
+    if (!response.ok) throw new Error(`Assistant backend returned ${response.status}`);
+    const payload = await response.json();
+    renderAssistantMessage("assistant", String(payload.response || payload.answer || "No response returned."));
+    status.textContent = "Backend connected";
+  } catch (error) {
+    console.error(error);
+    renderAssistantMessage("assistant", `Backend unavailable. ${generatePrototypeAssistantResponse(cleanQuestion, selectedProps)}`);
+    status.textContent = "Local fallback";
+  }
+}
+
+function setupAssistant() {
+  const input = document.getElementById("assistantInput");
+  const send = document.getElementById("assistantSend");
+  const prompts = document.getElementById("assistantPromptButtons");
+  send.addEventListener("click", () => {
+    const question = input.value;
+    input.value = "";
+    submitAssistantQuestion(question);
+  });
+  input.addEventListener("keydown", event => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    send.click();
+  });
+  prompts.addEventListener("click", event => {
+    const button = event.target.closest("button[data-question]");
+    if (!button) return;
+    submitAssistantQuestion(button.dataset.question);
+  });
+  resetAssistantForSelection(null);
 }
 
 function nearestIndex(labels, timestamp) {
@@ -627,6 +892,7 @@ function shortDate(label) {
 }
 
 async function renderCurve(props) {
+  const requestId = ++curveRequestId;
   const card = document.getElementById("curveCard");
   const note = document.getElementById("curveNote");
   const markerLegend = document.getElementById("phaseMarkerLegend");
@@ -650,6 +916,7 @@ async function renderCurve(props) {
     return;
   }
   const payload = await response.json();
+  if (requestId !== curveRequestId) return;
   const series = payload.series || {};
   const labels = series.timestamp || [];
   const q = series.q || [];
@@ -776,6 +1043,7 @@ async function selectFeature(feature, layer) {
   selectedProps = feature.properties || {};
   applySelectedStyle();
   renderMetrics(selectedProps);
+  resetAssistantForSelection(selectedProps);
   await renderCurve(selectedProps);
 }
 
@@ -786,8 +1054,38 @@ function onEachFeature(feature, layer) {
     layerByCtrl.set(key, layer);
     featureByCtrl.set(key, feature);
   }
-  layer.bindPopup(makePopup(props));
-  layer.on("click", () => selectFeature(feature, layer));
+  layer.bindTooltip(makeTooltip(props), {
+    sticky: true,
+    direction: "top",
+    opacity: 0.96,
+    className: "cs-tooltip"
+  });
+  layer.on({
+    click: () => selectFeature(feature, layer),
+    mouseover: () => {
+      map.getContainer().style.cursor = "pointer";
+      if (layer !== selectedLeafletLayer) {
+        layer.setStyle({ weight: 4.5, opacity: 1 });
+        if (layer.bringToFront) layer.bringToFront();
+      }
+    },
+    mouseout: () => {
+      map.getContainer().style.cursor = "";
+      if (layer !== selectedLeafletLayer && controlLayer) {
+        controlLayer.resetStyle(layer);
+      } else {
+        applySelectedStyle();
+      }
+    }
+  });
+}
+
+function setupCurveDetails() {
+  const details = document.getElementById("curveDetails");
+  details.addEventListener("toggle", () => {
+    if (!details.open || !curveChart) return;
+    requestAnimationFrame(() => curveChart?.resize());
+  });
 }
 
 async function initMap() {
@@ -817,10 +1115,17 @@ async function initMap() {
   document.getElementById("censoredCount").textContent = summary.recovery_endpoint_censored.toLocaleString();
 
   controlLayer = L.geoJSON(mapData, {
-    renderer: L.canvas({ padding: 0.5 }),
+    renderer: controlRenderer,
     style: featureStyle,
     onEachFeature
   }).addTo(map);
+
+  map.on("zoomend", () => {
+    if (controlLayer) {
+      controlLayer.setStyle(featureStyle);
+      applySelectedStyle();
+    }
+  });
 
   if (controlLayer.getBounds().isValid()) {
     map.fitBounds(controlLayer.getBounds(), { padding: [35, 35] });
@@ -836,6 +1141,9 @@ document.getElementById("layerSelect").addEventListener("change", event => {
   }
   updateLegend();
 });
+
+setupAssistant();
+setupCurveDetails();
 
 initMap().catch(error => {
   console.error(error);

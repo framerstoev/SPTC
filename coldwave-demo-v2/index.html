@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Experimental Data-Driven Resilience Curve Prototype</title>
+  <title>Experimental Roadway Resilience Explorer</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="./css/style.css" />
 </head>
@@ -11,17 +11,19 @@
   <div class="app-shell">
     <aside class="panel left-panel">
       <header class="hero">
-        <p class="eyebrow">Jan. 2026 Texas cold-wave case</p>
-        <h1>Experimental Data-Driven Resilience Curve Prototype</h1>
-        <p>Candidate B phase detection for control-section Q(t) curves</p>
+        <h1>Experimental Roadway Resilience Explorer</h1>
+        <p>Jan. 2026 Texas cold-wave case | Data-driven v2 review prototype</p>
       </header>
 
-      <section class="summary-grid">
-        <div><span>Total CS</span><strong id="totalSections">-</strong></div>
-        <div><span>Curve support</span><strong id="curveSections">-</strong></div>
-        <div><span>Valid phases</span><strong id="validDetections">-</strong></div>
-        <div><span>Censored recovery</span><strong id="censoredCount">-</strong></div>
-      </section>
+      <p class="status-line" aria-label="Statewide data status">
+        <strong id="totalSections">-</strong> sections
+        <span aria-hidden="true">&middot;</span>
+        <strong id="curveSections">-</strong> with curves
+        <span aria-hidden="true">&middot;</span>
+        <strong id="validDetections">-</strong> valid phases
+        <span aria-hidden="true">&middot;</span>
+        <strong id="censoredCount">-</strong> censored
+      </p>
 
       <section class="control-block">
         <label for="csSearch">Find control section</label>
@@ -32,7 +34,7 @@
         <div class="search-results" id="searchResults" aria-live="polite"></div>
       </section>
 
-      <section class="control-block">
+      <section class="control-block map-controls">
         <label for="layerSelect">Map layer</label>
         <select id="layerSelect">
           <option value="observed_curve_resilience_score_v0">Observed Curve Resilience Score v0</option>
@@ -49,80 +51,112 @@
           <option value="EVENT_REI">EVENT_REI</option>
         </select>
         <p class="layer-note" id="layerNote"></p>
-        <div class="legend" id="legend"></div>
+        <details class="legend-details">
+          <summary>View legend</summary>
+          <div class="legend" id="legend"></div>
+        </details>
       </section>
 
-      <section class="notes">
-        <h2>Method</h2>
-        <p>This v2 prototype is experimental. It uses a data-driven resilience-curve method rather than predefined event/recovery windows.</p>
-        <ul>
-          <li>Q(t) = speed / baseline speed profile; Q = 1 means baseline-level speed performance.</li>
-          <li>Candidate B: dominant sustained performance drop.</li>
-          <li>6-hour centered rolling median.</li>
-          <li>Threshold = 0.90 x Q0.</li>
-          <li>k = 3 consecutive observations.</li>
-          <li>Tier 3 metrics are observed operational labels.</li>
-          <li>Tier 1/2 variables are predictor/context layers.</li>
-          <li>Score classes are experimental v0 quantile classes.</li>
-        </ul>
+      <section class="selected" aria-live="polite">
+        <p class="eyebrow">Selected control section</p>
+        <h2 id="selectedTitle">No section selected</h2>
+        <p id="selectedSub">Click a control section on the map or use search.</p>
+
+        <div class="badge-row" id="statusBadges"></div>
       </section>
 
-      <section class="notes compact">
-        <h2>Caveats</h2>
-        <ul>
-          <li>Do not treat this as the stable dashboard score.</li>
-          <li>Delay burden is supplemental user-impact information.</li>
-          <li>Profile volume is not observed event-day volume.</li>
-          <li>Phase detection is sensitive to smoothing, threshold, and noise.</li>
-        </ul>
+      <section class="assistant-panel" aria-labelledby="assistantHeading">
+        <div class="assistant-heading">
+          <div>
+            <p class="eyebrow">Review support</p>
+            <h2 id="assistantHeading">Resilience Assistant</h2>
+          </div>
+          <span class="assistant-status" id="assistantStatus">Assistant Preview</span>
+        </div>
+        <p class="assistant-disclaimer">Responses are currently generated from displayed dashboard metrics. No live AI service is connected.</p>
+        <div class="assistant-messages" id="assistantMessages" aria-live="polite"></div>
+        <div class="assistant-prompt-grid" id="assistantPromptButtons">
+          <button type="button" data-question="Explain this control section">Explain section</button>
+          <button type="button" data-question="Compare observed and potential resilience">Compare potential</button>
+          <button type="button" data-question="What does the warning mean?">Explain warning</button>
+          <button type="button" data-question="Summarize the Q(t) curve">Summarize curve</button>
+          <button type="button" data-question="Generate a review summary">Create review note</button>
+        </div>
+        <div class="assistant-input-row">
+          <input id="assistantInput" type="text" autocomplete="off" placeholder="Ask about the selected section..." />
+          <button id="assistantSend" type="button">Send</button>
+        </div>
       </section>
+
+      <section class="supporting-metrics" aria-label="Selected control-section supporting metrics">
+        <div class="metric-grid top-grid" id="topMetrics"></div>
+      </section>
+
+      <details class="technical-details" id="curveDetails">
+        <summary>View Q(t) curve and phase metrics</summary>
+        <div class="details-content">
+          <div class="curve-card" id="curveCard">
+            <div class="section-heading">
+              <h3>Full-window Q(t) curve</h3>
+              <p>Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance.</p>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="curveChart"></canvas>
+            </div>
+            <div class="phase-marker-legend" id="phaseMarkerLegend"></div>
+            <div class="chart-note" id="curveNote">Select a control section to load its curve.</div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Data-driven observed curve metrics</h3>
+            <div class="metric-grid" id="curveMetrics"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="technical-details" id="contextDetails">
+        <summary>View Tier 1/2 context and delay proxy</summary>
+        <div class="details-content">
+          <div class="detail-block first-block">
+            <h3>Supplemental impact</h3>
+            <p class="muted">Vehicle-hours delay is a proxy using profile demand weighting, not real observed event-day total delay.</p>
+            <div class="metric-grid" id="impactMetrics"></div>
+          </div>
+
+          <div class="detail-block">
+            <h3>Tier 1/2 predictor context</h3>
+            <p class="muted">These variables are not part of the observed curve score. They are potential predictors/context layers for future modeling.</p>
+            <div class="metric-grid" id="tierMetrics"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="technical-details method-details">
+        <summary>Method and limitations</summary>
+        <div class="details-content notes">
+          <div class="warning-card" id="warningCard"></div>
+          <h2>Experimental method</h2>
+          <ul>
+            <li>Q(t) = speed / baseline speed profile; Q = 1 means baseline-level speed performance.</li>
+            <li>Candidate B uses the dominant sustained performance drop.</li>
+            <li>Detection uses a 6-hour centered rolling median, 0.90 x Q0 threshold, and k = 3 consecutive observations.</li>
+            <li>Tier 3 metrics are observed operational labels; Tier 1/2 variables are predictor/context layers.</li>
+            <li>Score classes are experimental v0 quantile classes.</li>
+          </ul>
+          <h2>Limitations</h2>
+          <ul>
+            <li>This is not the stable dashboard score.</li>
+            <li>Delay burden is supplemental user-impact information.</li>
+            <li>Profile volume is not observed event-day volume.</li>
+            <li>Phase detection is sensitive to smoothing, threshold, data coverage, and noise.</li>
+          </ul>
+        </div>
+      </details>
     </aside>
 
     <main class="map-shell">
       <div id="map"></div>
     </main>
-
-    <aside class="panel right-panel">
-      <section class="selected">
-        <p class="eyebrow">Selected control section</p>
-        <h2 id="selectedTitle">No section selected</h2>
-        <p id="selectedSub">Click a control section on the map.</p>
-
-        <div class="badge-row" id="statusBadges"></div>
-        <div class="metric-grid top-grid" id="topMetrics"></div>
-
-        <div class="warning-card" id="warningCard"></div>
-
-        <div class="curve-card" id="curveCard">
-          <div class="section-heading">
-            <h3>Full-window Q(t) curve</h3>
-            <p>Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance.</p>
-          </div>
-          <div class="chart-wrap">
-            <canvas id="curveChart"></canvas>
-          </div>
-          <div class="phase-marker-legend" id="phaseMarkerLegend"></div>
-          <div class="chart-note" id="curveNote"></div>
-        </div>
-
-        <div class="detail-block">
-          <h3>Data-driven observed curve metrics</h3>
-          <div class="metric-grid" id="curveMetrics"></div>
-        </div>
-
-        <div class="detail-block">
-          <h3>Supplemental impact</h3>
-          <p class="muted">Vehicle-hours delay is a proxy using profile demand weighting, not real observed event-day total delay.</p>
-          <div class="metric-grid" id="impactMetrics"></div>
-        </div>
-
-        <div class="detail-block">
-          <h3>Tier 1/2 predictor context</h3>
-          <p class="muted">These variables are not part of the observed curve score. They are potential predictors/context layers for future modeling.</p>
-          <div class="metric-grid" id="tierMetrics"></div>
-        </div>
-      </section>
-    </aside>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
