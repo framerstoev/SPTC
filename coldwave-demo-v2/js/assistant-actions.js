@@ -20,6 +20,17 @@
     metric: "metric",
     review: "review"
   });
+  const fallbackLabels = Object.freeze({
+    backend_unavailable: "Backend unavailable — local fallback",
+    request_timeout: "Backend timeout — local fallback",
+    section_not_found: "Section unavailable — local fallback",
+    metric_not_found: "Metric unavailable — local fallback",
+    backend_validation_error: "Backend rejected request — local fallback",
+    snapshot_unavailable: "Snapshot unavailable — local fallback",
+    invalid_json: "Backend response unavailable — local fallback",
+    invalid_response: "Backend response unavailable — local fallback",
+    unexpected_status: "Backend response unavailable — local fallback"
+  });
 
   function createController(options = {}) {
     const assistantNamespace = global.SPTCAssistant || Object.create(null);
@@ -81,6 +92,34 @@
       elements.messages.scrollTop = 0;
     }
 
+    function textElement(tagName, className, text) {
+      const element = documentRef.createElement(tagName);
+      if (className) element.className = className;
+      element.textContent = text;
+      return element;
+    }
+
+    function replaceStructuredMessage(message) {
+      elements.messages.replaceChildren(message);
+      elements.messages.scrollTop = 0;
+    }
+
+    function appendDefinition(result, label, value) {
+      const row = documentRef.createElement("p");
+      row.className = "assistant-result-row";
+      row.appendChild(textElement("strong", null, `${label}: `));
+      row.appendChild(textElement("span", null, value));
+      result.appendChild(row);
+    }
+
+    function formatNumber(value, digits = 3) {
+      return Number(value).toFixed(digits);
+    }
+
+    function readableStatus(value) {
+      return String(value).replaceAll("_", " ");
+    }
+
     function clearReview() {
       elements.reviewContainer.replaceChildren();
     }
@@ -95,7 +134,7 @@
         requestGeneration: generation,
         currentAction
       };
-      elements.status.textContent = statusText;
+      if (statusText !== null) elements.status.textContent = statusText;
       elements.messages.setAttribute(
         "aria-busy",
         requestState === requestStates.loading ? "true" : "false"
@@ -143,7 +182,7 @@
       pending = null;
       generation += 1;
       request.controller.abort();
-      updateState(requestStates.cancelledOrStale, "Request cancelled", request.action);
+      updateState(requestStates.cancelledOrStale, null, request.action);
     }
 
     function normalizeContext(nextContext) {
@@ -200,17 +239,193 @@
       updateState(requestStates.idle, "Local template", action);
     }
 
-    function renderUnwiredBackendFallback(action) {
+    function localFallbackText(action) {
+      if (action === actions.metric) {
+        return context.localMetricText
+          || "The current layer does not map to a reviewed metric explanation.";
+      }
+      if (action === actions.review) {
+        return `The backend review-note draft is unavailable; no draft was generated. ${context.localSectionText || "A concise local section preview is unavailable."}`;
+      }
+      return context.localSectionText || "A concise local section preview is unavailable.";
+    }
+
+    function renderBackendFallback(action, errorCode) {
       clearReview();
-      const prefix = action === actions.review
-        ? "The backend review-note draft is unavailable."
-        : "The backend action is unavailable.";
-      replaceMessage(`${prefix} ${context.localSectionText || "A concise local section preview is unavailable."}`);
+      replaceMessage(localFallbackText(action));
       updateState(
         requestStates.fallbackSuccess,
-        "Backend unavailable — local fallback",
+        fallbackLabels[errorCode] || "Backend response unavailable — local fallback",
         action
       );
+    }
+
+    function compactMetricList(title, metrics, attributeName) {
+      const block = documentRef.createElement("div");
+      block.className = "assistant-result-group";
+      block.appendChild(textElement("h4", null, title));
+      const list = documentRef.createElement("ul");
+      metrics.forEach(metric => {
+        list.appendChild(textElement("li", null, `${metric.label}: ${metric.value}`));
+      });
+      block.appendChild(list);
+      block.setAttribute(attributeName, String(metrics.length));
+      return block;
+    }
+
+    function renderSectionResult(response) {
+      const result = documentRef.createElement("div");
+      result.className = "assistant-message assistant assistant-result";
+      result.appendChild(textElement("h3", null, response.identity.display_cs_id));
+      appendDefinition(
+        result,
+        "Location",
+        `${response.identity.route}, ${response.identity.county}`
+      );
+      appendDefinition(
+        result,
+        "Observed support",
+        response.support_status.observed_support ? "available" : "unavailable"
+      );
+      appendDefinition(
+        result,
+        "Detection status",
+        readableStatus(response.support_status.detection_status)
+      );
+
+      const observedMetrics = [];
+      if (response.observed_metrics.q_min !== null) {
+        observedMetrics.push({
+          label: "Q_min",
+          value: formatNumber(response.observed_metrics.q_min)
+        });
+      }
+      if (response.observed_metrics.loss_depth_percent !== null) {
+        observedMetrics.push({
+          label: "Loss depth",
+          value: `${formatNumber(response.observed_metrics.loss_depth_percent, 1)}%`
+        });
+      }
+      if (response.observed_metrics.resilience_loss_area !== null) {
+        observedMetrics.push({
+          label: "Resilience loss area",
+          value: `${formatNumber(response.observed_metrics.resilience_loss_area)} Q-hours`
+        });
+      }
+      if (observedMetrics.length > 0) {
+        result.appendChild(compactMetricList(
+          "Selected observed evidence",
+          observedMetrics.slice(0, 3),
+          "data-observed-metric-count"
+        ));
+      } else if (!response.support_status.observed_support) {
+        result.appendChild(textElement(
+          "p",
+          "assistant-result-note",
+          "Tier 3 observed evidence is unavailable for this section in the current release. This does not indicate that no disruption occurred."
+        ));
+      } else {
+        result.appendChild(textElement(
+          "p",
+          "assistant-result-note",
+          "Phase-dependent observed metrics are unavailable under this detection status."
+        ));
+      }
+
+      const planningMetrics = [
+        { label: "WEATHER_REI", value: formatNumber(response.planning_context.weather_rei) },
+        { label: "NETRISK_LITE", value: formatNumber(response.planning_context.netrisk_lite) },
+        { label: "EVENT_REI", value: formatNumber(response.planning_context.event_rei) }
+      ];
+      result.appendChild(compactMetricList(
+        "Planning context",
+        planningMetrics,
+        "data-planning-metric-count"
+      ));
+      if (response.warnings.length > 0) {
+        result.appendChild(compactMetricList(
+          "Warnings",
+          response.warnings.map(warning => ({
+            label: `${warning.code} (${warning.severity})`,
+            value: warning.message
+          })),
+          "data-warning-count"
+        ));
+      } else {
+        appendDefinition(result, "Warnings", "None returned");
+      }
+      result.appendChild(textElement(
+        "p",
+        "assistant-result-note",
+        "Planning context and observed Tier 3 evidence describe different parts of this event-specific review."
+      ));
+      replaceStructuredMessage(result);
+    }
+
+    function renderMetricResult(response) {
+      const result = documentRef.createElement("div");
+      result.className = "assistant-message assistant assistant-result";
+      result.appendChild(textElement("h3", null, response.metric.display_name));
+      result.appendChild(textElement(
+        "p",
+        "assistant-result-note",
+        response.interpretation.plain_language
+      ));
+      appendDefinition(result, "Definition", response.metric.definition);
+      appendDefinition(result, "Unit", response.metric.unit);
+      appendDefinition(
+        result,
+        "Applicability",
+        response.metric.applicability.map(readableStatus).join(", ")
+      );
+      if (response.metric.nullable) {
+        appendDefinition(result, "When unavailable", response.metric.null_meaning);
+      }
+      const limitations = response.interpretation.limitations.slice(0, 3);
+      const limitationBlock = compactMetricList(
+        "Reviewed limitations",
+        limitations.map((limitation, index) => ({
+          label: `Limitation ${index + 1}`,
+          value: limitation
+        })),
+        "data-limitation-count"
+      );
+      result.appendChild(limitationBlock);
+      result.appendChild(textElement(
+        "p",
+        "assistant-result-note",
+        "This is a metric definition, not an interpretation of the selected section's relative standing."
+      ));
+      replaceStructuredMessage(result);
+    }
+
+    function backendMethod(action) {
+      if (!client) return null;
+      if (action === actions.section && typeof client.getSectionSummary === "function") {
+        return (request, signal) => client.getSectionSummary(request.sectionId, { signal });
+      }
+      if (action === actions.metric && typeof client.explainMetric === "function") {
+        return (request, signal) => client.explainMetric(request.metricName, { signal });
+      }
+      return null;
+    }
+
+    function requestIsCurrent(request) {
+      return pending === request
+        && generation === request.generation
+        && context.sectionId === request.sectionId
+        && context.activeLayer === request.activeLayer
+        && context.activeMetric === request.metricName;
+    }
+
+    function renderBackendSuccess(action, response) {
+      clearReview();
+      if (action === actions.section) {
+        renderSectionResult(response);
+      } else if (action === actions.metric) {
+        renderMetricResult(response);
+      }
+      updateState(requestStates.backendSuccess, "Backend result", action);
     }
 
     async function startAction(action) {
@@ -225,12 +440,40 @@
         return;
       }
 
-      // Action-specific backend handlers are added in the following reviewed commits.
-      if (!client) {
-        renderUnwiredBackendFallback(action);
+      const method = backendMethod(action);
+      if (!method) {
+        renderBackendFallback(action, "backend_unavailable");
         return;
       }
-      renderUnwiredBackendFallback(action);
+      const request = {
+        generation,
+        action,
+        controller: new global.AbortController(),
+        sectionId: context.sectionId,
+        activeLayer: context.activeLayer,
+        metricName: context.activeMetric
+      };
+      pending = request;
+      replaceMessage(action === actions.metric
+        ? "Loading the reviewed metric definition..."
+        : "Loading the reviewed section summary...");
+      updateState(requestStates.loading, "Backend tools — loading", action);
+      try {
+        const response = await method(request, request.controller.signal);
+        if (!requestIsCurrent(request)) return;
+        pending = null;
+        renderBackendSuccess(action, response);
+      } catch (error) {
+        if (!requestIsCurrent(request)) return;
+        pending = null;
+        const errorCode = typeof error?.code === "string" ? error.code : "invalid_response";
+        if (errorCode === "request_cancelled") {
+          updateState(requestStates.cancelledOrStale, null, action);
+          renderPreview();
+          return;
+        }
+        renderBackendFallback(action, errorCode);
+      }
     }
 
     function bindAction(button, action) {
