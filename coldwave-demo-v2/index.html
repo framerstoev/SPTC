@@ -78,12 +78,12 @@
         </div>
         <p class="assistant-disclaimer">Deterministic local templates and reviewed read-only backend tools only. No LLM is connected.</p>
         <div class="assistant-messages" id="assistantMessages" aria-live="polite" aria-busy="false"></div>
-        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Fixed reviewed Assistant actions">
+        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Fixed reviewed Assistant actions" aria-describedby="assistantActionAvailability">
           <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
           <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain the current metric</button>
           <button id="assistantGenerateReviewNote" type="button" data-assistant-action="review" disabled>Generate review note</button>
         </div>
-        <p class="assistant-action-availability" id="assistantActionAvailability">Select a control section to enable the fixed actions.</p>
+        <p class="assistant-action-availability" id="assistantActionAvailability" aria-live="polite" aria-atomic="true">Select a control section to enable the fixed actions.</p>
         <div class="assistant-review-container" id="assistantReviewContainer"></div>
         <p class="assistant-fixed-note" id="assistantInteractionNote">Fixed reviewed actions only; free-form input is not available in this mode.</p>
         <div class="assistant-input-row" id="assistantComposer" hidden aria-hidden="true">

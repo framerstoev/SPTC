@@ -46,6 +46,9 @@
       || Object.freeze({});
     const client = options.client || assistantNamespace.client || null;
     const documentRef = options.document || global.document;
+    const clipboard = Object.prototype.hasOwnProperty.call(options, "clipboard")
+      ? options.clipboard
+      : global.navigator?.clipboard || null;
     const mode = runtime.effective_mode === modes.backendTools
       ? modes.backendTools
       : modes.localTemplate;
@@ -68,6 +71,7 @@
     };
     let generation = 0;
     let pending = null;
+    let activeReview = null;
     let state = {
       mode,
       requestState: requestStates.noSelection,
@@ -121,6 +125,7 @@
     }
 
     function clearReview() {
+      activeReview = null;
       elements.reviewContainer.replaceChildren();
     }
 
@@ -215,6 +220,11 @@
       const identityChanged = normalized.sectionId !== context.sectionId
         || normalized.activeLayer !== context.activeLayer
         || normalized.activeMetric !== context.activeMetric;
+      if (!identityChanged && pending) {
+        context = normalized;
+        updateAvailability();
+        return;
+      }
       if (identityChanged) abortPending();
       context = normalized;
       if (identityChanged) generation += 1;
@@ -399,6 +409,128 @@
       replaceStructuredMessage(result);
     }
 
+    function reviewListBlock(title, items, listName) {
+      const block = documentRef.createElement("section");
+      block.className = "assistant-review-list-block";
+      block.setAttribute("data-review-list", listName);
+      block.appendChild(textElement("h3", null, title));
+      const list = documentRef.createElement("ul");
+      items.forEach(item => {
+        list.appendChild(textElement("li", null, item));
+      });
+      block.appendChild(list);
+      return block;
+    }
+
+    function reviewDetectionStatus(response) {
+      const statusEvidence = response.evidence.find(evidence => (
+        evidence.field_name === "detection_status"
+      ));
+      return statusEvidence ? readableStatus(statusEvidence.raw_value) : "unavailable";
+    }
+
+    function renderReviewResult(response, request) {
+      const compact = documentRef.createElement("div");
+      compact.className = "assistant-message assistant assistant-result";
+      compact.setAttribute("data-review-compact", "true");
+      compact.appendChild(textElement("h3", null, response.title));
+      compact.appendChild(textElement(
+        "p",
+        "assistant-review-draft-label",
+        "Draft for human review"
+      ));
+      appendDefinition(
+        compact,
+        "Section",
+        `${response.identity.display_cs_id}; ${response.identity.route}, ${response.identity.county}`
+      );
+      appendDefinition(compact, "Status", reviewDetectionStatus(response));
+      appendDefinition(
+        compact,
+        "Warning codes",
+        response.warnings.map(warning => warning.code).join(", ")
+      );
+      appendDefinition(compact, "Evidence records", String(response.evidence.length));
+      appendDefinition(compact, "Limitations", String(response.limitations.length));
+      compact.appendChild(textElement(
+        "p",
+        "assistant-result-note",
+        "Expand the full draft below for structured review and the human-review checklist."
+      ));
+      replaceStructuredMessage(compact);
+
+      const details = documentRef.createElement("details");
+      details.className = "assistant-review-details";
+      details.open = false;
+      details.setAttribute("data-report-section-count", String(response.sections.length));
+      details.appendChild(textElement("summary", null, "Open full review note"));
+      const body = documentRef.createElement("div");
+      body.className = "assistant-review-body";
+      response.sections.forEach(section => {
+        const sectionElement = documentRef.createElement("section");
+        sectionElement.className = "assistant-review-section";
+        sectionElement.setAttribute("data-report-section", section.key);
+        sectionElement.appendChild(textElement("h3", null, section.heading));
+        sectionElement.appendChild(textElement("p", null, section.body));
+        body.appendChild(sectionElement);
+      });
+      body.appendChild(reviewListBlock(
+        "Warnings",
+        response.warnings.map(warning => (
+          `${warning.code} (${warning.severity}): ${warning.message}`
+        )),
+        "warnings"
+      ));
+      body.appendChild(reviewListBlock(
+        "Limitations",
+        response.limitations,
+        "limitations"
+      ));
+      body.appendChild(reviewListBlock(
+        "Human-review checklist",
+        response.human_review_items.map(item => `Review: ${item}`),
+        "human-review-checklist"
+      ));
+      details.appendChild(body);
+      elements.reviewContainer.appendChild(details);
+
+      const reviewToken = Object.freeze({
+        generation: request.generation,
+        sectionId: request.sectionId,
+        markdown: response.rendered_markdown
+      });
+      activeReview = reviewToken;
+      const copyRow = documentRef.createElement("div");
+      copyRow.className = "assistant-copy-row";
+      const copyButton = textElement("button", null, "Copy Markdown");
+      copyButton.setAttribute("id", "assistantCopyMarkdown");
+      copyButton.setAttribute("type", "button");
+      const copyStatus = documentRef.createElement("span");
+      copyStatus.setAttribute("id", "assistantCopyStatus");
+      copyStatus.className = "assistant-copy-status";
+      copyStatus.setAttribute("role", "status");
+      copyStatus.setAttribute("aria-live", "polite");
+      copyStatus.setAttribute("aria-atomic", "true");
+      copyButton.addEventListener("click", async () => {
+        if (activeReview !== reviewToken) return;
+        if (!clipboard || typeof clipboard.writeText !== "function") {
+          copyStatus.textContent = "Clipboard unavailable.";
+          return;
+        }
+        try {
+          await clipboard.writeText(reviewToken.markdown);
+          if (activeReview !== reviewToken) return;
+          copyStatus.textContent = "Copied Markdown.";
+        } catch {
+          if (activeReview !== reviewToken) return;
+          copyStatus.textContent = "Copy failed.";
+        }
+      });
+      copyRow.appendChild(copyButton);
+      copyRow.appendChild(copyStatus);
+      elements.reviewContainer.appendChild(copyRow);
+    }
+
     function backendMethod(action) {
       if (!client) return null;
       if (action === actions.section && typeof client.getSectionSummary === "function") {
@@ -406,6 +538,9 @@
       }
       if (action === actions.metric && typeof client.explainMetric === "function") {
         return (request, signal) => client.explainMetric(request.metricName, { signal });
+      }
+      if (action === actions.review && typeof client.generateSectionReviewNote === "function") {
+        return (request, signal) => client.generateSectionReviewNote(request.sectionId, { signal });
       }
       return null;
     }
@@ -418,14 +553,20 @@
         && context.activeMetric === request.metricName;
     }
 
-    function renderBackendSuccess(action, response) {
+    function renderBackendSuccess(action, response, request) {
       clearReview();
       if (action === actions.section) {
         renderSectionResult(response);
       } else if (action === actions.metric) {
         renderMetricResult(response);
+      } else {
+        renderReviewResult(response, request);
       }
-      updateState(requestStates.backendSuccess, "Backend result", action);
+      updateState(
+        requestStates.backendSuccess,
+        action === actions.review ? "Draft for human review" : "Backend result",
+        action
+      );
     }
 
     async function startAction(action) {
@@ -454,15 +595,18 @@
         metricName: context.activeMetric
       };
       pending = request;
-      replaceMessage(action === actions.metric
+      const loadingText = action === actions.metric
         ? "Loading the reviewed metric definition..."
-        : "Loading the reviewed section summary...");
+        : action === actions.review
+          ? "Loading the reviewed review-note draft..."
+          : "Loading the reviewed section summary...";
+      replaceMessage(loadingText);
       updateState(requestStates.loading, "Backend tools — loading", action);
       try {
         const response = await method(request, request.controller.signal);
         if (!requestIsCurrent(request)) return;
+        renderBackendSuccess(action, response, request);
         pending = null;
-        renderBackendSuccess(action, response);
       } catch (error) {
         if (!requestIsCurrent(request)) return;
         pending = null;
