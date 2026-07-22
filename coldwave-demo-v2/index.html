@@ -71,20 +71,24 @@
             <p class="eyebrow">Review support</p>
             <h2 id="assistantHeading">Resilience Assistant</h2>
           </div>
-          <span class="assistant-status" id="assistantStatus">Assistant Preview</span>
+          <div class="assistant-state-labels">
+            <span class="assistant-mode" id="assistantModeLabel">Local template</span>
+            <span class="assistant-status" id="assistantStatus" role="status" aria-live="polite" aria-atomic="true">No section selected</span>
+          </div>
         </div>
-        <p class="assistant-disclaimer">Responses are currently generated from displayed dashboard metrics. No live AI service is connected.</p>
-        <div class="assistant-messages" id="assistantMessages" aria-live="polite"></div>
-        <div class="assistant-prompt-grid" id="assistantPromptButtons">
-          <button type="button" data-question="Explain this control section">Explain section</button>
-          <button type="button" data-question="Compare observed and potential resilience">Compare potential</button>
-          <button type="button" data-question="What does the warning mean?">Explain warning</button>
-          <button type="button" data-question="Summarize the Q(t) curve">Summarize curve</button>
-          <button type="button" data-question="Generate a review summary">Create review note</button>
+        <p class="assistant-disclaimer">Deterministic local templates and reviewed read-only backend tools only. No LLM is connected.</p>
+        <div class="assistant-messages" id="assistantMessages" aria-live="polite" aria-busy="false"></div>
+        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Fixed reviewed Assistant actions">
+          <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
+          <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain the current metric</button>
+          <button id="assistantGenerateReviewNote" type="button" data-assistant-action="review" disabled>Generate review note</button>
         </div>
-        <div class="assistant-input-row">
-          <input id="assistantInput" type="text" autocomplete="off" placeholder="Ask about the selected section..." />
-          <button id="assistantSend" type="button">Send</button>
+        <p class="assistant-action-availability" id="assistantActionAvailability">Select a control section to enable the fixed actions.</p>
+        <div class="assistant-review-container" id="assistantReviewContainer"></div>
+        <p class="assistant-fixed-note" id="assistantInteractionNote">Fixed reviewed actions only; free-form input is not available in this mode.</p>
+        <div class="assistant-input-row" id="assistantComposer" hidden aria-hidden="true">
+          <input id="assistantInput" type="text" autocomplete="off" placeholder="Free-form input is disabled" disabled />
+          <button id="assistantSend" type="button" disabled>Send</button>
         </div>
       </section>
 
@@ -163,6 +167,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="./js/assistant-config.js"></script>
   <script src="./js/assistant-api.js"></script>
+  <script src="./js/assistant-actions.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

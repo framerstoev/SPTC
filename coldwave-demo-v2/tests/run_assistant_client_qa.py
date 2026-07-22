@@ -22,9 +22,9 @@ CHROME_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
 )
-EXPECTED_APP_SHA256 = "fe29f97a658f00beb311738e3627a954bfa4d10562b67140315646b052b92d02"
+EXPECTED_APP_SHA256 = "747b9b0ec8b6f926696e57567ad0a869a9484bb640dfb72454754cb446b709fa"
 EXPECTED_STYLE_SHA256 = (
-    "75fe222a6e660027fbc8d233c2acacba429df5e2da0450f64eee0ffcde203b13"
+    "fefd14630f5c700e9dfb183f283dd3d34edaff5e3bd9637524c573c79d865fd8"
 )
 
 
@@ -45,9 +45,11 @@ def static_checks() -> None:
     index = (V2_ROOT / "index.html").read_text(encoding="utf-8")
     config = (V2_ROOT / "js" / "assistant-config.js").read_text(encoding="utf-8")
     api = (V2_ROOT / "js" / "assistant-api.js").read_text(encoding="utf-8")
+    actions = (V2_ROOT / "js" / "assistant-actions.js").read_text(encoding="utf-8")
     script_order = (
         "./js/assistant-config.js",
         "./js/assistant-api.js",
+        "./js/assistant-actions.js",
         "./js/app.js",
     )
     positions = [index.index(script) for script in script_order]
@@ -58,6 +60,7 @@ def static_checks() -> None:
         "css/style.css",
         "js/assistant-config.js",
         "js/assistant-api.js",
+        "js/assistant-actions.js",
         "js/app.js",
         "data/summary.json",
         "tests/run_assistant_client_qa.js",
@@ -90,6 +93,20 @@ def static_checks() -> None:
     assert api.count("global.fetch(url, requestOptions)") == 1
     assert "requestReviewedJson" in api
     assert "requestReviewedJson," not in api
+    assert all(
+        token not in actions
+        for token in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "DOMParser",
+            "fetch(",
+            "/api/v1/",
+            "localStorage",
+            "sessionStorage",
+            "Authorization",
+        )
+    )
     assert all(
         token not in index + config + api
         for token in (
@@ -269,6 +286,7 @@ def main() -> None:
             "/css/style.css",
             "/js/assistant-config.js",
             "/js/assistant-api.js",
+            "/js/assistant-actions.js",
             "/js/app.js",
             "/data/summary.json",
             "/data/curves/CS_1081.json",

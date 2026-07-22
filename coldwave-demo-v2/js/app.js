@@ -128,6 +128,7 @@ let controlLayer;
 let activeLayer = "observed_curve_resilience_score_v0";
 let selectedLeafletLayer = null;
 let selectedProps = null;
+let assistantActionController = null;
 let ranges = {};
 let scoreClassBreaks = [];
 let searchIndex = [];
@@ -739,19 +740,37 @@ function renderAssistantMessage(role, text) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-function resetAssistantForSelection(props) {
-  const messages = document.getElementById("assistantMessages");
-  messages.replaceChildren();
-  document.getElementById("assistantInput").value = "";
-  document.getElementById("assistantStatus").textContent = "Assistant Preview";
-  if (!props) {
-    renderAssistantMessage("assistant", "Select a control section to ground the assistant context.");
-    messages.scrollTop = 0;
-    return;
-  }
+function normalizedAssistantSectionId(props) {
+  if (!props) return null;
+  const value = String(
+    props.CTRL_SECT_KEY ?? props.CTRL_SECT_NORM ?? props.CTRL_SECT_ ?? ""
+  ).trim();
+  const digits = value.replace(/^CS_/i, "");
+  return /^[1-9][0-9]{0,11}$/.test(digits) ? digits : null;
+}
+
+function buildLocalMetricActionText(layerName) {
+  const mapping = window.SPTCAssistant?.activeLayerMetrics || {};
+  const metricName = Object.prototype.hasOwnProperty.call(mapping, layerName)
+    ? mapping[layerName]
+    : null;
+  if (!metricName) return null;
+  return `The current map layer maps to the reviewed API metric ${metricName}. This local template identifies the mapping only; it does not assign a preferred direction or interpret the selected section's relative standing.`;
+}
+
+function buildAssistantActionSnapshot(props) {
   const context = buildAssistantContext(props);
-  renderAssistantMessage("assistant", buildInitialAssistantInterpretation(context));
-  messages.scrollTop = 0;
+  return {
+    sectionId: normalizedAssistantSectionId(props),
+    activeLayer,
+    localSectionText: context ? buildInitialAssistantInterpretation(context) : null,
+    localMetricText: buildLocalMetricActionText(activeLayer)
+  };
+}
+
+function resetAssistantForSelection(props) {
+  document.getElementById("assistantInput").value = "";
+  assistantActionController?.setContext(buildAssistantActionSnapshot(props));
 }
 
 async function submitAssistantQuestion(question) {
@@ -791,22 +810,11 @@ async function submitAssistantQuestion(question) {
 function setupAssistant() {
   const input = document.getElementById("assistantInput");
   const send = document.getElementById("assistantSend");
-  const prompts = document.getElementById("assistantPromptButtons");
-  send.addEventListener("click", () => {
-    const question = input.value;
-    input.value = "";
-    submitAssistantQuestion(question);
-  });
-  input.addEventListener("keydown", event => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    send.click();
-  });
-  prompts.addEventListener("click", event => {
-    const button = event.target.closest("button[data-question]");
-    if (!button) return;
-    submitAssistantQuestion(button.dataset.question);
-  });
+  input.disabled = true;
+  send.disabled = true;
+  if (window.SPTCAssistantActions?.createController) {
+    assistantActionController = window.SPTCAssistantActions.createController({ document });
+  }
   resetAssistantForSelection(null);
 }
 
@@ -1140,6 +1148,7 @@ document.getElementById("layerSelect").addEventListener("change", event => {
     applySelectedStyle();
   }
   updateLegend();
+  resetAssistantForSelection(selectedProps);
 });
 
 setupAssistant();
