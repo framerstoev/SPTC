@@ -7,7 +7,7 @@ This is a local experimental frontend for the data-driven resilience curve v0 re
 Open locally from `data/front-end/sptc-demo`:
 
 ```powershell
-python -m http.server 8001
+python -m http.server 8001 --bind 127.0.0.1
 ```
 
 Then visit:
@@ -86,12 +86,30 @@ The v0 processing script currently sets `total_detected_phase_delay_proxy` equal
 - V0 disruption-delay field
 - Full-window delay proxy: N/A
 
-## Dormant Deterministic Backend Client
+## Fixed Deterministic Assistant Actions
 
-Phase 2A2 adds a static, dormant client foundation only. It is not connected to the Assistant
-Preview buttons or any other `app.js` action. The committed default remains `local-template`, so
-the existing deterministic Assistant Preview continues to operate when the backend is stopped.
-There is no LLM, credential, API key, health check, retry, telemetry, or automatic backend request.
+Phase 2A3 connects the reviewed runtime configuration and bounded client to exactly three visible,
+selected-section actions:
+
+- **Explain this section** uses the current deterministic local section preview in
+  `local-template` mode and the reviewed section-summary endpoint in `backend-tools` mode.
+- **Explain the current metric** is available only when the selected map layer has an accepted
+  metric mapping. It returns mapping-only local text in `local-template` mode and the reviewed
+  metric-registry explanation in `backend-tools` mode.
+- **Generate review note** requires the deterministic backend. A successful result shows a compact
+  summary, a visible **Draft for human review** label, and a collapsed full-note area. The local
+  template never fabricates the full draft.
+
+The Assistant displays a persistent **Local template** or **Backend tools** mode label and textual
+loading, result, fallback, and draft states. The old free-form composer remains only as a dormant
+future hook: its container is hidden, its input and Send button are disabled, and no Enter, Send,
+or prose-to-backend path is bound. Compare, filter, rank, curve-API, map-action, and natural-language
+chat behavior are not available.
+
+Neither mode makes an Assistant backend request on page load, mode resolution, section selection,
+or layer change. Only an explicit click on one of the three enabled actions can invoke a backend
+client method. Existing dashboard requests for static summary, GeoJSON, tiles, and selected local
+curve JSON remain separate from Assistant API traffic.
 
 The reviewed runtime modes are:
 
@@ -121,10 +139,32 @@ Only three explicit methods are exposed under `window.SPTCAssistant.client`:
 
 The client normalizes reviewed section identifiers, restricts metric explanations to current map
 metrics, constructs no arbitrary paths or bodies, omits credentials, and validates/copies only
-reviewed response fields. Review-note Markdown is returned as inert text/copy content and is not
-rendered as HTML. A caller can pass `{ signal: abortController.signal }`; the client combines that
-signal with its fixed timeout and cleans up timers/listeners after completion. A later UI can abort
-an earlier controller before starting its replacement request.
+reviewed response fields. Review-note Markdown remains inert copy content and is never parsed or
+rendered as HTML.
+
+The action controller keeps runtime mode separate from explicit request state. Starting a new action
+aborts the previous request and replaces its generation token. A section or map-layer change also
+aborts and invalidates any pending action. Late, cancelled, or stale results are ignored without an
+error or fallback warning. This protects the current selection from receiving a result requested for
+an earlier section or metric.
+
+In `backend-tools` mode, reviewed network, timeout, not-found, validation, snapshot, JSON, response,
+and unexpected-status failures produce a visible backend/fallback label and the corresponding local
+template result. Review-note failure explicitly states that no draft was generated and does not show
+the full-note or copy controls. Cancellation and staleness remain silent.
+
+Section-summary results are deliberately compact: identity, support/detection status, no more than
+three observed metrics, no more than three planning-context metrics, warnings, and the distinction
+between planning context and observed evidence. Metric results describe the metric definition,
+unit, applicability, null meaning, and no more than three limitations; they do not rank the selected
+section or add a preferred direction.
+
+A successful review note keeps the normal response compact. Its native, initially collapsed
+**Open full review note** control contains the accepted six structured sections in order, followed
+by separate warnings, limitations, and human-review checklist blocks. **Copy Markdown** copies the
+client-validated `rendered_markdown` string exactly. Copy success, unavailable Clipboard API, and
+copy rejection are announced with concise accessible text; copied content is not stored or inserted
+as HTML.
 
 Sanitized client error codes are `invalid_request`, `backend_unavailable`, `request_timeout`,
 `request_cancelled`, `section_not_found`, `metric_not_found`, `backend_validation_error`,
@@ -144,7 +184,7 @@ $env:RESILIENCE_CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8
 From the nested frontend repository root, start the static server:
 
 ```powershell
-python -m http.server 8001
+python -m http.server 8001 --bind 127.0.0.1
 ```
 
 Then open:
@@ -153,8 +193,21 @@ Then open:
 http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 ```
 
-This only makes the dormant client callable from the browser console or future reviewed wiring.
-No current UI action calls it.
+The normal local-template page remains:
+
+```text
+http://127.0.0.1:8001/coldwave-demo-v2/
+```
+
+Reloading either URL makes no Assistant API request. On the backend-tools URL, select a valid
+control section and explicitly choose one of the three fixed actions to make a reviewed request.
+The detection-status and supplemental-delay map layers do not have accepted metric explanations,
+so **Explain the current metric** is disabled for those layers with a visible reason. The section and
+review-note actions remain available.
+
+There is no LLM, free-form assistant request, credential, API key, health preflight, retry,
+telemetry, or user-configurable backend URL. Backend output is rendered through created DOM nodes
+and `textContent`; the Phase 2A3 Assistant renderer does not use dynamic HTML or a Markdown parser.
 
 ## Caveats
 

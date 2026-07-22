@@ -32,7 +32,8 @@ function assert(condition, message) {
     1081: "detected",
     257: "no_sustained_drop",
     3597: "recovery_endpoint_censored",
-    1: "no_observed_support"
+    1: "no_observed_support",
+    583693: "detected"
   };
   for (const [sectionId, expectedStatus] of Object.entries(expectedStatuses)) {
     const summary = await client.getSectionSummary(sectionId);
@@ -55,7 +56,7 @@ function assert(condition, message) {
   }
 
   console.log(
-    "Live deterministic client QA passed: four summaries, two metrics, and two review notes "
+    "Live deterministic client QA passed: five summaries, two metrics, and two review notes "
     + `(evidence counts ${detectedNote.evidence.length}/${noSupportNote.evidence.length}).`
   );
 })().catch(error => {

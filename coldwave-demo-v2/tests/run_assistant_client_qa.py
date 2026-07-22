@@ -1,4 +1,4 @@
-"""Run no-build Phase 2A2 static and headless-browser QA."""
+"""Run no-build Phase 2A3 static, client, action, and resource QA."""
 
 from __future__ import annotations
 
@@ -65,6 +65,9 @@ def static_checks() -> None:
         "data/summary.json",
         "tests/run_assistant_client_qa.js",
         "tests/run_assistant_client_live_qa.js",
+        "tests/assistant-actions-tests.js",
+        "tests/run_assistant_actions_qa.js",
+        "tests/run_assistant_actions_live_qa.js",
     ):
         assert (V2_ROOT / relative_path).is_file(), relative_path
 
@@ -121,8 +124,33 @@ def static_checks() -> None:
     app = (V2_ROOT / "js" / "app.js").read_text(encoding="utf-8")
     assert "SPTCAssistant.client" not in app
     assert "/api/v1/" not in app
+    setup_start = app.index("function setupAssistant()")
+    setup_end = app.index("\nfunction ", setup_start + 1)
+    setup_assistant = app[setup_start:setup_end]
+    assert "button[data-question]" not in setup_assistant
+    assert "send.addEventListener" not in setup_assistant
+    assert "input.addEventListener" not in setup_assistant
+    selection_start = app.index("async function selectFeature(")
+    selection_end = app.index("\nfunction ", selection_start + 1)
+    assert "resetAssistantForSelection(selectedProps)" in app[
+        selection_start:selection_end
+    ]
+    layer_start = app.index(
+        'document.getElementById("layerSelect").addEventListener'
+    )
+    layer_end = app.index("\n});", layer_start) + 4
+    assert "resetAssistantForSelection(selectedProps)" in app[layer_start:layer_end]
     assert sha256(V2_ROOT / "js" / "app.js") == EXPECTED_APP_SHA256
     assert sha256(V2_ROOT / "css" / "style.css") == EXPECTED_STYLE_SHA256
+    assert index.count("data-assistant-action=") == 3
+    assert "data-question=" not in index
+    assert 'id="assistantComposer" hidden aria-hidden="true"' in index
+    assert 'id="assistantInput"' in index and 'disabled />' in index
+    assert 'id="assistantSend" type="button" disabled' in index
+    assert (
+        'id="assistantActionAvailability" aria-live="polite" '
+        'aria-atomic="true"'
+    ) in index
 
     summary = json.loads(
         (V2_ROOT / "data" / "summary.json").read_text(encoding="utf-8")
@@ -204,7 +232,7 @@ def fetch_resource(url: str, *, method: str = "GET") -> tuple[int, int]:
 
 def run_browser(browser: Path, url: str) -> None:
     with tempfile.TemporaryDirectory(
-        prefix="sptc-phase2a2-", ignore_cleanup_errors=True
+        prefix="sptc-phase2a3-", ignore_cleanup_errors=True
     ) as profile:
         command = [
             str(browser),
@@ -242,7 +270,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--browser",
         action="store_true",
-        help="also require automated Chrome/Edge runtime tests",
+        help="also require the Phase 2A2 client-contract Chrome/Edge runtime tests",
     )
     parser.add_argument(
         "--skip-javascript",
@@ -252,7 +280,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--live",
         action="store_true",
-        help="also call the accepted backend at 127.0.0.1:8080 through the production client",
+        help=(
+            "also call the accepted backend at 127.0.0.1:8080 through the "
+            "production client and action controller"
+        ),
     )
     return parser.parse_args()
 
@@ -260,17 +291,19 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     static_checks()
-    javascript_result = (
-        None
-        if args.skip_javascript
-        else run_javascript_tests("run_assistant_client_qa.js")
-    )
-    live_result = None
+    client_result = None
+    action_result = None
+    if not args.skip_javascript:
+        client_result = run_javascript_tests("run_assistant_client_qa.js")
+        action_result = run_javascript_tests("run_assistant_actions_qa.js")
+    live_client_result = None
+    live_action_result = None
     if args.live:
         if args.skip_javascript:
             raise RuntimeError("--live cannot be combined with --skip-javascript")
-        live_result = run_javascript_tests("run_assistant_client_live_qa.js")
-        if live_result is None:
+        live_client_result = run_javascript_tests("run_assistant_client_live_qa.js")
+        live_action_result = run_javascript_tests("run_assistant_actions_live_qa.js")
+        if live_client_result is None or live_action_result is None:
             raise RuntimeError(
                 "--live requires an existing compatible JavaScript runtime"
             )
@@ -288,6 +321,9 @@ def main() -> None:
             "/js/assistant-api.js",
             "/js/assistant-actions.js",
             "/js/app.js",
+            "/tests/assistant-actions-tests.js",
+            "/tests/run_assistant_actions_qa.js",
+            "/tests/run_assistant_actions_live_qa.js",
             "/data/summary.json",
             "/data/curves/CS_1081.json",
             "/data/curves/CS_257.json",
@@ -319,20 +355,28 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    print("Phase 2A2 static/resource QA passed")
-    if javascript_result:
-        print(javascript_result)
+    print("Phase 2A3 static/resource QA passed")
+    if client_result:
+        print(client_result)
+    if action_result:
+        print(action_result)
     elif not args.skip_javascript:
         print(
             "JavaScript contract QA not run; no existing compatible runtime was found"
         )
-    if live_result:
-        print(live_result)
+    if live_client_result:
+        print(live_client_result)
+    if live_action_result:
+        print(live_action_result)
     if args.browser:
-        print("Phase 2A2 browser runtime QA passed for 127.0.0.1 and localhost")
+        print(
+            "Phase 2A2 client-contract browser runtime QA passed for "
+            "127.0.0.1 and localhost"
+        )
     else:
         print(
-            "Browser runtime QA not run; use --browser or the documented manual steps"
+            "Browser client-contract QA not run; use --browser or the documented "
+            "Phase 2A3 manual UI steps"
         )
 
 
