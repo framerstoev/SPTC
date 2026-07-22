@@ -75,10 +75,85 @@ The UI labels were updated to:
 - V0 disruption-delay field
 - Full-window delay proxy: N/A
 
+## Phase 2A2 Automated QA
+
+From the nested frontend repository root, run:
+
+```powershell
+python coldwave-demo-v2/tests/run_assistant_client_qa.py
+git diff --check
+```
+
+The Python runner performs static security/allowlist checks, verifies the accepted `app.js` and
+CSS hashes, parses representative data files, and serves/fetches the frontend resources over an
+ephemeral loopback HTTP port. It also runs `run_assistant_client_qa.js` when an existing compatible
+JavaScript runtime is available. The audited workstation has no standalone Node installation; the
+runner safely reuses VS Code's existing Electron Node mode without npm or installation.
+With the accepted backend running on port 8080, add `--live` to pass four representative summaries,
+the `q_min` and `event_rei` explanations, and detected/no-support review notes through the actual
+production client validators.
+
+The JavaScript suite executes the production configuration and client code with mocked fetch. It
+covers:
+
+- exact local/remote/file/HTTPS mode resolution and immutable fixed configuration;
+- the exact three-method client surface and ten active-layer mappings;
+- normalized IDs, rejected identifiers, and the reviewed metric allowlist;
+- exact paths, methods, headers, POST body, no retry, and no page-evaluation request;
+- timeout, pre-aborted and active caller cancellation, and cleanup on success/failure;
+- sanitized 404/422/503/network/JSON/contract/unexpected-status errors;
+- all four detection-status warning sequences and support/null consistency;
+- finite numbers, relative-loss unit consistency, real calendar timestamps, and bounded text;
+- exact six-section review-note structure, 1-64 evidence records, unique IDs, resolved references,
+  critical identity/status/release agreement, and metric provenance;
+- removal of unknown backend fields and deep-freezing of returned copies.
+
+The same suite can be viewed from a browser at:
+
+```text
+http://127.0.0.1:8001/coldwave-demo-v2/tests/assistant-client-tests.html?assistantMode=backend-tools
+```
+
+It should report `25 Phase 2A2 JavaScript contract tests passed.` No live backend is needed because
+the suite supplies reviewed mock responses.
+
+## Manual Browser and CORS Checks
+
+Chrome and Edge on the audited workstation delegate command-line launches to an already running
+personal browser session, so an isolated automated browser/CORS run was not reliable. Complete the
+following manual checks before action wiring or demonstration:
+
+1. Stop the backend, open the normal v2 page with no query parameter, and confirm the existing
+   Assistant Preview, map, selected section, active metric, and console remain unchanged.
+2. In browser DevTools Network, filter for `127.0.0.1:8080`; reload both the default page and the
+   `?assistantMode=backend-tools` page. Confirm neither reload issues a backend or `/health` request.
+3. Start the backend with only the two port-8001 origins documented in `README.md`. On the
+   backend-tools page, call these methods from the console and inspect the frozen sanitized result:
+
+   ```javascript
+   await SPTCAssistant.client.getSectionSummary("CS_1081")
+   await SPTCAssistant.client.explainMetric("q_min")
+   await SPTCAssistant.client.explainMetric("event_rei")
+   await SPTCAssistant.client.generateSectionReviewNote("CS_1081")
+   await SPTCAssistant.client.generateSectionReviewNote("CS_1")
+   ```
+
+4. Serve the same frontend on port 8002 without adding that origin to the backend CORS allowlist.
+   Open `http://127.0.0.1:8002/coldwave-demo-v2/?assistantMode=backend-tools` and call
+   `getSectionSummary("1081")`. Confirm the browser blocks the cross-origin response and the client
+   exposes only `backend_unavailable`, without the raw browser exception.
+5. Repeat the existing representative UI checks for `CS_1081`, `CS_257`, `CS_3597`, `CS_1`, and
+   `CS_583693`, including search, layer changes and runtime legend breaks, hover/click selection,
+   lazy curve loading, Assistant Preview responses, console errors, and a mobile/small-screen size.
+
+These console calls are QA only. Phase 2A2 does not connect any visible UI action to backend-tools.
+
 ## Known Limitations
 
 - Candidate B remains experimental.
 - The shaded chart area is an approximate visual representation of detected curve loss, not a recalculation of the metric.
 - Recovery metrics are lower-confidence when `recovery_endpoint_censored` is flagged.
 - Delay burden is a proxy based on profile demand weighting, not observed event-day vehicle volume.
+- Browser-enforced CORS and visible dashboard interaction remain manual QA on the audited
+  workstation; the automated JavaScript suite uses mocked fetch.
 - This v2 is not deployed and should not replace the stable `coldwave-demo`.
