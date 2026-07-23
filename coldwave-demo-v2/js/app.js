@@ -175,7 +175,11 @@ function statusKey(props) {
 }
 
 function statusLabel(value) {
-  return detectionLabels[value] || String(value || "Unknown");
+  return Object.hasOwn(detectionLabels, value) ? detectionLabels[value] : "Unknown";
+}
+
+function dataDensityLabel(value) {
+  return ["A", "B", "C"].includes(value) ? value : "N/A";
 }
 
 function isNoSustainedDrop(props) {
@@ -433,7 +437,7 @@ function renderSearchResults(query) {
   const q = query.trim().toLowerCase();
   if (!q) {
     box.classList.remove("visible");
-    box.innerHTML = "";
+    box.replaceChildren();
     return;
   }
   const matches = searchIndex
@@ -441,15 +445,25 @@ function renderSearchResults(query) {
     .slice(0, 10);
   box.classList.add("visible");
   if (!matches.length) {
-    box.innerHTML = `<div class="search-empty">No matching control section found.</div>`;
+    const empty = document.createElement("div");
+    empty.className = "search-empty";
+    empty.textContent = "No matching control section found.";
+    box.replaceChildren(empty);
     return;
   }
-  box.innerHTML = matches.map(item => `
-    <button class="search-result" type="button" data-key="${item.key}">
-      <strong>${item.route} | ${item.ctrlKey}</strong>
-      <span>${item.county} | ${item.status}</span>
-    </button>
-  `).join("");
+  const results = matches.map(item => {
+    const button = document.createElement("button");
+    const identity = document.createElement("strong");
+    const context = document.createElement("span");
+    button.className = "search-result";
+    button.type = "button";
+    button.dataset.key = String(item.key);
+    identity.textContent = `${item.route} | ${item.ctrlKey}`;
+    context.textContent = `${item.county} | ${item.status}`;
+    button.append(identity, context);
+    return button;
+  });
+  box.replaceChildren(...results);
 }
 
 async function selectByKey(key) {
@@ -566,7 +580,7 @@ function renderMetrics(props) {
     metricCard("NETRISK_LITE", fmt(props.NETRISK_LITE), "", "Higher = greater network risk."),
     metricCard("EVENT_REI", fmt(props.EVENT_REI), "", "Higher = greater potential event risk."),
     metricCard("AADT", fmtInt(props.AADT_CS), "", "Control-section traffic context where available."),
-    metricCard("Data density", props.data_density_summary || "N/A", "", "NPMRDS data-density summary for matched observations.")
+    metricCard("Data density", dataDensityLabel(props.data_density_summary), "", "NPMRDS data-density summary for matched observations.")
   ].join("");
 }
 

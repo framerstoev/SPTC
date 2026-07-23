@@ -22,7 +22,7 @@ CHROME_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
 )
-EXPECTED_APP_SHA256 = "747b9b0ec8b6f926696e57567ad0a869a9484bb640dfb72454754cb446b709fa"
+EXPECTED_APP_SHA256 = "788bb077971179b026a51801010116baa619b3e709ee5d672e941da57cd624a8"
 EXPECTED_STYLE_SHA256 = (
     "ece2ddddc950e211254f19b164dff813b59459d08513c799a16d8742a2f4aa3a"
 )
