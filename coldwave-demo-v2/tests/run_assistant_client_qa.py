@@ -1,4 +1,4 @@
-"""Run no-build Phase 2A3 static, client, action, and resource QA."""
+"""Run no-build Phase 2A4 static, client, action, search, and resource QA."""
 
 from __future__ import annotations
 
@@ -68,6 +68,9 @@ def static_checks() -> None:
         "tests/assistant-actions-tests.js",
         "tests/run_assistant_actions_qa.js",
         "tests/run_assistant_actions_live_qa.js",
+        "tests/search-rendering-tests.js",
+        "tests/run_search_rendering_qa.js",
+        "tests/run_phase2a4_browser_qa.py",
     ):
         assert (V2_ROOT / relative_path).is_file(), relative_path
 
@@ -132,12 +135,11 @@ def static_checks() -> None:
     assert "input.addEventListener" not in setup_assistant
     selection_start = app.index("async function selectFeature(")
     selection_end = app.index("\nfunction ", selection_start + 1)
-    assert "resetAssistantForSelection(selectedProps)" in app[
-        selection_start:selection_end
-    ]
-    layer_start = app.index(
-        'document.getElementById("layerSelect").addEventListener'
+    assert (
+        "resetAssistantForSelection(selectedProps)"
+        in app[selection_start:selection_end]
     )
+    layer_start = app.index('document.getElementById("layerSelect").addEventListener')
     layer_end = app.index("\n});", layer_start) + 4
     assert "resetAssistantForSelection(selectedProps)" in app[layer_start:layer_end]
     assert sha256(V2_ROOT / "js" / "app.js") == EXPECTED_APP_SHA256
@@ -145,11 +147,10 @@ def static_checks() -> None:
     assert index.count("data-assistant-action=") == 3
     assert "data-question=" not in index
     assert 'id="assistantComposer" hidden aria-hidden="true"' in index
-    assert 'id="assistantInput"' in index and 'disabled />' in index
+    assert 'id="assistantInput"' in index and "disabled />" in index
     assert 'id="assistantSend" type="button" disabled' in index
     assert (
-        'id="assistantActionAvailability" aria-live="polite" '
-        'aria-atomic="true"'
+        'id="assistantActionAvailability" aria-live="polite" aria-atomic="true"'
     ) in index
 
     summary = json.loads(
@@ -293,9 +294,11 @@ def main() -> None:
     static_checks()
     client_result = None
     action_result = None
+    search_result = None
     if not args.skip_javascript:
         client_result = run_javascript_tests("run_assistant_client_qa.js")
         action_result = run_javascript_tests("run_assistant_actions_qa.js")
+        search_result = run_javascript_tests("run_search_rendering_qa.js")
     live_client_result = None
     live_action_result = None
     if args.live:
@@ -324,6 +327,8 @@ def main() -> None:
             "/tests/assistant-actions-tests.js",
             "/tests/run_assistant_actions_qa.js",
             "/tests/run_assistant_actions_live_qa.js",
+            "/tests/search-rendering-tests.js",
+            "/tests/run_search_rendering_qa.js",
             "/data/summary.json",
             "/data/curves/CS_1081.json",
             "/data/curves/CS_257.json",
@@ -355,11 +360,13 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    print("Phase 2A3 static/resource QA passed")
+    print("Phase 2A4 static/resource QA passed")
     if client_result:
         print(client_result)
     if action_result:
         print(action_result)
+    if search_result:
+        print(search_result)
     elif not args.skip_javascript:
         print(
             "JavaScript contract QA not run; no existing compatible runtime was found"
@@ -375,8 +382,8 @@ def main() -> None:
         )
     else:
         print(
-            "Browser client-contract QA not run; use --browser or the documented "
-            "Phase 2A3 manual UI steps"
+            "Legacy mock-page browser QA not run; use "
+            "run_phase2a4_browser_qa.py for isolated production-page acceptance"
         )
 
 
