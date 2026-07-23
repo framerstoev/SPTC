@@ -17,6 +17,7 @@
   const summaryResponseLimit = 128 * 1024;
   const metricResponseLimit = 128 * 1024;
   const reviewNoteResponseLimit = 1024 * 1024;
+  const assistantResponseLimit = 512 * 1024;
   const detectionStatuses = Object.freeze([
     "detected",
     "no_sustained_drop",
@@ -30,6 +31,49 @@
     "NO_OBSERVED_SUPPORT"
   ]);
   const warningSeverities = Object.freeze(["info", "caution"]);
+  const assistantStatuses = Object.freeze([
+    "completed",
+    "clarification_required",
+    "unsupported_request",
+    "assistant_disabled",
+    "model_unavailable",
+    "tool_error",
+    "invalid_model_response"
+  ]);
+  const assistantIntents = Object.freeze([
+    "explain_selected_section",
+    "explain_explicit_section",
+    "explain_current_metric",
+    "explain_explicit_metric",
+    "explain_warning_or_status",
+    "compare_two_sections",
+    "generate_review_note",
+    "explain_planning_vs_observed",
+    "request_clarification",
+    "decline_unsupported_request"
+  ]);
+  const assistantToolNames = Object.freeze([
+    "get_section_summary",
+    "explain_metric",
+    "compare_sections",
+    "generate_review_note",
+    "request_clarification",
+    "answer_scope_explanation",
+    "decline_unsupported_request"
+  ]);
+  const assistantEvidenceKinds = Object.freeze([
+    "section_status",
+    "metric_value",
+    "metric_definition",
+    "review_status",
+    "identity"
+  ]);
+  const clarificationReasons = Object.freeze([
+    "section_required",
+    "metric_required",
+    "two_sections_required",
+    "ambiguous_supported_intent"
+  ]);
   const activeLayerMetrics = Object.freeze({
     observed_curve_resilience_score_v0: "observed_curve_resilience_score_v0",
     q_min: "q_min",
@@ -55,6 +99,27 @@
     event_rei: "EVENT_REI"
   });
   const explainableMetrics = new Set(Object.values(activeLayerMetrics));
+  const assistantEvidenceMetricNames = new Set([
+    "q0",
+    "q_min",
+    "loss_depth",
+    "loss_depth_fraction",
+    "loss_depth_percent",
+    "degradation_duration_hours",
+    "degradation_slope",
+    "recovery_duration_hours",
+    "recovery_slope",
+    "time_to_80_hours",
+    "time_to_90_hours",
+    "resilience_loss_area",
+    "normalized_loss_area",
+    "observed_curve_resilience_score_v0",
+    "weather_rei",
+    "netrisk_lite",
+    "event_rei",
+    "potential_resilience_score",
+    "aadt"
+  ]);
   const reviewNoteMetricNames = new Set([
     "weather_rei",
     "netrisk_lite",
@@ -122,8 +187,11 @@
     unexpected_status: "The backend returned an unexpected status."
   });
   const unsafeTextPattern = /(?:file:\/\/|(?:^|[^a-z0-9+.-])[a-z]:[\\/]|\\\\[^\\]|(?:^|[\s("'`])\/(?:home|users|tmp|var|opt|srv|mnt|workspace|root)(?:\/|\b)|\.(?:csv|parquet|duckdb|sqlite3?)\b|\binternal_path\b|\btraceback\b)/i;
+  const assistantRestrictedTextPattern = /(?:https?:\/\/|\bollama\b|<\/?think\b|\bchain[-_ ]of[-_ ]thought\b|\binternal[_ ]prompt\b|\bprompt[_ ]tokens\b|\bresponse[_ ]metadata\b)/i;
   const disallowedControlPattern = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
   const evidenceIdPattern = /^e_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
+  const assistantEvidenceIdPattern = /^e_[a-z0-9_]+$/;
+  const assistantSectionIdPattern = /^CS_[1-9][0-9]{0,11}$/;
   const timestampPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?$/;
 
   class AssistantClientError extends Error {
@@ -278,12 +346,24 @@
   }
 
   function ensureBackendToolsMode() {
-    if (namespace.runtime.effective_mode !== namespace.modes.backendTools) {
+    if (
+      namespace.runtime.effective_mode !== namespace.modes.backendTools
+      && namespace.runtime.effective_mode !== namespace.modes.backendAgent
+    ) {
       throw clientError("invalid_request");
     }
   }
 
-  function createCancellation(signal) {
+  function ensureBackendAgentMode() {
+    if (
+      namespace.runtime.effective_mode !== namespace.modes.backendAgent
+      || namespace.runtime.backend_agent_enabled !== true
+    ) {
+      throw clientError("invalid_request");
+    }
+  }
+
+  function createCancellation(signal, timeoutMs = namespace.runtime.timeout_ms) {
     if (
       typeof global.AbortController !== "function"
       || typeof global.setTimeout !== "function"
@@ -333,7 +413,7 @@
           cancellationReason = "timeout";
           controller.abort();
         }
-      }, namespace.runtime.timeout_ms);
+      }, timeoutMs);
     } catch {
       removeCallerListener();
       throw clientError("backend_unavailable");
@@ -820,6 +900,221 @@
     });
   }
 
+  function boundedAssistantRequestText(value, maximumLength) {
+    if (typeof value !== "string") throw clientError("invalid_request");
+    const text = value.trim();
+    if (
+      text.length < 1
+      || text.length > maximumLength
+      || disallowedControlPattern.test(text)
+    ) {
+      throw clientError("invalid_request");
+    }
+    return text;
+  }
+
+  function buildAssistantRequestBody(request) {
+    if (!isRecord(request)) throw clientError("invalid_request");
+    const allowedKeys = new Set([
+      "message",
+      "selected_section_id",
+      "active_metric",
+      "history"
+    ]);
+    if (Object.keys(request).some(key => !allowedKeys.has(key)) || !hasOwn(request, "message")) {
+      throw clientError("invalid_request");
+    }
+
+    const body = {
+      message: boundedAssistantRequestText(request.message, 1000)
+    };
+    if (
+      hasOwn(request, "selected_section_id")
+      && request.selected_section_id !== null
+      && request.selected_section_id !== undefined
+      && request.selected_section_id !== ""
+    ) {
+      body.selected_section_id = `CS_${canonicalSectionId(request.selected_section_id)}`;
+    }
+    if (
+      hasOwn(request, "active_metric")
+      && request.active_metric !== null
+      && request.active_metric !== undefined
+      && request.active_metric !== ""
+    ) {
+      body.active_metric = canonicalMetricName(request.active_metric);
+    }
+    if (
+      hasOwn(request, "history")
+      && request.history !== null
+      && request.history !== undefined
+    ) {
+      if (!Array.isArray(request.history) || request.history.length > 4) {
+        throw clientError("invalid_request");
+      }
+      let totalCharacters = 0;
+      const history = request.history.map(item => {
+        if (
+          !isRecord(item)
+          || Object.keys(item).some(key => key !== "role" && key !== "content")
+          || Object.keys(item).length !== 2
+          || !["user", "assistant"].includes(item.role)
+        ) {
+          throw clientError("invalid_request");
+        }
+        const content = boundedAssistantRequestText(item.content, 1000);
+        totalCharacters += content.length;
+        return { role: item.role, content };
+      });
+      if (totalCharacters > 4000) throw clientError("invalid_request");
+      if (history.length > 0) body.history = history;
+    }
+    return body;
+  }
+
+  function boundedAssistantResponseText(value, maximumLength, minimumLength = 1) {
+    const text = boundedText(value, maximumLength, minimumLength);
+    if (assistantRestrictedTextPattern.test(text)) invalidResponse();
+    return text;
+  }
+
+  function validateAssistantSectionId(value) {
+    if (value === null) return null;
+    const sectionId = boundedAssistantResponseText(value, 15);
+    if (!assistantSectionIdPattern.test(sectionId)) invalidResponse();
+    return sectionId;
+  }
+
+  function validateAssistantMetricName(value) {
+    if (value === null) return null;
+    if (typeof value !== "string" || !assistantEvidenceMetricNames.has(value)) invalidResponse();
+    return value;
+  }
+
+  function validateAssistantEvidenceValue(value) {
+    if (value === null || typeof value === "boolean") return value;
+    if (typeof value === "number") return finiteNumber(value);
+    if (typeof value === "string") {
+      return boundedAssistantResponseText(value, 4000, 0);
+    }
+    invalidResponse();
+  }
+
+  function validateAssistantEvidence(value) {
+    const evidenceId = boundedAssistantResponseText(required(value, "evidence_id"), 100);
+    if (!assistantEvidenceIdPattern.test(evidenceId)) invalidResponse();
+    const kind = oneOf(required(value, "kind"), assistantEvidenceKinds);
+    const sectionId = validateAssistantSectionId(required(value, "section_id"));
+    const metricName = validateAssistantMetricName(required(value, "metric_name"));
+    const definition = required(value, "definition") === null
+      ? null
+      : boundedAssistantResponseText(required(value, "definition"), 2000);
+    if (
+      (["metric_value", "metric_definition"].includes(kind) && metricName === null)
+      || (!["metric_value", "metric_definition"].includes(kind) && metricName !== null)
+      || (kind === "metric_definition" && (sectionId !== null || definition === null))
+    ) {
+      invalidResponse();
+    }
+    return {
+      evidence_id: evidenceId,
+      kind,
+      section_id: sectionId,
+      metric_name: metricName,
+      label: boundedAssistantResponseText(required(value, "label"), 200),
+      value: validateAssistantEvidenceValue(required(value, "value")),
+      display_value: boundedAssistantResponseText(required(value, "display_value"), 500),
+      unit: required(value, "unit") === null
+        ? null
+        : boundedAssistantResponseText(required(value, "unit"), 200),
+      definition
+    };
+  }
+
+  function validateAssistantWarning(value) {
+    return {
+      section_id: validateAssistantSectionId(required(value, "section_id")),
+      code: oneOf(required(value, "code"), warningCodes),
+      severity: oneOf(required(value, "severity"), warningSeverities),
+      message: boundedAssistantResponseText(required(value, "message"), 1000)
+    };
+  }
+
+  function validateAssistantResponse(payload, httpStatus) {
+    if (!isRecord(payload)) invalidResponse();
+    const status = oneOf(required(payload, "status"), assistantStatuses);
+    const statusesByHttpCode = {
+      200: ["completed", "clarification_required", "unsupported_request"],
+      502: ["invalid_model_response"],
+      503: ["assistant_disabled", "model_unavailable", "tool_error"]
+    };
+    if (!statusesByHttpCode[httpStatus]?.includes(status)) invalidResponse();
+
+    const intentValue = required(payload, "intent");
+    const intent = intentValue === null ? null : oneOf(intentValue, assistantIntents);
+    const toolsUsed = copyArray(required(payload, "tools_used"), 0, 1, item => {
+      if (required(item, "call_index") !== 1) invalidResponse();
+      return {
+        tool_name: oneOf(required(item, "tool_name"), assistantToolNames),
+        call_index: 1
+      };
+    });
+    const evidence = copyArray(
+      required(payload, "evidence"),
+      0,
+      32,
+      validateAssistantEvidence
+    );
+    uniqueArray(evidence.map(item => item.evidence_id));
+    const warnings = copyArray(
+      required(payload, "warnings"),
+      0,
+      8,
+      validateAssistantWarning
+    );
+    const limitations = copyArray(
+      required(payload, "limitations"),
+      0,
+      12,
+      item => boundedAssistantResponseText(item, 2000)
+    );
+    const clarificationValue = required(payload, "clarification");
+    const clarification = clarificationValue === null ? null : {
+      reason: oneOf(required(clarificationValue, "reason"), clarificationReasons),
+      question: boundedAssistantResponseText(required(clarificationValue, "question"), 500)
+    };
+    if (
+      (status === "clarification_required"
+        && (intent !== "request_clarification" || clarification === null))
+      || (status !== "clarification_required" && clarification !== null)
+      || (status === "unsupported_request" && intent !== "decline_unsupported_request")
+    ) {
+      invalidResponse();
+    }
+    if (required(payload, "data_release") !== dataRelease) invalidResponse();
+    if (required(payload, "method_version") !== methodVersion) invalidResponse();
+    return deepFreeze({
+      status,
+      answer: boundedAssistantResponseText(required(payload, "answer"), 4000),
+      intent,
+      tools_used: toolsUsed,
+      evidence,
+      warnings,
+      limitations,
+      clarification,
+      data_release: dataRelease,
+      method_version: methodVersion
+    });
+  }
+
+  function validateAssistantRequestError(payload) {
+    if (!isRecord(payload)) invalidResponse();
+    const detail = required(payload, "detail");
+    if (required(detail, "code") !== "invalid_assistant_request") invalidResponse();
+    boundedAssistantResponseText(required(detail, "message"), 2000);
+    throw clientError("backend_validation_error");
+  }
+
   function validateErrorPayload(payload, status, endpointKind, expectedValue) {
     if (!isRecord(payload)) invalidResponse();
     const detail = required(payload, "detail");
@@ -881,9 +1176,13 @@
     validator,
     signal
   }) {
-    ensureBackendToolsMode();
+    if (endpointKind === "assistant") ensureBackendAgentMode();
+    else ensureBackendToolsMode();
     if (typeof global.fetch !== "function") throw clientError("backend_unavailable");
-    const cancellation = createCancellation(signal);
+    const timeoutMs = endpointKind === "assistant"
+      ? namespace.runtime.agent_timeout_ms
+      : namespace.runtime.timeout_ms;
+    const cancellation = createCancellation(signal, timeoutMs);
     try {
       throwIfCancelled(cancellation);
       const headers = { Accept: "application/json" };
@@ -916,10 +1215,17 @@
       ) {
         throw clientError("invalid_response");
       }
-      if (![200, 404, 422, 503].includes(response.status)) {
+      const allowedStatuses = endpointKind === "assistant"
+        ? [200, 422, 502, 503]
+        : [200, 404, 422, 503];
+      if (!allowedStatuses.includes(response.status)) {
         throw clientError("unexpected_status");
       }
       const payload = await readReviewedJson(response, responseLimit, cancellation);
+      if (endpointKind === "assistant") {
+        if (response.status === 422) validateAssistantRequestError(payload);
+        return validator(payload, response.status);
+      }
       if (response.status !== 200) {
         validateErrorPayload(payload, response.status, endpointKind, expectedValue);
       }
@@ -984,6 +1290,20 @@
     });
   }
 
+  async function queryAssistant(request, options) {
+    const body = buildAssistantRequestBody(request);
+    return requestReviewedJson({
+      url: `${namespace.runtime.backend_base_url}/api/v1/assistant/query`,
+      method: "POST",
+      body,
+      endpointKind: "assistant",
+      expectedValue: null,
+      responseLimit: assistantResponseLimit,
+      validator: validateAssistantResponse,
+      signal: callerSignal(options)
+    });
+  }
+
   Object.defineProperties(namespace, {
     activeLayerMetrics: {
       value: activeLayerMetrics,
@@ -993,7 +1313,8 @@
       value: Object.freeze({
         getSectionSummary,
         explainMetric,
-        generateSectionReviewNote
+        generateSectionReviewNote,
+        queryAssistant
       }),
       enumerable: true
     }

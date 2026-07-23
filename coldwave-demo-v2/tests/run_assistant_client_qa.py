@@ -75,7 +75,8 @@ def static_checks() -> None:
         assert (V2_ROOT / relative_path).is_file(), relative_path
 
     assert config.count("http://127.0.0.1:8080") == 1
-    assert "timeoutMs = 8000" in config
+    assert "backendToolsTimeoutMs = 8000" in config
+    assert "backendAgentTimeoutMs = 80000" in config
     assert "fetch(" not in config
     assert all(
         token not in config
@@ -89,12 +90,12 @@ def static_checks() -> None:
             "/filter",
             "/rank",
             "/curve",
-            "/assistant",
             "Authorization",
             "api_key",
             "API_KEY",
         )
     )
+    assert api.count("/api/v1/assistant/query") == 1
     assert api.count('credentials: "omit"') == 1
     assert api.count("global.fetch(url, requestOptions)") == 1
     assert "requestReviewedJson" in api

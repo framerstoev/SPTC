@@ -339,6 +339,42 @@
     };
   }
 
+  function assistantFixture(overrides = {}) {
+    return {
+      status: overrides.status || "completed",
+      answer: overrides.answer || "The selected section has reviewed deterministic evidence.",
+      intent: overrides.intent === undefined ? "explain_selected_section" : overrides.intent,
+      tools_used: overrides.tools_used || [
+        { tool_name: "get_section_summary", call_index: 1 }
+      ],
+      evidence: overrides.evidence || [{
+        evidence_id: "e_metric_q_min",
+        kind: "metric_value",
+        section_id: "CS_1081",
+        metric_name: "q_min",
+        label: "Minimum normalized Q",
+        value: 0.62,
+        display_value: "0.620",
+        unit: "dimensionless",
+        definition: "Minimum smoothed normalized performance."
+      }],
+      warnings: overrides.warnings || [{
+        section_id: "CS_1081",
+        code: "METHOD_SCOPE",
+        severity: "info",
+        message: "The method is experimental and event specific."
+      }],
+      limitations: overrides.limitations || [
+        "This single-event review does not establish cause or predict future performance."
+      ],
+      clarification: overrides.clarification === undefined ? null : overrides.clarification,
+      data_release: "coldwave_2026_01_r1",
+      method_version: "data_driven_resilience_v0",
+      chain_of_thought: "ignored",
+      raw_model_response: { ignored: true }
+    };
+  }
+
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
@@ -399,6 +435,7 @@
     equal(global.SPTCAssistant.runtime.effective_mode, "backend-tools");
     equal(global.SPTCAssistant.runtime.backend_base_url, "http://127.0.0.1:8080");
     equal(global.SPTCAssistant.runtime.timeout_ms, 8000);
+    equal(global.SPTCAssistant.runtime.agent_timeout_ms, 80000);
     assert(global.SPTCAssistant.runtime.backend_agent_enabled === false);
     assert(Object.isFrozen(global.SPTCAssistant.runtime));
     assert(Object.isFrozen(global.SPTCAssistant.client));
@@ -453,8 +490,20 @@
       [
         "http://127.0.0.1:8001/page?assistantMode=backend-agent",
         "backend-agent",
+        "backend-agent",
+        null
+      ],
+      [
+        "https://127.0.0.1:8001/page?assistantMode=backend-agent",
+        "backend-agent",
         "local-template",
-        "backend_agent_disabled"
+        "backend_agent_requires_local_http"
+      ],
+      [
+        "http://review.example/page?assistantMode=backend-agent",
+        "backend-agent",
+        "local-template",
+        "backend_agent_requires_local_http"
       ],
       [
         "http://127.0.0.1:8001/page?assistantMode=unknown",
@@ -498,7 +547,7 @@
       equal(runtime.requested_mode, expectedRequestedMode, href);
       equal(runtime.effective_mode, expectedMode, href);
       equal(runtime.fallback_reason, expectedReason, href);
-      assert(runtime.backend_agent_enabled === false, href);
+      assert(runtime.backend_agent_enabled === (expectedMode === "backend-agent"), href);
     });
   });
 
@@ -516,14 +565,18 @@
     assert(target.SPTCAssistant === existing, "Existing namespace was overwritten");
   });
 
-  test("backend destination noise is ignored and runtime is immutable", () => {
+  test("backend destination overrides fail closed and runtime is immutable", () => {
     const target = evaluateConfig(
-      "http://localhost:8001/page?assistantMode=backend-tools"
+      "http://localhost:8001/page?assistantMode=backend-agent"
       + "&backendUrl=http://review.example&apiUrl=http://review.example&host=review.example&port=9"
     );
     const runtime = target.SPTCAssistant.runtime;
+    equal(runtime.requested_mode, "invalid");
+    equal(runtime.effective_mode, "local-template");
+    equal(runtime.fallback_reason, "runtime_override_parameter");
     equal(runtime.backend_base_url, "http://127.0.0.1:8080");
     equal(runtime.timeout_ms, 8000);
+    equal(runtime.agent_timeout_ms, 80000);
     try {
       runtime.backend_base_url = "http://review.example";
     } catch {}
@@ -535,7 +588,8 @@
     equal(Object.getOwnPropertyNames(target.SPTCAssistant.client).sort(), [
       "explainMetric",
       "generateSectionReviewNote",
-      "getSectionSummary"
+      "getSectionSummary",
+      "queryAssistant"
     ]);
     equal(target.SPTCAssistant.activeLayerMetrics, {
       observed_curve_resilience_score_v0: "observed_curve_resilience_score_v0",
@@ -598,6 +652,116 @@
     equal(timers.cleared.length, 4);
   });
 
+  test("queryAssistant sends only the bounded agent contract and returns a frozen copy", async () => {
+    const calls = [];
+    const timers = timerProbe();
+    const rawResponse = assistantFixture();
+    const target = evaluateClient("http://127.0.0.1/page?assistantMode=backend-agent", {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return jsonResponse(200, rawResponse);
+      },
+      setTimeout: timers.setTimeout,
+      clearTimeout: timers.clearTimeout
+    });
+    const result = await target.SPTCAssistant.client.queryAssistant({
+      message: "  Explain the selected section.  ",
+      selected_section_id: "CS_001081",
+      active_metric: "q_min",
+      history: [
+        { role: "user", content: " Earlier question. " },
+        { role: "assistant", content: " Earlier bounded answer. " }
+      ]
+    });
+
+    equal(calls.length, 1);
+    equal(calls[0].url, "http://127.0.0.1:8080/api/v1/assistant/query");
+    equal(calls[0].options.method, "POST");
+    equal(calls[0].options.mode, "cors");
+    equal(calls[0].options.credentials, "omit");
+    equal(calls[0].options.redirect, "error");
+    equal(calls[0].options.cache, "no-store");
+    equal(calls[0].options.headers, {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    });
+    equal(JSON.parse(calls[0].options.body), {
+      message: "Explain the selected section.",
+      selected_section_id: "CS_1081",
+      active_metric: "q_min",
+      history: [
+        { role: "user", content: "Earlier question." },
+        { role: "assistant", content: "Earlier bounded answer." }
+      ]
+    });
+    assert(Object.isFrozen(result));
+    assert(Object.isFrozen(result.tools_used) && Object.isFrozen(result.tools_used[0]));
+    assert(Object.isFrozen(result.evidence) && Object.isFrozen(result.evidence[0]));
+    assert(Object.isFrozen(result.warnings) && Object.isFrozen(result.warnings[0]));
+    assert(!Object.hasOwn(result, "chain_of_thought"));
+    assert(!Object.hasOwn(result, "raw_model_response"));
+    assert(result !== rawResponse);
+    equal(timers.callbacks.size, 0);
+    equal(timers.cleared.length, 1);
+  });
+
+  test("queryAssistant omits empty optional fields", async () => {
+    const calls = [];
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return jsonResponse(200, assistantFixture());
+      }
+    });
+    await target.SPTCAssistant.client.queryAssistant({
+      message: "Explain planning context versus observed evidence.",
+      selected_section_id: null,
+      active_metric: "",
+      history: []
+    });
+    equal(JSON.parse(calls[0].options.body), {
+      message: "Explain planning context versus observed evidence."
+    });
+  });
+
+  test("queryAssistant is agent-only and uses the separate 80-second timeout", async () => {
+    for (const href of [
+      "http://localhost/page",
+      "http://localhost/page?assistantMode=backend-tools",
+      "https://localhost/page?assistantMode=backend-agent"
+    ]) {
+      let fetchCount = 0;
+      const target = evaluateClient(href, {
+        fetch: async () => {
+          fetchCount += 1;
+          return jsonResponse(200, assistantFixture());
+        }
+      });
+      await expectCode(
+        () => target.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+        "invalid_request"
+      );
+      equal(fetchCount, 0);
+    }
+
+    const timers = timerProbe();
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: (url, options) => new Promise((resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+          once: true
+        });
+      }),
+      setTimeout: timers.setTimeout,
+      clearTimeout: timers.clearTimeout
+    });
+    const pendingRequest = target.SPTCAssistant.client.queryAssistant({
+      message: "Explain the selected section."
+    });
+    equal(Array.from(timers.callbacks.values())[0].milliseconds, 80000);
+    timers.fireFirst();
+    await expectCode(() => pendingRequest, "request_timeout");
+  });
+
   test("section and metric inputs reject before fetch", async () => {
     let fetchCount = 0;
     const target = evaluateClient("http://localhost/page?assistantMode=backend-tools", {
@@ -627,10 +791,10 @@
     equal(fetchCount, 0);
   });
 
-  test("inactive and future-agent modes never issue requests", async () => {
+  test("local and non-loopback modes never issue deterministic requests", async () => {
     for (const href of [
       "http://localhost/page",
-      "http://localhost/page?assistantMode=backend-agent",
+      "https://localhost/page?assistantMode=backend-agent",
       "https://localhost/page?assistantMode=backend-tools"
     ]) {
       let fetchCount = 0;
@@ -643,6 +807,23 @@
       await expectCode(() => target.SPTCAssistant.client.getSectionSummary(29), "invalid_request");
       equal(fetchCount, 0);
     }
+  });
+
+  test("backend-agent keeps fixed tools on the eight-second timeout", async () => {
+    const timers = timerProbe();
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: (url, options) => new Promise((resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+          once: true
+        });
+      }),
+      setTimeout: timers.setTimeout,
+      clearTimeout: timers.clearTimeout
+    });
+    const pendingRequest = target.SPTCAssistant.client.getSectionSummary(29);
+    equal(Array.from(timers.callbacks.values())[0].milliseconds, 8000);
+    timers.fireFirst();
+    await expectCode(() => pendingRequest, "request_timeout");
   });
 
   test("reviewed statuses map to sanitized client errors", async () => {

@@ -12,7 +12,33 @@
     backendAgent: "backend-agent"
   });
   const backendBaseUrl = "http://127.0.0.1:8080";
-  const timeoutMs = 8000;
+  const backendToolsTimeoutMs = 8000;
+  const backendAgentTimeoutMs = 80000;
+  const runtimeOverrideParameters = new Set([
+    "apikey",
+    "apiurl",
+    "assistantapikey",
+    "assistantapiurl",
+    "assistantbackendurl",
+    "assistantmodel",
+    "assistantollamaurl",
+    "assistantprovider",
+    "assistanttimeout",
+    "backendendpoint",
+    "backendhost",
+    "backendport",
+    "backendurl",
+    "baseurl",
+    "endpoint",
+    "host",
+    "model",
+    "modelname",
+    "ollamabaseurl",
+    "ollamaurl",
+    "port",
+    "provider",
+    "timeout"
+  ]);
 
   function isReviewedLocalPage() {
     let pageUrl;
@@ -28,9 +54,10 @@
   }
 
   function resolveMode() {
+    let searchParams;
     let modeEntries;
     try {
-      const searchParams = new global.URLSearchParams(global.location.search || "");
+      searchParams = new global.URLSearchParams(global.location.search || "");
       modeEntries = Array.from(searchParams.entries())
         .filter(([name]) => name.toLowerCase() === "assistantmode");
     } catch {
@@ -38,6 +65,17 @@
         requestedMode: "invalid",
         effectiveMode: modes.localTemplate,
         fallbackReason: "invalid_mode_parameter"
+      };
+    }
+
+    const hasRuntimeOverride = Array.from(searchParams.keys()).some(name => (
+      runtimeOverrideParameters.has(name.toLowerCase())
+    ));
+    if (hasRuntimeOverride) {
+      return {
+        requestedMode: "invalid",
+        effectiveMode: modes.localTemplate,
+        fallbackReason: "runtime_override_parameter"
       };
     }
 
@@ -71,14 +109,7 @@
         fallbackReason: null
       };
     }
-    if (requestedMode === modes.backendAgent) {
-      return {
-        requestedMode,
-        effectiveMode: modes.localTemplate,
-        fallbackReason: "backend_agent_disabled"
-      };
-    }
-    if (requestedMode !== modes.backendTools) {
+    if (requestedMode !== modes.backendTools && requestedMode !== modes.backendAgent) {
       return {
         requestedMode: "invalid",
         effectiveMode: modes.localTemplate,
@@ -89,12 +120,14 @@
       return {
         requestedMode,
         effectiveMode: modes.localTemplate,
-        fallbackReason: "backend_tools_requires_local_http"
+        fallbackReason: requestedMode === modes.backendAgent
+          ? "backend_agent_requires_local_http"
+          : "backend_tools_requires_local_http"
       };
     }
     return {
       requestedMode,
-      effectiveMode: modes.backendTools,
+      effectiveMode: requestedMode,
       fallbackReason: null
     };
   }
@@ -104,9 +137,10 @@
     requested_mode: resolvedMode.requestedMode,
     effective_mode: resolvedMode.effectiveMode,
     backend_base_url: backendBaseUrl,
-    timeout_ms: timeoutMs,
+    timeout_ms: backendToolsTimeoutMs,
+    agent_timeout_ms: backendAgentTimeoutMs,
     fallback_reason: resolvedMode.fallbackReason,
-    backend_agent_enabled: false
+    backend_agent_enabled: resolvedMode.effectiveMode === modes.backendAgent
   });
   const namespace = Object.create(null);
   Object.defineProperties(namespace, {
