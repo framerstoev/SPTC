@@ -821,7 +821,7 @@ class ProductionPageQA:
 
         summary_mark = self.page.event_mark()
         self.click("#assistantExplainSection")
-        self.wait_status("Backend result")
+        self.wait_status("Deterministic backend result")
         summary_request = self.assert_one_request(
             summary_mark,
             "GET",
@@ -844,7 +844,7 @@ class ProductionPageQA:
         )
         metric_mark = self.page.event_mark()
         self.click("#assistantExplainMetric")
-        self.wait_status("Backend result")
+        self.wait_status("Deterministic backend result")
         metric_request = self.assert_one_request(
             metric_mark,
             "GET",
@@ -859,7 +859,7 @@ class ProductionPageQA:
 
         review_mark = self.page.event_mark()
         self.click("#assistantGenerateReviewNote")
-        self.wait_status("Draft for human review")
+        self.wait_status("Deterministic draft for human review")
         review_request = self.assert_one_request(
             review_mark,
             "POST",
@@ -991,7 +991,7 @@ class ProductionPageQA:
             self.select_direct(section_id)
             mark = self.page.event_mark()
             self.click("#assistantExplainSection")
-            self.wait_status("Backend result")
+            self.wait_status("Deterministic backend result")
             request = self.assert_one_request(
                 mark,
                 "GET",
@@ -1237,7 +1237,7 @@ class ProductionPageQA:
                 pass
             time.sleep(0.5)
             self.report.check(
-                self.status() == "Local template preview"
+                self.status() == "Deterministic fixed actions ready"
                 and "Backend unavailable" not in self.status(),
                 "switching metric prevents stale metric rendering",
             )
@@ -1266,7 +1266,7 @@ class ProductionPageQA:
                 {"requestId": second["requestId"]},
             )
             paused.remove(second["requestId"])
-            self.wait_status("Backend result")
+            self.wait_status("Deterministic backend result")
             self.report.check(
                 self.evaluate(
                     "document.querySelectorAll('#assistantMessages > .assistant-message').length"

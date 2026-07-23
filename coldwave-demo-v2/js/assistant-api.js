@@ -188,6 +188,8 @@
   });
   const unsafeTextPattern = /(?:file:\/\/|(?:^|[^a-z0-9+.-])[a-z]:[\\/]|\\\\[^\\]|(?:^|[\s("'`])\/(?:home|users|tmp|var|opt|srv|mnt|workspace|root)(?:\/|\b)|\.(?:csv|parquet|duckdb|sqlite3?)\b|\binternal_path\b|\btraceback\b)/i;
   const assistantRestrictedTextPattern = /(?:https?:\/\/|\bollama\b|<\/?think\b|\bchain[-_ ]of[-_ ]thought\b|\binternal[_ ]prompt\b|\bprompt[_ ]tokens\b|\bresponse[_ ]metadata\b)/i;
+  const assistantInternalPathPattern = /(?:^|[\s("'`])(?:\.\.[\\/]|\/(?:app|code|etc|private|project|repo)(?:\/|\b)|services[\\/]resilience-agent\b|data[\\/]tier3\b|\.local[\\/]snapshot\b)/i;
+  const assistantRawJsonPattern = /^\s*(?:\{[\s\S]*\}|\[[\s\S]*\])\s*$/;
   const disallowedControlPattern = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
   const evidenceIdPattern = /^e_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
   const assistantEvidenceIdPattern = /^e_[a-z0-9_]+$/;
@@ -978,6 +980,17 @@
     return text;
   }
 
+  function boundedAssistantAnswer(value) {
+    const text = boundedAssistantResponseText(value, 4000);
+    if (
+      assistantInternalPathPattern.test(text)
+      || assistantRawJsonPattern.test(text)
+    ) {
+      invalidResponse();
+    }
+    return text;
+  }
+
   function validateAssistantSectionId(value) {
     if (value === null) return null;
     const sectionId = boundedAssistantResponseText(value, 15);
@@ -1095,7 +1108,7 @@
     if (required(payload, "method_version") !== methodVersion) invalidResponse();
     return deepFreeze({
       status,
-      answer: boundedAssistantResponseText(required(payload, "answer"), 4000),
+      answer: boundedAssistantAnswer(required(payload, "answer")),
       intent,
       tools_used: toolsUsed,
       evidence,

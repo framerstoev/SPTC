@@ -391,7 +391,7 @@
       history = [
         ...history,
         { role: "user", content: message },
-        { role: "assistant", content: answer }
+        { role: "assistant", content: answer.slice(0, maximumMessageCharacters) }
       ].slice(-maximumHistoryMessages);
     }
 

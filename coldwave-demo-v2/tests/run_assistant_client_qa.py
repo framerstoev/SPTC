@@ -1,4 +1,4 @@
-"""Run no-build Phase 2A4 static, client, action, search, and resource QA."""
+"""Run no-build Phase 3G static, client, action, chat, search, and resource QA."""
 
 from __future__ import annotations
 
@@ -34,6 +34,8 @@ def static_checks() -> None:
     api = (V2_ROOT / "js" / "assistant-api.js").read_text(encoding="utf-8")
     actions = (V2_ROOT / "js" / "assistant-actions.js").read_text(encoding="utf-8")
     chat = (V2_ROOT / "js" / "assistant-chat.js").read_text(encoding="utf-8")
+    app = (V2_ROOT / "js" / "app.js").read_text(encoding="utf-8")
+    style = (V2_ROOT / "css" / "style.css").read_text(encoding="utf-8")
     script_order = (
         "./js/assistant-config.js",
         "./js/assistant-api.js",
@@ -58,9 +60,12 @@ def static_checks() -> None:
         "tests/assistant-actions-tests.js",
         "tests/run_assistant_actions_qa.js",
         "tests/run_assistant_actions_live_qa.js",
+        "tests/assistant-chat-tests.js",
+        "tests/run_assistant_chat_qa.js",
         "tests/search-rendering-tests.js",
         "tests/run_search_rendering_qa.js",
         "tests/run_phase2a4_browser_qa.py",
+        "tests/run_phase3g_browser_qa.py",
     ):
         assert (V2_ROOT / relative_path).is_file(), relative_path
 
@@ -104,6 +109,7 @@ def static_checks() -> None:
             "Authorization",
         )
     )
+    assert "queryAssistant" not in actions
     assert all(
         token not in chat
         for token in (
@@ -129,7 +135,6 @@ def static_checks() -> None:
             "Bearer ",
         )
     )
-    app = (V2_ROOT / "js" / "app.js").read_text(encoding="utf-8")
     assert "SPTCAssistant.client" not in app
     assert "/api/v1/" not in app
     assert "ASSISTANT_API_URL" not in app
@@ -155,6 +160,7 @@ def static_checks() -> None:
     assert 'id="assistantAgent" hidden aria-hidden="true" aria-busy="false"' in index
     assert 'id="assistantComposer" hidden aria-hidden="true"' in index
     assert 'id="assistantInput"' in index and 'maxlength="1000"' in index
+    assert 'type="file"' not in index
     assert 'id="assistantSend" type="button" disabled' in index
     assert 'id="assistantCancel" type="button" hidden disabled' in index
     assert 'id="assistantCharacterCount" aria-live="polite"' in index
@@ -162,6 +168,18 @@ def static_checks() -> None:
     assert (
         'id="assistantActionAvailability" aria-live="polite" aria-atomic="true"'
     ) in index
+    assert index.count('<aside class="panel left-panel">') == 1
+    assert index.count('<main class="map-shell">') == 1
+    assert "right-panel" not in index
+    assert "grid-template-columns: minmax(380px, 30vw) minmax(0, 1fr);" in style
+    assert "html,\nbody {\n  height: 100%;\n  margin: 0;\n  overflow: hidden;" in style
+    assert "const response = await fetch(props.curve_file);" in app
+    assert 'label: "Raw Q(t) observations"' in app
+    assert 'label: "Centered six-observation rolling median"' in app
+    assert "centered six-observation rolling median" in index
+    assert "observations, not elapsed hours" in index
+    assert "no missing-hour interpolation" in index
+    assert "6-hour smoothing" not in index + app
 
     summary = json.loads(
         (V2_ROOT / "data" / "summary.json").read_text(encoding="utf-8")
@@ -304,10 +322,12 @@ def main() -> None:
     static_checks()
     client_result = None
     action_result = None
+    chat_result = None
     search_result = None
     if not args.skip_javascript:
         client_result = run_javascript_tests("run_assistant_client_qa.js")
         action_result = run_javascript_tests("run_assistant_actions_qa.js")
+        chat_result = run_javascript_tests("run_assistant_chat_qa.js")
         search_result = run_javascript_tests("run_search_rendering_qa.js")
     live_client_result = None
     live_action_result = None
@@ -338,8 +358,11 @@ def main() -> None:
             "/tests/assistant-actions-tests.js",
             "/tests/run_assistant_actions_qa.js",
             "/tests/run_assistant_actions_live_qa.js",
+            "/tests/assistant-chat-tests.js",
+            "/tests/run_assistant_chat_qa.js",
             "/tests/search-rendering-tests.js",
             "/tests/run_search_rendering_qa.js",
+            "/tests/run_phase3g_browser_qa.py",
             "/data/summary.json",
             "/data/curves/CS_1081.json",
             "/data/curves/CS_257.json",
@@ -371,11 +394,13 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    print("Phase 2A4 static/resource QA passed")
+    print("Phase 3G static/resource regression QA passed")
     if client_result:
         print(client_result)
     if action_result:
         print(action_result)
+    if chat_result:
+        print(chat_result)
     if search_result:
         print(search_result)
     elif not args.skip_javascript:
@@ -393,8 +418,8 @@ def main() -> None:
         )
     else:
         print(
-            "Legacy mock-page browser QA not run; use "
-            "run_phase2a4_browser_qa.py for isolated production-page acceptance"
+            "Isolated production-page browser QA not run; use "
+            "run_phase2a4_browser_qa.py and run_phase3g_browser_qa.py for acceptance"
         )
 
 

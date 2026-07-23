@@ -340,14 +340,17 @@
   }
 
   function assistantFixture(overrides = {}) {
+    const selected = (key, fallback) => (
+      Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : fallback
+    );
     return {
-      status: overrides.status || "completed",
-      answer: overrides.answer || "The selected section has reviewed deterministic evidence.",
-      intent: overrides.intent === undefined ? "explain_selected_section" : overrides.intent,
-      tools_used: overrides.tools_used || [
+      status: selected("status", "completed"),
+      answer: selected("answer", "The selected section has reviewed deterministic evidence."),
+      intent: selected("intent", "explain_selected_section"),
+      tools_used: selected("tools_used", [
         { tool_name: "get_section_summary", call_index: 1 }
-      ],
-      evidence: overrides.evidence || [{
+      ]),
+      evidence: selected("evidence", [{
         evidence_id: "e_metric_q_min",
         kind: "metric_value",
         section_id: "CS_1081",
@@ -357,19 +360,19 @@
         display_value: "0.620",
         unit: "dimensionless",
         definition: "Minimum smoothed normalized performance."
-      }],
-      warnings: overrides.warnings || [{
+      }]),
+      warnings: selected("warnings", [{
         section_id: "CS_1081",
         code: "METHOD_SCOPE",
         severity: "info",
         message: "The method is experimental and event specific."
-      }],
-      limitations: overrides.limitations || [
+      }]),
+      limitations: selected("limitations", [
         "This single-event review does not establish cause or predict future performance."
-      ],
-      clarification: overrides.clarification === undefined ? null : overrides.clarification,
-      data_release: "coldwave_2026_01_r1",
-      method_version: "data_driven_resilience_v0",
+      ]),
+      clarification: selected("clarification", null),
+      data_release: selected("data_release", "coldwave_2026_01_r1"),
+      method_version: selected("method_version", "data_driven_resilience_v0"),
       chain_of_thought: "ignored",
       raw_model_response: { ignored: true }
     };
@@ -494,7 +497,19 @@
         null
       ],
       [
+        "http://localhost:8001/page?assistantMode=backend-agent",
+        "backend-agent",
+        "backend-agent",
+        null
+      ],
+      [
         "https://127.0.0.1:8001/page?assistantMode=backend-agent",
+        "backend-agent",
+        "local-template",
+        "backend_agent_requires_local_http"
+      ],
+      [
+        "file:///review/page.html?assistantMode=backend-agent",
         "backend-agent",
         "local-template",
         "backend_agent_requires_local_http"
@@ -504,6 +519,24 @@
         "backend-agent",
         "local-template",
         "backend_agent_requires_local_http"
+      ],
+      [
+        "https://framerstoev.github.io/SPTC/coldwave-demo-v2/?assistantMode=backend-agent",
+        "backend-agent",
+        "local-template",
+        "backend_agent_requires_local_http"
+      ],
+      [
+        "http://127.0.0.1:8001/page?assistantMode=Backend-Agent",
+        "invalid",
+        "local-template",
+        "invalid_mode"
+      ],
+      [
+        "http://127.0.0.1:8001/page?assistantMode=backend-agent&assistantMode=backend-agent",
+        "invalid",
+        "local-template",
+        "duplicate_mode_parameter"
       ],
       [
         "http://127.0.0.1:8001/page?assistantMode=unknown",
@@ -722,6 +755,387 @@
     equal(JSON.parse(calls[0].options.body), {
       message: "Explain planning context versus observed evidence."
     });
+  });
+
+  test("assistant requests reject unreviewed input before fetch", async () => {
+    let fetchCount = 0;
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: async () => {
+        fetchCount += 1;
+        return jsonResponse(200, assistantFixture());
+      }
+    });
+    const validHistoryItem = { role: "user", content: "Earlier question." };
+    const invalidRequests = [
+      null,
+      [],
+      {},
+      { message: "" },
+      { message: "   " },
+      { message: "x".repeat(1001) },
+      { message: "Unsafe\u0001control" },
+      { message: "Explain it.", prompt: "hidden" },
+      { message: "Explain it.", selected_section_id: "CS_0" },
+      { message: "Explain it.", selected_section_id: "CS_1081 " },
+      { message: "Explain it.", active_metric: "q0" },
+      { message: "Explain it.", history: "not-an-array" },
+      { message: "Explain it.", history: Array(5).fill(validHistoryItem) },
+      {
+        message: "Explain it.",
+        history: [{ role: "user", content: "Earlier.", evidence: [] }]
+      },
+      { message: "Explain it.", history: [{ role: "system", content: "Hidden." }] },
+      { message: "Explain it.", history: [{ role: "assistant", content: "   " }] },
+      {
+        message: "Explain it.",
+        history: [{ role: "assistant", content: "x".repeat(1001) }]
+      }
+    ];
+    for (const request of invalidRequests) {
+      await expectCode(
+        () => target.SPTCAssistant.client.queryAssistant(request),
+        "invalid_request"
+      );
+    }
+    await expectCode(
+      () => target.SPTCAssistant.client.queryAssistant(
+        { message: "Explain it." },
+        { timeout: 80000 }
+      ),
+      "invalid_request"
+    );
+    equal(fetchCount, 0);
+  });
+
+  test("all seven assistant statuses validate only with reviewed HTTP pairing", async () => {
+    const clarificationQuestion = "Which reviewed control section should I explain?";
+    const cases = [
+      [200, assistantFixture()],
+      [200, assistantFixture({
+        status: "clarification_required",
+        answer: clarificationQuestion,
+        intent: "request_clarification",
+        tools_used: [{ tool_name: "request_clarification", call_index: 1 }],
+        evidence: [],
+        warnings: [],
+        limitations: [],
+        clarification: {
+          reason: "section_required",
+          question: clarificationQuestion
+        }
+      })],
+      [200, assistantFixture({
+        status: "unsupported_request",
+        answer: "That request is outside the reviewed assistant scope.",
+        intent: "decline_unsupported_request",
+        tools_used: [{ tool_name: "decline_unsupported_request", call_index: 1 }],
+        evidence: [],
+        warnings: [],
+        limitations: ["Predictions and investment recommendations are outside scope."]
+      })],
+      [503, assistantFixture({
+        status: "assistant_disabled",
+        answer: "The local assistant is not enabled.",
+        intent: null,
+        tools_used: [],
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })],
+      [503, assistantFixture({
+        status: "model_unavailable",
+        answer: "The local Qwen model is unavailable.",
+        intent: null,
+        tools_used: [],
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })],
+      [503, assistantFixture({
+        status: "tool_error",
+        answer: "The deterministic tool could not complete.",
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })],
+      [502, assistantFixture({
+        status: "invalid_model_response",
+        answer: "The local model response could not be safely accepted.",
+        intent: null,
+        tools_used: [],
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })]
+    ];
+    for (const [httpStatus, payload] of cases) {
+      let fetchCount = 0;
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => {
+          fetchCount += 1;
+          return jsonResponse(httpStatus, payload);
+        }
+      });
+      const result = await target.SPTCAssistant.client.queryAssistant({
+        message: "Use the reviewed local assistant."
+      });
+      equal(result.status, payload.status);
+      assert(Object.isFrozen(result));
+      assert(Object.isFrozen(result.tools_used));
+      assert(Object.isFrozen(result.evidence));
+      assert(Object.isFrozen(result.warnings));
+      assert(Object.isFrozen(result.limitations));
+      equal(fetchCount, 1);
+    }
+  });
+
+  test("assistant status drift and malformed clarification fail closed", async () => {
+    const question = "Which reviewed section?";
+    const invalidCases = [
+      [503, assistantFixture()],
+      [200, assistantFixture({
+        status: "assistant_disabled",
+        intent: null,
+        tools_used: [],
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })],
+      [503, assistantFixture({
+        status: "invalid_model_response",
+        intent: null,
+        tools_used: [],
+        evidence: [],
+        warnings: [],
+        limitations: []
+      })],
+      [200, assistantFixture({
+        status: "clarification_required",
+        intent: "request_clarification",
+        tools_used: [{ tool_name: "request_clarification", call_index: 1 }],
+        evidence: [],
+        warnings: [],
+        limitations: [],
+        clarification: null
+      })],
+      [200, assistantFixture({
+        status: "completed",
+        clarification: { reason: "section_required", question }
+      })],
+      [200, assistantFixture({
+        status: "unsupported_request",
+        intent: "explain_selected_section"
+      })],
+      [200, assistantFixture({ data_release: "future_release" })],
+      [200, assistantFixture({ method_version: "future_method" })]
+    ];
+    for (const [httpStatus, payload] of invalidCases) {
+      let fetchCount = 0;
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => {
+          fetchCount += 1;
+          return jsonResponse(httpStatus, payload);
+        }
+      });
+      await expectCode(
+        () => target.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+        "invalid_response"
+      );
+      equal(fetchCount, 1);
+    }
+
+    const validationTarget = evaluateClient(
+      "http://localhost/page?assistantMode=backend-agent",
+      {
+        fetch: async () => jsonResponse(422, {
+          detail: {
+            code: "invalid_assistant_request",
+            message: "The reviewed assistant request was rejected."
+          }
+        })
+      }
+    );
+    await expectCode(
+      () => validationTarget.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+      "backend_validation_error"
+    );
+  });
+
+  test("assistant response bounds and unsafe content fail closed without retry", async () => {
+    const oversizedAnswer = assistantFixture({ answer: "x".repeat(4001) });
+    const htmlAnswer = assistantFixture({ answer: "<script>alert(1)</script>" });
+    const urlAnswer = assistantFixture({ answer: "See http://127.0.0.1/private." });
+    const providerAnswer = assistantFixture({ answer: "Ollama returned this text." });
+    const pathAnswer = assistantFixture({ answer: "Read C:\\private\\assistant.json." });
+    const relativePathAnswer = assistantFixture({
+      answer: "Read ../services/resilience-agent/private.txt."
+    });
+    const posixPathAnswer = assistantFixture({ answer: "Read /etc/private/config." });
+    const rawJsonAnswer = assistantFixture({
+      answer: '{"tool_name":"get_section_summary","arguments":{"section_id":"CS_1081"}}'
+    });
+    const tooManyTools = assistantFixture({
+      tools_used: [
+        { tool_name: "get_section_summary", call_index: 1 },
+        { tool_name: "explain_metric", call_index: 2 }
+      ]
+    });
+    const invalidToolIndex = assistantFixture({
+      tools_used: [{ tool_name: "get_section_summary", call_index: 2 }]
+    });
+    const tooManyEvidence = assistantFixture({
+      evidence: Array.from({ length: 33 }, (_, index) => ({
+        ...assistantFixture().evidence[0],
+        evidence_id: `e_metric_q_min_${index}`
+      }))
+    });
+    const duplicateEvidence = assistantFixture();
+    duplicateEvidence.evidence.push(clone(duplicateEvidence.evidence[0]));
+    const invalidEvidenceValue = assistantFixture();
+    invalidEvidenceValue.evidence[0].value = { raw: true };
+    const invalidMetric = assistantFixture();
+    invalidMetric.evidence[0].metric_name = "future_metric";
+    const invalidWarning = assistantFixture();
+    invalidWarning.warnings[0].code = "INTERNAL_WARNING";
+    const tooManyWarnings = assistantFixture({
+      warnings: Array.from({ length: 9 }, () => clone(assistantFixture().warnings[0]))
+    });
+    const tooManyLimitations = assistantFixture({
+      limitations: Array.from({ length: 13 }, (_, index) => `Reviewed limitation ${index}.`)
+    });
+    const cases = [
+      oversizedAnswer,
+      htmlAnswer,
+      urlAnswer,
+      providerAnswer,
+      pathAnswer,
+      relativePathAnswer,
+      posixPathAnswer,
+      rawJsonAnswer,
+      tooManyTools,
+      invalidToolIndex,
+      tooManyEvidence,
+      duplicateEvidence,
+      invalidEvidenceValue,
+      invalidMetric,
+      invalidWarning,
+      tooManyWarnings,
+      tooManyLimitations
+    ];
+    for (const payload of cases) {
+      let fetchCount = 0;
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => {
+          fetchCount += 1;
+          return jsonResponse(200, payload);
+        }
+      });
+      await expectCode(
+        () => target.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+        "invalid_response"
+      );
+      equal(fetchCount, 1, "An invalid assistant response must not be retried");
+    }
+
+    const nonfinitePayload = JSON.stringify(assistantFixture())
+      .replace('"value":0.62', '"value":1e400');
+    const nonfiniteTarget = evaluateClient(
+      "http://localhost/page?assistantMode=backend-agent",
+      { fetch: async () => textResponse(200, nonfinitePayload) }
+    );
+    await expectCode(
+      () => nonfiniteTarget.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+      "invalid_response"
+    );
+  });
+
+  test("assistant response copying drops unknown raw model and nested fields", async () => {
+    const rawResponse = assistantFixture();
+    rawResponse.provider_payload = {
+      endpoint: "http://127.0.0.1:11434",
+      model_json: { private: true }
+    };
+    rawResponse.internal_prompt = "C:\\private\\prompt.txt";
+    rawResponse.tools_used[0].arguments = { section_id: "CS_999" };
+    rawResponse.evidence[0].raw_value = { unreviewed: true };
+    rawResponse.warnings[0].traceback = "/private/traceback";
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: async () => jsonResponse(200, rawResponse)
+    });
+    const result = await target.SPTCAssistant.client.queryAssistant({
+      message: "Explain the selected section."
+    });
+    equal(Object.keys(result).sort(), [
+      "answer",
+      "clarification",
+      "data_release",
+      "evidence",
+      "intent",
+      "limitations",
+      "method_version",
+      "status",
+      "tools_used",
+      "warnings"
+    ]);
+    assert(!Object.hasOwn(result, "provider_payload"));
+    assert(!Object.hasOwn(result, "internal_prompt"));
+    assert(!Object.hasOwn(result, "chain_of_thought"));
+    assert(!Object.hasOwn(result.tools_used[0], "arguments"));
+    assert(!Object.hasOwn(result.evidence[0], "raw_value"));
+    assert(!Object.hasOwn(result.warnings[0], "traceback"));
+  });
+
+  test("assistant network, JSON, size, and unexpected HTTP failures stay distinct", async () => {
+    const cases = [
+      [async () => { throw new Error("private provider detail"); }, "backend_unavailable"],
+      [async () => textResponse(200, "not-json"), "invalid_json"],
+      [async () => textResponse(200, " ".repeat(512 * 1024 + 1)), "invalid_response"],
+      [async () => textResponse(500, "private backend failure"), "unexpected_status"]
+    ];
+    for (const [fetchImplementation, expectedCode] of cases) {
+      let fetchCount = 0;
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => {
+          fetchCount += 1;
+          return fetchImplementation();
+        }
+      });
+      await expectCode(
+        () => target.SPTCAssistant.client.queryAssistant({ message: "Explain it." }),
+        expectedCode
+      );
+      equal(fetchCount, 1);
+    }
+  });
+
+  test("assistant caller cancellation aborts once without retry", async () => {
+    const timers = timerProbe();
+    const caller = signalProbe();
+    let fetchCount = 0;
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      setTimeout: timers.setTimeout,
+      clearTimeout: timers.clearTimeout,
+      fetch: async (url, options) => {
+        void url;
+        fetchCount += 1;
+        return new Promise((resolve, reject) => {
+          void resolve;
+          options.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true
+          });
+        });
+      }
+    });
+    const pending = target.SPTCAssistant.client.queryAssistant(
+      { message: "Explain it." },
+      { signal: caller.signal }
+    );
+    caller.abort();
+    await expectCode(() => pending, "request_cancelled");
+    equal(fetchCount, 1);
+    equal(caller.state.removed, 1);
+    equal(timers.callbacks.size, 0);
+    equal(timers.cleared.length, 1);
   });
 
   test("queryAssistant is agent-only and uses the separate 80-second timeout", async () => {

@@ -224,7 +224,10 @@ async function runAvailableProbe() {
   equal(fetchCalls[2].url, "http://127.0.0.1:8080/api/v1/reports/review-note");
   equal(controller.getState().requestState, "backend_success");
   equal(controller.getState().currentAction, "review");
-  equal(document.getElementById("assistantStatus").textContent, "Draft for human review");
+  equal(
+    document.getElementById("assistantStatus").textContent,
+    "Deterministic draft for human review"
+  );
   includes(messages.textContent, "Draft for human review");
   includes(messages.textContent, "CS_1081");
   const reviewContainer = document.getElementById("assistantReviewContainer");

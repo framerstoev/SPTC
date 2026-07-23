@@ -483,21 +483,35 @@ module.exports = async function runAssistantActionsTests() {
     }
   });
 
-  test("backend-agent keeps deterministic fixed actions enabled", async () => {
-    let callCount = 0;
+  test("backend-agent keeps all three deterministic fixed actions enabled", async () => {
+    const calls = [];
     const client = {
       async getSectionSummary() {
-        callCount += 1;
+        calls.push("section");
         return summaryFixture();
+      },
+      async explainMetric() {
+        calls.push("metric");
+        return metricFixture();
+      },
+      async generateSectionReviewNote() {
+        calls.push("review");
+        return reviewNoteFixture();
       }
     };
     const { controller, elements } = createHarness({ mode: "backend-agent", client });
     controller.setContext(selectedContext());
     await elements.assistantExplainSection.click();
-    equal(callCount, 1);
+    equal(elements.assistantStatus.textContent, "Deterministic backend result");
+    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
+    await elements.assistantExplainMetric.click();
+    equal(elements.assistantStatus.textContent, "Deterministic backend result");
+    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
+    await elements.assistantGenerateReviewNote.click();
+    equal(calls.join(","), "section,metric,review");
     equal(controller.getState().mode, "backend-agent");
     equal(elements.assistantModeLabel.textContent, "Local Qwen + backend tools");
-    equal(elements.assistantStatus.textContent, "Deterministic backend result");
+    equal(elements.assistantStatus.textContent, "Deterministic draft for human review");
     includes(elements.assistantMessages.textContent, "Deterministic fixed action");
   });
 
