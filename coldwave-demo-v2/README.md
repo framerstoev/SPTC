@@ -38,6 +38,17 @@ The left-panel search uses the map GeoJSON properties only. It supports partial 
 
 Selecting a search result zooms to the control section, highlights it, updates the right panel, and lazy-loads the curve JSON only for that selected section.
 
+### Safe Result Rendering
+
+Phase 2A4 replaced the former search-result HTML interpolation with reviewed DOM construction.
+Each result is a created `button` containing created `strong` and `span` nodes; route,
+control-section, county, and status values are assigned with `textContent`, and selection identity
+is assigned through `dataset.key`. Clear, no-match, and result states use `replaceChildren`.
+Fixtures containing script- and image-like text, event-handler text, quotes, apostrophes,
+ampersands, angle brackets, route/county-like HTML, bounded long strings, and relevant control
+characters remained inert visible text. No sanitizer dependency was added, and search ordering,
+click/Enter selection, map zoom, and local curve loading are unchanged.
+
 ## Experimental Score Classes
 
 The `Observed Curve Resilience Score v0` layer uses quantile classes because fixed breaks were highly imbalanced for the current v0 score distribution.
@@ -105,6 +116,9 @@ loading, result, fallback, and draft states. The old free-form composer remains 
 future hook: its container is hidden, its input and Send button are disabled, and no Enter, Send,
 or prose-to-backend path is bound. Compare, filter, rank, curve-API, map-action, and natural-language
 chat behavior are not available.
+
+Phase 2A4 changed only legacy search-identity output safety and acceptance QA. It did not expand
+the three-action Assistant surface or change its safe DOM renderer.
 
 Neither mode makes an Assistant backend request on page load, mode resolution, section selection,
 or layer change. Only an explicit click on one of the three enabled actions can invoke a backend
@@ -198,6 +212,11 @@ The normal local-template page remains:
 ```text
 http://127.0.0.1:8001/coldwave-demo-v2/
 ```
+
+These modes were accepted only for loopback use on the reviewer workstation. `backend-tools`
+remains local/reviewer-only, with no LLM, free-form request, credential, API key, or configurable
+backend destination. This acceptance is not deployment readiness: public hosting, licensing,
+authentication, canonical timezone, and backend-hosting decisions remain unresolved.
 
 Reloading either URL makes no Assistant API request. On the backend-tools URL, select a valid
 control section and explicitly choose one of the three fixed actions to make a reviewed request.

@@ -89,172 +89,142 @@ The UI labels were updated to:
 - V0 disruption-delay field
 - Full-window delay proxy: N/A
 
-## Phase 2A3 Automated QA
+## Phase 2A4 Search Rendering Security Audit
+
+The accepted Phase 2A3 `app.js` contained 14 `innerHTML` assignments. The audit classified every
+assignment before changing code:
+
+| Site | Accepted-head classification | Phase 2A4 disposition |
+| --- | --- | --- |
+| score-class legend | dynamic but constrained | Closed labels/colors and finite-formatted ranges; unchanged. |
+| detection-status legend | dynamic but constrained | Closed status/color mapping; unchanged. |
+| continuous legend | dynamic but constrained | Closed layer configuration and finite-formatted ranges; unchanged. |
+| blank-search clear | safely cleared container | Replaced locally with `replaceChildren()`. |
+| no-match search message | static trusted template | Rebuilt as a created `div` with fixed `textContent`. |
+| matching search results | **dynamic and unsafe** | Route, control-section, county, status, and `data-key` interpolation replaced with created nodes, `textContent`, and reviewed `dataset.key`. |
+| status badges | dynamic and unsafe for an unknown raw status | `statusLabel` now uses the closed status registry and fixed `Unknown` fallback. |
+| top metric cards | dynamic but constrained | Constant labels/help and finite numeric formatters; unchanged. |
+| warning-card clear | safely cleared container | Empty string only; unchanged. |
+| curve metric cards | dynamic but constrained | Constant labels/help and finite numeric formatters; unchanged. |
+| impact metric cards | dynamic but constrained | Constant labels/help and finite numeric formatters; unchanged. |
+| Tier 1/2 metric cards | dynamic and unsafe for raw data-density text | Data density now resolves through the closed `A`/`B`/`C` registry with fixed `N/A` fallback. |
+| phase-marker clear | safely cleared container | Empty string only; unchanged. |
+| phase-marker legend | static trusted template | Fixed literal only; unchanged. |
+
+The search renderer now has no HTML-string sink. Eleven non-search assignments remain: eight receive
+only closed or finite-formatted values, two only clear containers, and one is a fixed marker
+template. The separate Leaflet tooltip path still escapes route, control-section, and county values
+through `escapeHtml`. `assistant-actions.js` remains byte-identical to the accepted Phase 2A3
+renderer and contains no `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `DOMParser`, or Markdown
+HTML parsing.
+
+The production-function test fixtures include `<script>alert(1)</script>`,
+`<img src=x onerror=alert(1)>`, quotes, apostrophes, ampersands, angle brackets, route/county-like
+markup, 512-character bounded values, tabs/newlines, and control characters. The tests assert exact
+inert visible text, no created script/image/SVG or event-handler attribute, preserved classes and
+ordering, the ten-result cap, blank/no-match behavior, and exact section IDs for delegated click and
+Enter selection. No sanitizer library was introduced.
+
+## Phase 2A4 Automated QA
 
 From the nested frontend repository root, run:
 
 ```powershell
-python coldwave-demo-v2/tests/run_assistant_client_qa.py
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py
 git diff --check
 ```
 
-The Python runner performs static security/allowlist checks, verifies the accepted `app.js` and CSS
-hashes, confirms the reviewed script order, rejects unsafe rendering/request tokens in the action
-module, parses representative data files, and serves/fetches frontend resources over an ephemeral
-loopback HTTP port. When an existing compatible JavaScript runtime is available, it runs both the
-Phase 2A2 configuration/client contracts and the Phase 2A3 action-controller suite. The audited
-workstation has no standalone Node installation; the runner safely reuses VS Code's existing
-Electron Node mode without npm or installation.
-
-The Phase 2A3 mocked suite covers:
-
-- zero client calls for local-template, invalid, and disabled backend-agent modes;
-- no backend-tools call before an explicit enabled action;
-- no-selection, supported-metric, unsupported-metric, status-layer, and delay-layer availability;
-- section, metric, and review-note loading/success states;
-- replacement-request cancellation, section/layer invalidation, stale-result rejection, silent
-  cancellation, and repeated-click stability;
-- the complete reviewed fallback error matrix and visible local source text;
-- detected, no-sustained-drop, censored-recovery, and no-observed-support presentation;
-- bounded section metrics and metric limitations;
-- collapsed review details, six accepted sections in order, warnings, limitations, checklist, and
-  copy-control visibility;
-- exact Markdown copy, copy success/unavailable/rejection states, and stale copy completion;
-- script-like backend fixtures remaining inert text and no unsafe dynamic HTML.
-
-On the audited workstation, the action suite can also be run directly with the existing VS Code
-Electron Node runtime:
-
-```powershell
-$env:ELECTRON_RUN_AS_NODE = "1"
-& "D:\VScode\Microsoft VS Code\Code.exe" "coldwave-demo-v2\tests\run_assistant_actions_qa.js"
-Remove-Item Env:ELECTRON_RUN_AS_NODE
-```
-
-Successful automated output includes:
+The result on the audited workstation was:
 
 ```text
-Phase 2A3 static/resource QA passed
+Phase 2A4 static/resource QA passed
 25 Phase 2A2 JavaScript contract tests passed.
 27 Phase 2A3 Assistant action tests passed.
+8 Phase 2A4 search rendering tests passed.
 ```
 
-Electron may emit a non-fatal Crashpad access-denied diagnostic on stderr; the test process exit
-code and exact pass line determine the action-suite result.
+The 60 deterministic JavaScript tests use the existing VS Code Electron Node runtime without npm
+or installation. They retain all Phase 2A2 client contracts and Phase 2A3 action, error, warning,
+cancellation, staleness, review-note, safe-rendering, and Clipboard success/failure contracts. The
+new tests extract the actual production search functions from `app.js`; they do not test a copied
+renderer.
 
-With the accepted backend running on port 8080, add `--live` to pass five representative summaries,
-the `q_min` and `event_rei` explanations, and detected/no-support review notes through the actual
-production client validators. The same command also runs the production action-controller probe.
-
-To run the production action controller probe separately, use:
+For live client/controller validation, start the accepted deterministic backend from
+`services/resilience-agent`:
 
 ```powershell
-$env:ELECTRON_RUN_AS_NODE = "1"
-& "D:\VScode\Microsoft VS Code\Code.exe" "coldwave-demo-v2\tests\run_assistant_actions_live_qa.js"
-Remove-Item Env:ELECTRON_RUN_AS_NODE
+$env:RESILIENCE_CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
+.\.venv\Scripts\uvicorn.exe resilience_agent.api:app --host 127.0.0.1 --port 8080
 ```
 
-Expected success is:
+Serve the actual frontend from the nested frontend repository root:
+
+```powershell
+D:\programming\Minicoda\python.exe -m http.server 8001 --bind 127.0.0.1
+```
+
+Then run:
+
+```powershell
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py --live
+```
+
+This passed five summaries, two metric definitions, two review notes, and the production controller
+probe with zero automatic requests and exactly one section, metric, and review action request.
+
+## Phase 2A4 Isolated Browser Acceptance
+
+The real production page was exercised in Google Chrome `150.0.7871.181` through CDP protocol 1.3.
+The run used a GUID-named directory directly under the OS temporary directory, a new hidden
+headless process, and `--user-data-dir` pointing only to that directory. No personal browser process
+or profile was reused. On this Codex Windows job host, an outer PowerShell `Start-Process` was needed
+to keep the GUI process alive; `run_phase2a4_browser_qa.py --isolated-profile <path>` then attached
+only through that profile's `DevToolsActivePort`. `Browser.close` ended Chrome, and every run verified
+zero Chrome processes and removed the exact temporary profile. Internal screenshots were captured
+for geometry checks and were not retained.
+
+After the outer process created `$profile`, the exact harness commands were:
+
+```powershell
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario full --isolated-profile $profile
+# Stop the backend, launch a fresh isolated profile, then run:
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario unavailable --isolated-profile $profile
+```
+
+In a normal PowerShell session that is not constrained by the Codex Windows job, omit
+`--isolated-profile`; the harness creates, owns, closes, and removes its own temporary profile.
+
+The full scenario passed **128 checks**; a separate run with the backend genuinely stopped passed
+**11 checks**.
+
+| Area | Accepted result |
+| --- | --- |
+| local-template | Correct mode label, zero Assistant API calls, deterministic section/metric content, no fabricated review draft, map selection, and local curve loading. |
+| backend-tools | Zero calls on load/selection; one `GET /api/v1/sections/1081`, one `GET /api/v1/metrics/q_min`, and one `POST /api/v1/reports/review-note` with `{"scope":"section","section_ids":["1081"]}` after explicit actions. |
+| review note | Initially collapsed; six accepted sections, warnings, limitations, and checklist visible after expansion; Markdown remained text and was not rendered as HTML. |
+| representative sections | `CS_1081`, `CS_257`, `CS_3597`, `CS_1`, and `CS_583693` rendered their reviewed statuses without causal, predictive, investment, high/low, confirmed-recovery, no-impact, or no-disruption claims. |
+| failure handling | Browser-blocked response, genuine eight-second timeout, and genuinely stopped backend all produced reviewed local fallback; review failure stated that no draft was generated. |
+| cancellation/staleness | Delayed CDP-intercepted requests confirmed action replacement, section change, and metric change suppress stale/cancelled results and duplicate current responses. |
+| unsupported metrics | Detection-status and supplemental-delay layers kept metric explanation disabled and emitted no metric request. |
+| keyboard/structure | All three action buttons, native details/summary, and Copy Markdown were keyboard reachable/activatable as applicable; disabled state, visible focus, ARIA live structure, and hidden disabled composer were inspected. No screen-reader announcement behavior is claimed. |
+| responsive/map | `1440x900`, `1024x768`, `768x900`, and `390x844` passed column, overlap, scroll, overflow, map-size/invalidation, selection, and curve-canvas checks; no permanent third column appeared. |
+| console/network | No uncaught application exception or console error; accepted Assistant endpoints only; no `/health`, Authorization, Cookie, credential, arbitrary backend URL, internal path, or traceback; requesting-origin CORS header matched `http://127.0.0.1:8001`. |
+| Clipboard | Safe DOM, exact validated Markdown contract, keyboard access, and concise unavailable/failure handling passed. Headless Chrome did not complete the native OS clipboard write, so successful OS clipboard copying is not claimed. |
+
+The normal reviewer URLs were:
 
 ```text
-Live production-controller QA passed: zero automatic requests; section, metric, and review actions each issued one validated request.
+http://127.0.0.1:8001/coldwave-demo-v2/
+http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 ```
 
-With the backend stopped, append `--expect-unavailable`; expected success is:
+### Manual Checks Still Outstanding
 
-```text
-Live production-controller unavailable-backend QA passed: zero automatic requests and one explicit local fallback.
-```
-
-The JavaScript suite executes the production configuration and client code with mocked fetch. It
-covers:
-
-- exact local/remote/file/HTTPS mode resolution and immutable fixed configuration;
-- the exact three-method client surface and ten active-layer mappings;
-- normalized IDs, rejected identifiers, and the reviewed metric allowlist;
-- exact paths, methods, headers, POST body, no retry, and no page-evaluation request;
-- timeout, pre-aborted and active caller cancellation, and cleanup on success/failure;
-- sanitized 404/422/503/network/JSON/contract/unexpected-status errors;
-- all four detection-status warning sequences and support/null consistency;
-- finite numbers, relative-loss unit consistency, real calendar timestamps, and bounded text;
-- exact six-section review-note structure, 1-64 evidence records, unique IDs, resolved references,
-  critical identity/status/release agreement, and metric provenance;
-- removal of unknown backend fields and deep-freezing of returned copies.
-
-The Phase 2A2 client-contract suite can also be viewed from a browser at:
-
-```text
-http://127.0.0.1:8001/coldwave-demo-v2/tests/assistant-client-tests.html?assistantMode=backend-tools
-```
-
-It should report `25 Phase 2A2 JavaScript contract tests passed.` No live backend is needed because
-the suite supplies reviewed mock responses. The Phase 2A3 action tests use a deterministic fake DOM
-under the existing JavaScript runtime so request sequencing, accessibility state, safe rendering,
-details, and clipboard outcomes do not depend on a personal browser profile.
-
-## Manual Browser and CORS Checks
-
-Chrome and Edge on the audited workstation delegate command-line launches to an already running
-personal browser session, so an isolated automated visual/browser-CORS run has not been reliable.
-The Electron Node fake-DOM/live-controller probes do not enforce browser CORS, native Clipboard
-permission, focus/details keyboard behavior, responsive/map layout, or browser console cleanliness.
-Do not treat mocked/runtime QA as completed visual validation. Use these exact manual steps:
-
-1. From the nested frontend repository root, run `python -m http.server 8001 --bind 127.0.0.1`, open
-   `http://127.0.0.1:8001/coldwave-demo-v2/`, and open DevTools Console and Network. Filter Network
-   for `127.0.0.1:8080`.
-2. With the backend stopped, reload the local-template page. Confirm the visible `Local template`
-   mode label, hidden/disabled composer, three fixed actions, no Assistant API or `/health` request,
-   no console error, and unchanged two-column map width.
-3. Select `CS_1081`. Confirm the section and review-note actions enable; click all three actions and
-   confirm each returns local deterministic content without a backend request. Generate review note
-   must say the backend is required, must retain the concise section preview, and must not show a
-   draft, full-note details, or Copy Markdown.
-4. Start the accepted backend from `services/resilience-agent` with:
-
-   ```powershell
-   $env:RESILIENCE_CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
-   .\.venv\Scripts\uvicorn.exe resilience_agent.api:app --host 127.0.0.1 --port 8080
-   ```
-
-5. Open `http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools`. Before selecting or
-   clicking anything, confirm the visible `Backend tools` label and zero Assistant API requests.
-   Select `CS_1081`; confirm selection itself still makes no Assistant API request.
-6. Click **Explain this section** once. Confirm one reviewed section request, the loading label, then
-   `Backend result`. Verify identity, support/detection status, no more than three observed metrics,
-   no more than three planning metrics, warnings, and the planning/observed distinction.
-7. Choose the `Q_min` map layer and click **Explain the current metric**. Confirm one metric request
-   and a result containing display name, definition, unit, applicability, null meaning where
-   relevant, no more than three limitations, and no selected-section ranking or preferred direction.
-8. Select `Detection Status / Warning`, then `Supplemental Delay Burden`. For each, confirm the metric
-   action is disabled with a visible explanation while section and review-note actions remain
-   enabled. Confirm no request can be issued from the disabled control.
-9. Return to a supported layer and click **Generate review note**. Confirm one POST request, a compact
-   `Draft for human review` result, and a closed **Open full review note** control. Confirm the compact
-   area does not contain all report bodies. Expand it and verify six report sections in accepted
-   order, followed by separate warnings, limitations, and human-review checklist blocks.
-10. Click **Copy Markdown**. Where Clipboard API permission is available, confirm the status says
-    `Copied Markdown.` and the clipboard contains the returned Markdown. If the API is unavailable or
-    permission is rejected, confirm only `Clipboard unavailable.` or `Copy failed.` is shown and no
-    raw exception appears.
-11. In DevTools Network, enable throttling. Start an action, immediately select another section or
-    change the map layer, and confirm the pending request is cancelled/invalidated. No stale result,
-    backend-unavailable warning, or old review/copy control may appear for the new context. Repeat by
-    rapidly clicking two different actions and by clicking the same action twice.
-12. Stop the backend and invoke each action on the backend-tools page. Confirm a visible, specific
-    local-fallback label and local content. Review-note failure must say no draft was generated and
-    must not expose full-note or copy controls.
-13. Repeat presentation checks for `CS_1081` (detected), `CS_257` (no sustained drop), `CS_3597`
-    (censored recovery), `CS_1` (no observed support), and `CS_583693` (high-score detected example).
-    Confirm no-observed-support text does not claim that no disruption occurred.
-14. Serve the frontend on port 8002 without adding that origin to the CORS allowlist. Open
-    `http://127.0.0.1:8002/coldwave-demo-v2/?assistantMode=backend-tools`, select a section, and click
-    a fixed action. Confirm browser CORS blocks the response and the UI shows only the sanitized
-    backend-unavailable/local-fallback result.
-15. Repeat search, map hover/click selection, layer/legend changes, lazy local Q(t) loading, native
-    details/summary keyboard activation, action-button keyboard focus/activation, and small-screen
-    checks. Confirm the current curve remains local, the map remains usable, and the Console has no
-    new errors.
+- Confirm successful **Copy Markdown** behavior in a visible browser session where the reviewer
+  grants native Clipboard permission.
+- Perform a human visible-window design review if subjective visual polish is required. The
+  headless run inspected actual DOM geometry and screenshots, but is not a substitute for human
+  visual judgment or assistive-technology testing.
 
 ## Known Limitations
 
@@ -262,6 +232,6 @@ Do not treat mocked/runtime QA as completed visual validation. Use these exact m
 - The shaded chart area is an approximate visual representation of detected curve loss, not a recalculation of the metric.
 - Recovery metrics are lower-confidence when `recovery_endpoint_censored` is flagged.
 - Delay burden is a proxy based on profile demand weighting, not observed event-day vehicle volume.
-- Browser-enforced CORS, Clipboard API permission, and visible dashboard interaction remain manual
-  QA on the audited workstation; the automated Phase 2A3 suite uses mocked clients and a fake DOM.
+- Phase 2A4 acceptance is local/reviewer-only. It adds no LLM, free-form request, credential, or API key.
+- Public hosting, licensing, authentication, canonical timezone, and backend-hosting decisions remain unresolved; this is not deployment readiness.
 - This v2 is not deployed and should not replace the stable `coldwave-demo`.
