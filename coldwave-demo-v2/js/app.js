@@ -929,7 +929,7 @@ async function renderCurve(props) {
       labels,
       datasets: [
         {
-          label: "Raw hourly Q(t)",
+          label: "Raw Q(t) observations",
           data: q,
           borderColor: "rgba(100, 116, 139, 0.48)",
           backgroundColor: "rgba(100, 116, 139, 0.12)",
@@ -938,7 +938,7 @@ async function renderCurve(props) {
           tension: 0
         },
         {
-          label: "6-hour rolling median",
+          label: "Centered six-observation rolling median",
           data: qSmooth,
           borderColor: "#0f766e",
           borderWidth: 2,

@@ -166,7 +166,7 @@
           <ul>
             <li>Q(t) = speed / baseline speed profile; Q = 1 means baseline-level speed performance.</li>
             <li>Candidate B uses the dominant sustained performance drop.</li>
-            <li>Detection uses a 6-hour centered rolling median, 0.90 x Q0 threshold, and k = 3 consecutive observations.</li>
+            <li>Detection uses a centered six-observation rolling median (observations, not elapsed hours; no missing-hour interpolation), a 0.90 x Q0 threshold, and k = 3 consecutive observations.</li>
             <li>Tier 3 metrics are observed operational labels; Tier 1/2 variables are predictor/context layers.</li>
             <li>Score classes are experimental v0 quantile classes.</li>
           </ul>
