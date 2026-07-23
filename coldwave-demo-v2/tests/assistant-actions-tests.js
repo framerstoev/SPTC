@@ -463,8 +463,8 @@ module.exports = async function runAssistantActionsTests() {
     includes(elements.assistantActionAvailability.textContent, "Select a control section");
   });
 
-  test("local-template, invalid, and backend-agent modes issue zero client calls", async () => {
-    for (const mode of ["local-template", "invalid", "backend-agent"]) {
+  test("local-template and invalid modes issue zero client calls", async () => {
+    for (const mode of ["local-template", "invalid"]) {
       let callCount = 0;
       const client = {
         getSectionSummary() { callCount += 1; },
@@ -481,6 +481,24 @@ module.exports = async function runAssistantActionsTests() {
       equal(elements.assistantModeLabel.textContent, "Local template", mode);
       excludes(elements.assistantMessages.textContent, "Section\n", mode);
     }
+  });
+
+  test("backend-agent keeps deterministic fixed actions enabled", async () => {
+    let callCount = 0;
+    const client = {
+      async getSectionSummary() {
+        callCount += 1;
+        return summaryFixture();
+      }
+    };
+    const { controller, elements } = createHarness({ mode: "backend-agent", client });
+    controller.setContext(selectedContext());
+    await elements.assistantExplainSection.click();
+    equal(callCount, 1);
+    equal(controller.getState().mode, "backend-agent");
+    equal(elements.assistantModeLabel.textContent, "Local Qwen + backend tools");
+    equal(elements.assistantStatus.textContent, "Deterministic backend result");
+    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
   });
 
   test("backend-tools remains dormant until an enabled action is activated", async () => {
@@ -552,7 +570,7 @@ module.exports = async function runAssistantActionsTests() {
     pending.resolve(summaryFixture());
     await actionPromise;
     equal(controller.getState().requestState, "backend_success");
-    equal(elements.assistantStatus.textContent, "Backend result");
+    equal(elements.assistantStatus.textContent, "Deterministic backend result");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "false");
     includes(elements.assistantMessages.textContent, "CS_29");
     includes(elements.assistantMessages.textContent, "US_90_");
@@ -858,7 +876,7 @@ module.exports = async function runAssistantActionsTests() {
     await actionPromise;
     equal(controller.getState().requestState, "backend_success");
     equal(controller.getState().currentAction, "review");
-    equal(elements.assistantStatus.textContent, "Draft for human review");
+    equal(elements.assistantStatus.textContent, "Deterministic draft for human review");
     includes(elements.assistantMessages.textContent, "Control Section CS_29 Review Note");
     includes(elements.assistantMessages.textContent, "Draft for human review");
   });

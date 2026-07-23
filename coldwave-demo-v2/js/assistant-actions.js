@@ -39,7 +39,8 @@
     };
     const modes = assistantNamespace.modes || {
       localTemplate: "local-template",
-      backendTools: "backend-tools"
+      backendTools: "backend-tools",
+      backendAgent: "backend-agent"
     };
     const activeLayerMetrics = options.activeLayerMetrics
       || assistantNamespace.activeLayerMetrics
@@ -51,7 +52,10 @@
       : global.navigator?.clipboard || null;
     const mode = runtime.effective_mode === modes.backendTools
       ? modes.backendTools
-      : modes.localTemplate;
+      : runtime.effective_mode === modes.backendAgent
+        ? modes.backendAgent
+        : modes.localTemplate;
+    const backendActionsEnabled = mode === modes.backendTools || mode === modes.backendAgent;
     const elements = {
       modeLabel: documentRef.getElementById("assistantModeLabel"),
       status: documentRef.getElementById("assistantStatus"),
@@ -154,7 +158,7 @@
 
     function baseStatusText() {
       if (!context.sectionId) return "No section selected";
-      return "Local template preview";
+      return backendActionsEnabled ? "Deterministic fixed actions ready" : "Local template preview";
     }
 
     function renderPreview() {
@@ -286,6 +290,7 @@
     function renderSectionResult(response) {
       const result = documentRef.createElement("div");
       result.className = "assistant-message assistant assistant-result";
+      result.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
       result.appendChild(textElement("h3", null, response.identity.display_cs_id));
       appendDefinition(
         result,
@@ -375,6 +380,7 @@
     function renderMetricResult(response) {
       const result = documentRef.createElement("div");
       result.className = "assistant-message assistant assistant-result";
+      result.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
       result.appendChild(textElement("h3", null, response.metric.display_name));
       result.appendChild(textElement(
         "p",
@@ -433,6 +439,7 @@
       const compact = documentRef.createElement("div");
       compact.className = "assistant-message assistant assistant-result";
       compact.setAttribute("data-review-compact", "true");
+      compact.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
       compact.appendChild(textElement("h3", null, response.title));
       compact.appendChild(textElement(
         "p",
@@ -564,7 +571,9 @@
       }
       updateState(
         requestStates.backendSuccess,
-        action === actions.review ? "Draft for human review" : "Backend result",
+        action === actions.review
+          ? "Deterministic draft for human review"
+          : "Deterministic backend result",
         action
       );
     }
@@ -576,7 +585,7 @@
       abortPending();
       generation += 1;
       clearReview();
-      if (mode !== modes.backendTools) {
+      if (!backendActionsEnabled) {
         renderLocalAction(action);
         return;
       }
@@ -626,7 +635,9 @@
 
     elements.modeLabel.textContent = mode === modes.backendTools
       ? "Backend tools"
-      : "Local template";
+      : mode === modes.backendAgent
+        ? "Local Qwen + backend tools"
+        : "Local template";
     bindAction(elements.sectionButton, actions.section);
     bindAction(elements.metricButton, actions.metric);
     bindAction(elements.reviewButton, actions.review);

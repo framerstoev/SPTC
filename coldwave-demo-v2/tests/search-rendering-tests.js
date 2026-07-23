@@ -3,7 +3,6 @@
 module.exports = async function runSearchRenderingTests({
   appSource,
   assistantActionsSource,
-  assistantActionsSha256,
   vm
 }) {
   const tests = [];
@@ -322,12 +321,7 @@ module.exports = async function runSearchRenderingTests({
     };
   }
 
-  test("production search uses safe DOM construction and leaves the Assistant renderer unchanged", () => {
-    equal(
-      assistantActionsSha256,
-      "e5684da9261b955374588c5f3a515b84a45b2f89b843ae9bbbbe1237f51cda4f",
-      "assistant-actions.js differs from the accepted Phase 2A3 renderer"
-    );
+  test("production search and deterministic Assistant rendering use safe DOM construction", () => {
     excludes(renderSource, "innerHTML");
     excludes(renderSource, "outerHTML");
     excludes(renderSource, "insertAdjacentHTML");

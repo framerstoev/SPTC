@@ -1,6 +1,5 @@
 const MAP_URL = "./data/data_driven_resilience_map_v0.geojson";
 const SUMMARY_URL = "./data/summary.json";
-const ASSISTANT_API_URL = null;
 
 const controlRenderer = L.canvas({
   padding: 0.5,
@@ -129,6 +128,7 @@ let activeLayer = "observed_curve_resilience_score_v0";
 let selectedLeafletLayer = null;
 let selectedProps = null;
 let assistantActionController = null;
+let assistantChatController = null;
 let ranges = {};
 let scoreClassBreaks = [];
 let searchIndex = [];
@@ -745,15 +745,6 @@ function generatePrototypeAssistantResponse(question, props) {
   return buildInitialAssistantInterpretation(context);
 }
 
-function renderAssistantMessage(role, text) {
-  const messages = document.getElementById("assistantMessages");
-  const message = document.createElement("div");
-  message.className = `assistant-message ${role === "user" ? "user" : "assistant"}`;
-  message.textContent = text;
-  messages.appendChild(message);
-  messages.scrollTop = messages.scrollHeight;
-}
-
 function normalizedAssistantSectionId(props) {
   if (!props) return null;
   const value = String(
@@ -783,51 +774,17 @@ function buildAssistantActionSnapshot(props) {
 }
 
 function resetAssistantForSelection(props) {
-  document.getElementById("assistantInput").value = "";
-  assistantActionController?.setContext(buildAssistantActionSnapshot(props));
-}
-
-async function submitAssistantQuestion(question) {
-  const cleanQuestion = String(question || "").trim();
-  if (!cleanQuestion) return;
-  renderAssistantMessage("user", cleanQuestion);
-
-  if (!selectedProps) {
-    renderAssistantMessage("assistant", generatePrototypeAssistantResponse(cleanQuestion, null));
-    return;
-  }
-
-  if (ASSISTANT_API_URL === null) {
-    renderAssistantMessage("assistant", generatePrototypeAssistantResponse(cleanQuestion, selectedProps));
-    return;
-  }
-
-  const status = document.getElementById("assistantStatus");
-  status.textContent = "Backend request pending";
-  try {
-    const response = await fetch(ASSISTANT_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: cleanQuestion, context: buildAssistantContext(selectedProps) })
-    });
-    if (!response.ok) throw new Error(`Assistant backend returned ${response.status}`);
-    const payload = await response.json();
-    renderAssistantMessage("assistant", String(payload.response || payload.answer || "No response returned."));
-    status.textContent = "Backend connected";
-  } catch (error) {
-    console.error(error);
-    renderAssistantMessage("assistant", `Backend unavailable. ${generatePrototypeAssistantResponse(cleanQuestion, selectedProps)}`);
-    status.textContent = "Local fallback";
-  }
+  const snapshot = buildAssistantActionSnapshot(props);
+  assistantActionController?.setContext(snapshot);
+  assistantChatController?.setContext(snapshot);
 }
 
 function setupAssistant() {
-  const input = document.getElementById("assistantInput");
-  const send = document.getElementById("assistantSend");
-  input.disabled = true;
-  send.disabled = true;
   if (window.SPTCAssistantActions?.createController) {
     assistantActionController = window.SPTCAssistantActions.createController({ document });
+  }
+  if (window.SPTCAssistantChat?.createController) {
+    assistantChatController = window.SPTCAssistantChat.createController({ document });
   }
   resetAssistantForSelection(null);
 }

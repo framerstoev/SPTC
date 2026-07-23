@@ -1,6 +1,5 @@
 "use strict";
 
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -15,10 +14,6 @@ const runSearchRenderingTests = require("./search-rendering-tests.js");
 runSearchRenderingTests({
   appSource: appBytes.toString("utf8"),
   assistantActionsSource: assistantActionsBytes.toString("utf8"),
-  assistantActionsSha256: crypto
-    .createHash("sha256")
-    .update(assistantActionsBytes)
-    .digest("hex"),
   vm
 })
   .then(result => {

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import hashlib
 import http.server
 import json
 import os
@@ -22,10 +21,6 @@ CHROME_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
 )
-EXPECTED_APP_SHA256 = "788bb077971179b026a51801010116baa619b3e709ee5d672e941da57cd624a8"
-EXPECTED_STYLE_SHA256 = (
-    "ece2ddddc950e211254f19b164dff813b59459d08513c799a16d8742a2f4aa3a"
-)
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -33,23 +28,17 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         del format, args
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def static_checks() -> None:
     index = (V2_ROOT / "index.html").read_text(encoding="utf-8")
     config = (V2_ROOT / "js" / "assistant-config.js").read_text(encoding="utf-8")
     api = (V2_ROOT / "js" / "assistant-api.js").read_text(encoding="utf-8")
     actions = (V2_ROOT / "js" / "assistant-actions.js").read_text(encoding="utf-8")
+    chat = (V2_ROOT / "js" / "assistant-chat.js").read_text(encoding="utf-8")
     script_order = (
         "./js/assistant-config.js",
         "./js/assistant-api.js",
         "./js/assistant-actions.js",
+        "./js/assistant-chat.js",
         "./js/app.js",
     )
     positions = [index.index(script) for script in script_order]
@@ -61,6 +50,7 @@ def static_checks() -> None:
         "js/assistant-config.js",
         "js/assistant-api.js",
         "js/assistant-actions.js",
+        "js/assistant-chat.js",
         "js/app.js",
         "data/summary.json",
         "tests/run_assistant_client_qa.js",
@@ -115,7 +105,21 @@ def static_checks() -> None:
         )
     )
     assert all(
-        token not in index + config + api
+        token not in chat
+        for token in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "DOMParser",
+            "fetch(",
+            "/api/v1/",
+            "localStorage",
+            "sessionStorage",
+            "Authorization",
+        )
+    )
+    assert all(
+        token not in index + config + api + chat
         for token in (
             r"E:\\Projects",
             r"C:\\Users",
@@ -128,6 +132,8 @@ def static_checks() -> None:
     app = (V2_ROOT / "js" / "app.js").read_text(encoding="utf-8")
     assert "SPTCAssistant.client" not in app
     assert "/api/v1/" not in app
+    assert "ASSISTANT_API_URL" not in app
+    assert "11434" not in index + config + api + actions + chat + app
     setup_start = app.index("function setupAssistant()")
     setup_end = app.index("\nfunction ", setup_start + 1)
     setup_assistant = app[setup_start:setup_end]
@@ -143,13 +149,16 @@ def static_checks() -> None:
     layer_start = app.index('document.getElementById("layerSelect").addEventListener')
     layer_end = app.index("\n});", layer_start) + 4
     assert "resetAssistantForSelection(selectedProps)" in app[layer_start:layer_end]
-    assert sha256(V2_ROOT / "js" / "app.js") == EXPECTED_APP_SHA256
-    assert sha256(V2_ROOT / "css" / "style.css") == EXPECTED_STYLE_SHA256
     assert index.count("data-assistant-action=") == 3
     assert "data-question=" not in index
+    assert index.count("data-assistant-question=") == 8
+    assert 'id="assistantAgent" hidden aria-hidden="true" aria-busy="false"' in index
     assert 'id="assistantComposer" hidden aria-hidden="true"' in index
-    assert 'id="assistantInput"' in index and "disabled />" in index
+    assert 'id="assistantInput"' in index and 'maxlength="1000"' in index
     assert 'id="assistantSend" type="button" disabled' in index
+    assert 'id="assistantCancel" type="button" hidden disabled' in index
+    assert 'id="assistantCharacterCount" aria-live="polite"' in index
+    assert "Press Enter to send. Press Shift+Enter for a new line." in index
     assert (
         'id="assistantActionAvailability" aria-live="polite" aria-atomic="true"'
     ) in index
@@ -324,6 +333,7 @@ def main() -> None:
             "/js/assistant-config.js",
             "/js/assistant-api.js",
             "/js/assistant-actions.js",
+            "/js/assistant-chat.js",
             "/js/app.js",
             "/tests/assistant-actions-tests.js",
             "/tests/run_assistant_actions_qa.js",

@@ -76,8 +76,8 @@
             <span class="assistant-status" id="assistantStatus" role="status" aria-live="polite" aria-atomic="true">No section selected</span>
           </div>
         </div>
-        <p class="assistant-disclaimer">Deterministic local templates and reviewed read-only backend tools only. No LLM is connected.</p>
-        <div class="assistant-messages" id="assistantMessages" aria-live="polite" aria-busy="false"></div>
+        <p class="assistant-disclaimer" id="assistantDisclaimer">Deterministic local templates and reviewed read-only backend tools only. No language model is connected in this mode.</p>
+        <div class="assistant-messages" id="assistantMessages" aria-label="Deterministic fixed-action result" aria-live="polite" aria-busy="false"></div>
         <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Fixed reviewed Assistant actions" aria-describedby="assistantActionAvailability">
           <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
           <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain the current metric</button>
@@ -86,9 +86,32 @@
         <p class="assistant-action-availability" id="assistantActionAvailability" aria-live="polite" aria-atomic="true">Select a control section to enable the fixed actions.</p>
         <div class="assistant-review-container" id="assistantReviewContainer"></div>
         <p class="assistant-fixed-note" id="assistantInteractionNote">Fixed reviewed actions only; free-form input is not available in this mode.</p>
-        <div class="assistant-input-row" id="assistantComposer" hidden aria-hidden="true">
-          <input id="assistantInput" type="text" autocomplete="off" placeholder="Free-form input is disabled" disabled />
-          <button id="assistantSend" type="button" disabled>Send</button>
+        <div class="assistant-agent" id="assistantAgent" hidden aria-hidden="true" aria-busy="false">
+          <div class="assistant-chat-status" id="assistantChatStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+          <div class="assistant-suggestion-grid" id="assistantSuggestedQuestions" role="group" aria-label="Suggested local Qwen questions">
+            <button type="button" data-assistant-question="What happened on the selected section?" data-requires-context="section">What happened on the selected section?</button>
+            <button type="button" data-assistant-question="Explain the current metric." data-requires-context="metric">Explain the current metric.</button>
+            <button type="button" data-assistant-question="Why is observed evidence unavailable here?" data-requires-context="section">Why is observed evidence unavailable here?</button>
+            <button type="button" data-assistant-question="What does the recovery-censored warning mean?" data-requires-context="section">What does the recovery-censored warning mean?</button>
+            <button type="button" data-assistant-question="Compare CS_1081 and CS_583693.">Compare CS_1081 and CS_583693.</button>
+            <button type="button" data-assistant-question="Generate a review note for this section." data-requires-context="section">Generate a review note for this section.</button>
+            <button type="button" data-assistant-question="What is the difference between planning context and observed evidence?">What is the difference between planning context and observed evidence?</button>
+            <button type="button" data-assistant-question="What kinds of questions are outside the scope of this assistant?">What kinds of questions are outside the scope of this assistant?</button>
+          </div>
+          <div class="assistant-chat-messages" id="assistantChatMessages" role="log" aria-label="Local Qwen conversation" aria-live="polite" aria-relevant="additions" aria-busy="false"></div>
+          <div class="assistant-composer" id="assistantComposer" hidden aria-hidden="true">
+            <label for="assistantInput">Ask the local Qwen assistant</label>
+            <textarea id="assistantInput" rows="3" maxlength="1000" autocomplete="off" aria-describedby="assistantComposerHint assistantCharacterCount" placeholder="Ask about reviewed sections, metrics, warnings, comparisons, or review notes." disabled></textarea>
+            <div class="assistant-composer-meta">
+              <span id="assistantComposerHint">Press Enter to send. Press Shift+Enter for a new line.</span>
+              <span id="assistantCharacterCount" aria-live="polite">0 / 1000</span>
+            </div>
+            <div class="assistant-composer-actions">
+              <button id="assistantSend" type="button" disabled>Send</button>
+              <button id="assistantCancel" type="button" hidden disabled>Cancel</button>
+            </div>
+          </div>
+          <p class="assistant-cold-start-note">First response may take longer if the local model was not pre-warmed.</p>
         </div>
       </section>
 
@@ -168,6 +191,7 @@
   <script src="./js/assistant-config.js"></script>
   <script src="./js/assistant-api.js"></script>
   <script src="./js/assistant-actions.js"></script>
+  <script src="./js/assistant-chat.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>
