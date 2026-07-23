@@ -110,6 +110,128 @@
       return "Local assistant status";
     }
 
+    function readableIdentifier(value) {
+      return String(value || "").replaceAll("_", " ");
+    }
+
+    function appendDefinition(parent, label, value) {
+      const row = documentRef.createElement("p");
+      row.className = "assistant-chat-definition";
+      row.appendChild(textElement("strong", null, `${label}: `));
+      row.appendChild(textElement("span", null, value));
+      parent.appendChild(row);
+    }
+
+    function expandableBlock(summaryText, className) {
+      const details = documentRef.createElement("details");
+      details.className = className;
+      details.open = false;
+      details.appendChild(textElement("summary", null, summaryText));
+      return details;
+    }
+
+    function appendTools(message, toolsUsed) {
+      if (toolsUsed.length === 0) return;
+      const details = expandableBlock(
+        `Tools used (${toolsUsed.length})`,
+        "assistant-chat-details assistant-chat-tools"
+      );
+      const list = documentRef.createElement("ul");
+      toolsUsed.forEach(tool => {
+        list.appendChild(textElement("li", null, readableIdentifier(tool.tool_name)));
+      });
+      details.appendChild(list);
+      message.appendChild(details);
+    }
+
+    function appendEvidence(message, evidence) {
+      if (evidence.length === 0) return;
+      const details = expandableBlock(
+        `Structured deterministic evidence (${evidence.length})`,
+        "assistant-chat-details assistant-chat-evidence"
+      );
+      const list = documentRef.createElement("ul");
+      evidence.forEach(record => {
+        const item = documentRef.createElement("li");
+        item.className = "assistant-chat-evidence-item";
+        const displayValue = record.unit
+          ? `${record.display_value} (${record.unit})`
+          : record.display_value;
+        appendDefinition(item, record.label, displayValue);
+        if (record.section_id) appendDefinition(item, "Section", record.section_id);
+        if (record.metric_name) {
+          appendDefinition(item, "Metric", record.metric_name);
+        }
+        if (record.definition) {
+          item.appendChild(textElement(
+            "p",
+            "assistant-chat-evidence-definition",
+            record.definition
+          ));
+        }
+        list.appendChild(item);
+      });
+      details.appendChild(list);
+      message.appendChild(details);
+    }
+
+    function appendWarnings(message, warnings) {
+      if (warnings.length === 0) return;
+      const section = documentRef.createElement("section");
+      section.className = "assistant-chat-warnings";
+      section.setAttribute("aria-label", "Assistant warnings");
+      section.appendChild(textElement("h4", null, "Warnings"));
+      const list = documentRef.createElement("ul");
+      warnings.forEach(warning => {
+        const item = documentRef.createElement("li");
+        item.className = `severity-${warning.severity}`;
+        const scope = warning.section_id ? ` for ${warning.section_id}` : "";
+        item.appendChild(textElement(
+          "strong",
+          null,
+          `${warning.code} (${warning.severity})${scope}: `
+        ));
+        item.appendChild(textElement("span", null, warning.message));
+        list.appendChild(item);
+      });
+      section.appendChild(list);
+      message.appendChild(section);
+    }
+
+    function appendLimitations(message, limitations) {
+      if (limitations.length === 0) return;
+      const details = expandableBlock(
+        `Limitations (${limitations.length})`,
+        "assistant-chat-details assistant-chat-limitations"
+      );
+      const list = documentRef.createElement("ul");
+      limitations.forEach(limitation => {
+        list.appendChild(textElement("li", null, limitation));
+      });
+      details.appendChild(list);
+      message.appendChild(details);
+    }
+
+    function appendReleaseMetadata(message, response) {
+      const details = expandableBlock(
+        "Release and method",
+        "assistant-chat-details assistant-chat-metadata"
+      );
+      appendDefinition(details, "Data release", response.data_release);
+      appendDefinition(details, "Method version", response.method_version);
+      message.appendChild(details);
+    }
+
+    function displayedAnswer(response) {
+      const reviewedStatusText = {
+        assistant_disabled: "The local chatbot is not enabled. The deterministic fixed actions remain available.",
+        model_unavailable: "The local Qwen model is unavailable. The deterministic fixed actions remain available.",
+        tool_error: "The deterministic tool could not complete the request. No raw error was displayed.",
+        invalid_model_response: "The local model response could not be safely accepted. Rejected model text was not displayed."
+      };
+      return reviewedStatusText[response.status] || response.answer;
+    }
+
     function renderAssistantResponse(response) {
       const message = documentRef.createElement("article");
       message.className = `assistant-chat-message assistant status-${response.status}`;
@@ -125,6 +247,9 @@
         "assistant-chat-response-status",
         `Status: ${responseStatusLabels[response.status] || "Unavailable"}`
       ));
+      if (response.intent) {
+        appendDefinition(message, "Intent", readableIdentifier(response.intent));
+      }
       if (response.status === "clarification_required" && response.clarification) {
         message.appendChild(textElement(
           "p",
@@ -132,8 +257,17 @@
           response.clarification.question
         ));
       } else {
-        message.appendChild(textElement("p", "assistant-chat-answer", response.answer));
+        message.appendChild(textElement(
+          "p",
+          "assistant-chat-answer",
+          displayedAnswer(response)
+        ));
       }
+      appendWarnings(message, response.warnings);
+      appendTools(message, response.tools_used);
+      appendEvidence(message, response.evidence);
+      appendLimitations(message, response.limitations);
+      appendReleaseMetadata(message, response);
       appendChatNode(message);
     }
 
