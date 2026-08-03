@@ -715,7 +715,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
                 "code": "Enter",
                 "windowsVirtualKeyCode": 13,
                 "modifiers": 8,
-                "text": "\n",
+                "text": "\r",
             },
         )
         self.page.command(
