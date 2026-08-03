@@ -261,6 +261,26 @@ def expected_evidence_text(record: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def null_evidence_values_displayed_as_unavailable(
+    evidence: list[dict[str, Any]],
+) -> bool:
+    """Reject null evidence rendered as anything except unavailable.
+
+    Metric-definition evidence deliberately has no observed value and uses its
+    display label for the definition row, so only that evidence kind is exempt.
+    """
+
+    return all(
+        isinstance(record, dict)
+        and (
+            record.get("kind") == "metric_definition"
+            or record.get("value") is not None
+            or record.get("display_value") == "Unavailable"
+        )
+        for record in evidence
+    )
+
+
 def expected_warning_text(record: dict[str, Any]) -> str:
     """Reconstruct one warning row exactly as assistant-chat.js renders it."""
 
@@ -764,10 +784,8 @@ class Phase3GProductionPageQA(ProductionPageQA):
             for record in evidence
             if isinstance(record, dict) and record.get("metric_name")
         }
-        null_values_displayed_as_unavailable = all(
-            record.get("value") is not None
-            or record.get("display_value") == "Unavailable"
-            for record in evidence
+        null_values_displayed_as_unavailable = (
+            null_evidence_values_displayed_as_unavailable(evidence)
         )
         evidence_checks_passed = null_values_displayed_as_unavailable and (
             bool(evidence)
