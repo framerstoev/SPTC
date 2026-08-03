@@ -36,7 +36,7 @@ The left-panel search uses the map GeoJSON properties only. It supports partial 
 - route keys, such as `FM_1541_`, `IH_35_`, or `US_287_`
 - county names
 
-Selecting a search result zooms to the control section, highlights it, updates the right panel, and lazy-loads the curve JSON only for that selected section.
+Selecting a search result zooms to the control section, highlights it, updates the selected-section panel, and lazy-loads the curve JSON only for that selected section.
 
 ### Safe Result Rendering
 
@@ -70,7 +70,7 @@ These are experimental v0 classes, not official resilience categories. The numer
 The prototype uses Candidate B from v0:
 
 - dominant sustained performance drop
-- 6-hour centered rolling median
+- centered six-observation rolling median (observations, not elapsed hours; no missing-hour interpolation)
 - threshold = 0.90 x Q0
 - k = 3 consecutive observations
 
@@ -78,10 +78,11 @@ Tier 3 curve metrics are observed operational performance labels. Tier 1/2 varia
 
 ## Q(t) Chart
 
-The right-panel chart shows the full Jan. 1-Feb. 3 Q(t) series for the selected control section:
+The expandable selected-section chart shows the full Jan. 1-Feb. 3 Q(t) series for the selected
+control section:
 
-- raw hourly Q(t)
-- 6-hour rolling median
+- raw Q(t) observations
+- centered six-observation rolling median
 - Q = 1.0, 0.9, and 0.8 reference lines
 - detected onset, minimum, and recovery endpoint markers when available
 - subtle loss-area shading for the detected phase
@@ -97,136 +98,172 @@ The v0 processing script currently sets `total_detected_phase_delay_proxy` equal
 - V0 disruption-delay field
 - Full-window delay proxy: N/A
 
-## Fixed Deterministic Assistant Actions
+## Local Assistant: Fixed Actions and Bounded Qwen Chat
 
-Phase 2A3 connects the reviewed runtime configuration and bounded client to exactly three visible,
-selected-section actions:
+Phase 3G adds an explicit local-review `backend-agent` mode to the existing Assistant. The
+committed default remains `local-template`; the new mode is not enabled on the deployed site and is
+not a deployment-readiness claim.
 
-- **Explain this section** uses the current deterministic local section preview in
-  `local-template` mode and the reviewed section-summary endpoint in `backend-tools` mode.
-- **Explain the current metric** is available only when the selected map layer has an accepted
-  metric mapping. It returns mapping-only local text in `local-template` mode and the reviewed
-  metric-registry explanation in `backend-tools` mode.
-- **Generate review note** requires the deterministic backend. A successful result shows a compact
-  summary, a visible **Draft for human review** label, and a collapsed full-note area. The local
-  template never fabricates the full draft.
+The reviewed modes are:
 
-The Assistant displays a persistent **Local template** or **Backend tools** mode label and textual
-loading, result, fallback, and draft states. The old free-form composer remains only as a dormant
-future hook: its container is hidden, its input and Send button are disabled, and no Enter, Send,
-or prose-to-backend path is bound. Compare, filter, rank, curve-API, map-action, and natural-language
-chat behavior are not available.
+| Mode | Activation | Behavior |
+| --- | --- | --- |
+| `local-template` | Default and fail-closed fallback | Deterministic local explanatory templates; no Assistant API request. |
+| `backend-tools` | Exact `assistantMode=backend-tools` on loopback HTTP | Three deterministic fixed actions call their accepted FastAPI endpoints. |
+| `backend-agent` | Exact `assistantMode=backend-agent` on loopback HTTP | Shows the bounded chat composer and keeps all three deterministic fixed actions available. |
 
-Phase 2A4 changed only legacy search-identity output safety and acceptance QA. It did not expand
-the three-action Assistant surface or change its safe DOM renderer.
+`backend-agent` activates only from plain HTTP on exactly `127.0.0.1` or `localhost`, with one
+exactly cased `assistantMode` parameter. HTTPS, `file://`, GitHub Pages, remote hosts, userinfo,
+malformed or differently cased values, duplicate mode parameters, and backend/model/provider/key/
+timeout override parameters resolve to `local-template`. There is no normal-UI mode selector.
 
-Neither mode makes an Assistant backend request on page load, mode resolution, section selection,
-or layer change. Only an explicit click on one of the three enabled actions can invoke a backend
-client method. Existing dashboard requests for static summary, GeoJSON, tiles, and selected local
-curve JSON remain separate from Assistant API traffic.
-
-The reviewed runtime modes are:
-
-- `local-template`: the default and fallback mode.
-- `backend-tools`: available only when the page is served over plain HTTP from exactly
-  `127.0.0.1` or `localhost` and the exact query parameter is
-  `assistantMode=backend-tools`.
-- `backend-agent`: reserved and disabled; requesting it resolves to `local-template`.
-
-Unknown, malformed, duplicated, or differently cased mode parameters resolve to
-`local-template`. HTTPS, `file://`, userinfo, remote hosts, fragments, browser storage, and query
-parameters such as `backendUrl`, `apiUrl`, `host`, or `port` cannot activate or redirect the
-client. Reviewed state is exposed as frozen data under `window.SPTCAssistant.runtime`.
-
-The backend destination and timeout are fixed in committed code:
-
-```text
-http://127.0.0.1:8080
-8000 milliseconds
-```
-
-Only three explicit methods are exposed under `window.SPTCAssistant.client`:
+The browser destination is fixed at `http://127.0.0.1:8080`. It never calls the Ollama service or
+port `11434`. The frozen client exposes exactly four methods:
 
 - `getSectionSummary(csId, options?)` -> `GET /api/v1/sections/{cs_id}`
 - `explainMetric(metricName, options?)` -> `GET /api/v1/metrics/{metric_name}`
 - `generateSectionReviewNote(csId, options?)` -> `POST /api/v1/reports/review-note`
+- `queryAssistant(request, options?)` -> `POST /api/v1/assistant/query`
 
-The client normalizes reviewed section identifiers, restricts metric explanations to current map
-metrics, constructs no arbitrary paths or bodies, omits credentials, and validates/copies only
-reviewed response fields. Review-note Markdown remains inert copy content and is never parsed or
-rendered as HTML.
+The three fixed actions are never routed through Qwen. They remain deterministic and usable in
+`backend-agent` mode when the model is disabled, unavailable, or rejected:
 
-The action controller keeps runtime mode separate from explicit request state. Starting a new action
-aborts the previous request and replaces its generation token. A section or map-layer change also
-aborts and invalidates any pending action. Late, cancelled, or stale results are ignored without an
-error or fallback warning. This protects the current selection from receiving a result requested for
-an earlier section or metric.
+- **Explain this section** uses the accepted section-summary endpoint.
+- **Explain the current metric** uses the accepted metric-registry endpoint only for a reviewed
+  current-layer mapping.
+- **Generate review note** uses the accepted review-note endpoint and retains the compact draft,
+  initially collapsed native details, and validated Markdown copy behavior.
 
-In `backend-tools` mode, reviewed network, timeout, not-found, validation, snapshot, JSON, response,
-and unexpected-status failures produce a visible backend/fallback label and the corresponding local
-template result. Review-note failure explicitly states that no draft was generated and does not show
-the full-note or copy controls. Cancellation and staleness remain silent.
+### Composer and context ownership
 
-Section-summary results are deliberately compact: identity, support/detection status, no more than
-three observed metrics, no more than three planning-context metrics, warnings, and the distinction
-between planning context and observed evidence. Metric results describe the metric definition,
-unit, applicability, null meaning, and no more than three limitations; they do not rank the selected
-section or add a preferred direction.
+Only `backend-agent` shows and enables the visible **Ask the local Qwen assistant** textarea. It
+accepts plain text only, rejects blank input, enforces 1,000 characters, displays a live character
+count, sends on Enter, preserves a newline on Shift+Enter, prevents duplicate submission, and shows
+an accessible Cancel button while loading. No upload, browser storage, telemetry, automatic retry,
+or automatic question is added. The normal UI does not expose the timeout; it may note that the
+first response can take longer when the local model was not pre-warmed.
 
-A successful review note keeps the normal response compact. Its native, initially collapsed
-**Open full review note** control contains the accepted six structured sections in order, followed
-by separate warnings, limitations, and human-review checklist blocks. **Copy Markdown** copies the
-client-validated `rendered_markdown` string exactly. Copy success, unavailable Clipboard API, and
-copy rejection are announced with concise accessible text; copied content is not stored or inserted
-as HTML.
+Every chat request sends the current frontend `selected_section_id` and reviewed `active_metric`
+when present. Current frontend state is authoritative: history cannot select a section or metric.
+The private history contains at most four records and only prior user text plus bounded assistant
+answer text. It excludes tools, evidence, warnings, DOM text, prompts, configuration, and hidden
+messages. A section or layer change cancels pending work, invalidates late responses, clears the
+history, shows a context-reset notice, and sends no replacement request.
 
-Sanitized client error codes are `invalid_request`, `backend_unavailable`, `request_timeout`,
-`request_cancelled`, `section_not_found`, `metric_not_found`, `backend_validation_error`,
-`snapshot_unavailable`, `invalid_json`, `invalid_response`, and `unexpected_status`. Raw fetch
-exceptions and backend error bodies are not exposed.
+The eight visible suggestion buttons submit ordinary text through the same validated client:
 
-### Local backend-tools startup
+- What happened on the selected section?
+- Explain the current metric.
+- Why is observed evidence unavailable here?
+- What does the recovery-censored warning mean?
+- Compare CS_1081 and CS_583693.
+- Generate a review note for this section.
+- What is the difference between planning context and observed evidence?
+- What kinds of questions are outside the scope of this assistant?
 
-From `services/resilience-agent`, configure only the reviewed frontend origins and start the
-accepted deterministic backend:
+Section- and metric-dependent suggestions are disabled when their required current context is
+missing. In particular, **Explain the current metric** is not offered for an unsupported layer; the
+frontend does not send an empty metric merely to exercise model clarification.
 
-```powershell
-$env:RESILIENCE_CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
-.\.venv\Scripts\uvicorn.exe resilience_agent.api:app --host 127.0.0.1 --port 8080
-```
+### Validated response presentation
 
-From the nested frontend repository root, start the static server:
+The client uses CORS with omitted credentials, rejected redirects, `no-store`, JSON request/accept
+headers, caller cancellation, and endpoint-specific internal timeouts: 8,000 ms for deterministic
+tools and 80,000 ms only for chat. Requests are not retried.
 
-```powershell
-python -m http.server 8001 --bind 127.0.0.1
-```
+Before rendering, the client reconstructs a frozen allowlisted copy containing only reviewed
+`status`, `answer`, `intent`, `tools_used`, `evidence`, `warnings`, `limitations`, `clarification`,
+`data_release`, and `method_version` fields. It checks HTTP/status pairing, array/text/number bounds,
+finite structured values, warning and evidence shapes, exact release/method identifiers, and
+restricted path/provider/HTML/raw-JSON content. Unknown fields, raw model payloads, and
+chain-of-thought fields are ignored rather than passed to the renderer.
 
-Then open:
+Chat output is built only with created elements, `textContent`, reviewed attributes, and native
+`details`/`summary`. It does not parse Markdown or raw JSON. Each accepted completed,
+clarification, or unsupported response displays the source label **Local Qwen3 8B + deterministic
+tools**. Tools, deterministic evidence, warnings, limitations, and release/method metadata remain
+separate; long evidence is collapsed initially and warnings include text labels rather than color
+alone.
+
+The seven reviewed response states are visibly distinct:
+
+- `completed`: show the validated answer and any structured details.
+- `clarification_required`: show the reviewed clarification prominently without fabricating a result.
+- `unsupported_request`: show the reviewed limitation and retain supported suggestions.
+- `assistant_disabled`: state that local chat is not enabled; fixed actions remain available.
+- `model_unavailable`: state that local Qwen is unavailable without attributing a template to Qwen.
+- `tool_error`: state that the deterministic tool could not complete; raw errors are hidden.
+- `invalid_model_response`: state that the response could not be safely accepted; rejected prose is hidden.
+
+The composer has a visible label and documented Enter/Shift+Enter behavior. Send, Cancel, and
+suggestions are native keyboard-accessible buttons; loading/status use ARIA live/busy attributes;
+and evidence uses native disclosure controls. Automated structure, keyboard, focus, and responsive
+checks do not constitute full screen-reader or assistive-technology validation.
+
+### Exact local Qwen demo startup
+
+This is a three-terminal local workflow. It uses the installed `qwen3:8b` model, no cloud model,
+and no API key.
+
+1. Start Ollama loopback-only:
+
+   ```powershell
+   Set-Location E:\Projects\PhD\SPTC
+   $env:OLLAMA_HOST = "127.0.0.1:11434"
+   ollama serve
+   ```
+
+2. In `E:\Projects\PhD\SPTC\services\resilience-agent`, enable and pre-warm the accepted backend,
+   then start FastAPI:
+
+   ```powershell
+   Set-Location E:\Projects\PhD\SPTC\services\resilience-agent
+   $env:RESILIENCE_ASSISTANT_ENABLED = "true"
+   $env:RESILIENCE_SNAPSHOT_DIR = ".local\snapshot"
+   $env:RESILIENCE_CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8001,http://localhost:8001"
+   $env:RESILIENCE_MODEL_PROVIDER = "ollama"
+   $env:RESILIENCE_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+   $env:RESILIENCE_OLLAMA_MODEL = "qwen3:8b"
+   $env:RESILIENCE_ASSISTANT_TIMEOUT_SECONDS = "75"
+   $env:RESILIENCE_ASSISTANT_MAX_HISTORY_MESSAGES = "4"
+   $env:RESILIENCE_ASSISTANT_MAX_TOOL_CALLS = "1"
+   $env:RESILIENCE_ASSISTANT_MAX_ANSWER_WORDS = "180"
+   .\.venv\Scripts\python.exe -m resilience_agent.assistant_warmup
+   .\.venv\Scripts\uvicorn.exe resilience_agent.api:app --host 127.0.0.1 --port 8080
+   ```
+
+3. In `E:\Projects\PhD\SPTC\data\front-end\sptc-demo`, start the static server:
+
+   ```powershell
+   Set-Location E:\Projects\PhD\SPTC\data\front-end\sptc-demo
+   D:\programming\Minicoda\python.exe -m http.server 8001 --bind 127.0.0.1
+   ```
+
+Open the local Qwen review URL:
 
 ```text
-http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
+http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-agent
 ```
 
-The normal local-template page remains:
+The unchanged local-template and deterministic-tools URLs remain:
 
 ```text
 http://127.0.0.1:8001/coldwave-demo-v2/
+http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 ```
 
-These modes were accepted only for loopback use on the reviewer workstation. `backend-tools`
-remains local/reviewer-only, with no LLM, free-form request, credential, API key, or configurable
-backend destination. This acceptance is not deployment readiness: public hosting, licensing,
-authentication, canonical timezone, and backend-hosting decisions remain unresolved.
+Before stopping Ollama, optionally unload the model with `ollama stop qwen3:8b`; then stop Ollama,
+FastAPI, and the frontend with Ctrl+C. A one-command launcher is not included in Phase 3G.
 
-Reloading either URL makes no Assistant API request. On the backend-tools URL, select a valid
-control section and explicitly choose one of the three fixed actions to make a reviewed request.
-The detection-status and supplemental-delay map layers do not have accepted metric explanations,
-so **Explain the current metric** is disabled for those layers with a visible reason. The section and
-review-note actions remain available.
+The supported scope is explanation of one reviewed section or metric, warning/status meaning,
+comparison of exactly two explicit sections, one-section review-note generation, and the
+planning-context versus observed-evidence distinction. Prediction, causal/physical-damage claims,
+investment or treatment recommendations, raw/restricted data access, arbitrary export, code/SQL/
+shell/file/internet execution, prompt/provider disclosure, filter/rank/map control, and other
+unreviewed tools are declined.
 
-There is no LLM, free-form assistant request, credential, API key, health preflight, retry,
-telemetry, or user-configurable backend URL. Backend output is rendered through created DOM nodes
-and `textContent`; the Phase 2A3 Assistant renderer does not use dynamic HTML or a Markdown parser.
+This remains a local experimental review prototype. Public hosting, authentication, licensing,
+canonical timezone, backend hosting, and deployment hardening remain unresolved.
 
 ## Caveats
 
@@ -235,4 +272,10 @@ and `textContent`; the Phase 2A3 Assistant renderer does not use dynamic HTML or
 - Delay burden is supplemental user-impact information.
 - `volume_2025` is a profile demand weight, not observed event-day traffic volume.
 - Data-driven phase detection is sensitive to smoothing, threshold, missing data, and congestion noise.
+- Local Qwen routing or synthesis can fail closed; rejected prose is not a substitute for the
+  separately rendered deterministic evidence and warnings.
+- The Phase 3G model-unavailable production-page scenario passed 100 checks with a 2.16-second
+  visible unavailable-state latency. The real-Qwen browser matrix and Qwen latency remain pending
+  because the RTX 4060 driver failed the required `nvidia-smi` health check. See `QA_NOTES.md`.
+- Full screen-reader validation and a one-command launcher are not included.
 - This v2 is local-only and is not deployed.
