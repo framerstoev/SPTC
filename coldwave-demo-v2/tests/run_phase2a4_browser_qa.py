@@ -79,6 +79,7 @@ class CDPConnection:
             timeout=10,
             suppress_origin=True,
         )
+        self._socket.settimeout(None)
         self._next_id = 1
         self._pending: dict[int, queue.Queue[dict[str, Any]]] = {}
         self._events: list[dict[str, Any]] = []
