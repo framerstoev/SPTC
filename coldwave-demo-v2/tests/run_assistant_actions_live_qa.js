@@ -107,7 +107,6 @@ class FakeDocument {
       ["assistantStatus", "span"],
       ["assistantMessages", "div"],
       ["assistantActionAvailability", "p"],
-      ["assistantReviewContainer", "div"],
       ["assistantExplainSection", "button"],
       ["assistantExplainMetric", "button"],
       ["assistantGenerateReviewNote", "button"]
@@ -140,8 +139,10 @@ function byAttribute(root, attributeName) {
   return descendants(root).filter(element => element.getAttribute(attributeName) !== null);
 }
 
-function byId(root, id) {
-  return descendants(root).find(element => element.id === id) || null;
+function byClass(root, className) {
+  return descendants(root).find(element => (
+    String(element.className).split(/\s+/).includes(className)
+  )) || null;
 }
 
 const fetchCalls = [];
@@ -184,7 +185,7 @@ async function runUnavailableProbe() {
   await controller.startAction("section");
   equal(fetchCalls.length, 1, "Unavailable probe did not issue exactly one explicit request");
   equal(controller.getState().requestState, "fallback_success");
-  includes(document.getElementById("assistantStatus").textContent, "local fallback");
+  includes(document.getElementById("assistantStatus").textContent, "showing a local result");
   includes(document.getElementById("assistantMessages").textContent, "LIVE LOCAL SECTION FALLBACK");
   console.log(
     "Live production-controller unavailable-backend QA passed: zero automatic requests and one explicit local fallback."
@@ -224,25 +225,25 @@ async function runAvailableProbe() {
   equal(fetchCalls[2].url, "http://127.0.0.1:8080/api/v1/reports/review-note");
   equal(controller.getState().requestState, "backend_success");
   equal(controller.getState().currentAction, "review");
-  equal(
-    document.getElementById("assistantStatus").textContent,
-    "Deterministic draft for human review"
-  );
+  equal(document.getElementById("assistantStatus").textContent, "");
   includes(messages.textContent, "Draft for human review");
   includes(messages.textContent, "CS_1081");
-  const reviewContainer = document.getElementById("assistantReviewContainer");
-  const details = byTag(reviewContainer, "details");
+  const reviewEntries = byAttribute(messages, "data-review-compact");
+  equal(reviewEntries.length, 1);
+  const reviewEntry = reviewEntries[0];
+  includes(reviewEntry.textContent, "Verified result");
+  const details = byTag(reviewEntry, "details");
   equal(details.length, 1);
   equal(details[0].open, false);
   equal(details[0].getAttribute("data-report-section-count"), "6");
-  equal(byAttribute(reviewContainer, "data-report-section").length, 6);
+  equal(byAttribute(reviewEntry, "data-report-section").length, 6);
   equal(
-    byAttribute(reviewContainer, "data-review-list")
+    byAttribute(reviewEntry, "data-review-list")
       .map(block => block.getAttribute("data-review-list"))
       .join(","),
     "warnings,limitations,human-review-checklist"
   );
-  assert(byId(reviewContainer, "assistantCopyMarkdown"), "Copy control is missing");
+  assert(byClass(reviewEntry, "assistant-copy-markdown"), "Copy control is missing");
 
   console.log(
     "Live production-controller QA passed: zero automatic requests; section, metric, and review actions each issued one validated request."
