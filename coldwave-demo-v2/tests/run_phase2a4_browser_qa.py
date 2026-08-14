@@ -935,7 +935,9 @@ class ProductionPageQA:
         )
 
         self.set_layer("q_min")
-        self.evaluate("map.setZoom(Math.min(12, map.getZoom() + 2))")
+        self.evaluate(
+            "(() => { map.setZoom(Math.min(12, map.getZoom() + 2)); return true; })()"
+        )
         self.wait_js(
             "selectedLeafletLayer.options.color === featureColor(selectedProps)",
             "selected thematic color after layer and zoom changes",
@@ -956,7 +958,9 @@ class ProductionPageQA:
             "selected highlight survives map-layer and zoom changes without changing class color",
             json.dumps(refreshed, sort_keys=True),
         )
-        self.evaluate("map.setZoom(window.__phase3jSelection.zoom)")
+        self.evaluate(
+            "(() => { map.setZoom(window.__phase3jSelection.zoom); return true; })()"
+        )
         self.set_layer("observed_curve_resilience_score_v0")
         self.select_direct("1081")
 
