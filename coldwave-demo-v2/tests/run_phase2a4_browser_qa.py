@@ -1720,6 +1720,10 @@ class ProductionPageQA:
             layout = self.evaluate(
                 "(() => {"
                 "const app = document.querySelector('.app-shell');"
+                "const viewHostElement = document.querySelector('#appViewHost');"
+                "const viewElement = document.querySelector('#explorerView');"
+                "const viewHost = viewHostElement.getBoundingClientRect();"
+                "const view = viewElement.getBoundingClientRect();"
                 "const headerElement = document.querySelector('.app-header');"
                 "const header = headerElement.getBoundingClientRect();"
                 "const stats = Array.from(headerElement.querySelectorAll("
@@ -1727,7 +1731,8 @@ class ProductionPageQA:
                 "return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,"
                 "label:node.querySelector('dt').textContent.trim(),value:"
                 "node.querySelector('dd').textContent.trim()}; });"
-                "const panel = document.querySelector('.left-panel').getBoundingClientRect();"
+                "const panelElement = document.querySelector('.left-panel');"
+                "const panel = panelElement.getBoundingClientRect();"
                 "const splitterElement = document.querySelector('#analysisSplitter');"
                 "const splitter = splitterElement.getBoundingClientRect();"
                 "const map = document.querySelector('.map-shell').getBoundingClientRect();"
@@ -1748,10 +1753,13 @@ class ProductionPageQA:
                 "headerScrollWidth: headerElement.scrollWidth,"
                 "header: {left:header.left,right:header.right,top:header.top,bottom:header.bottom,"
                 "width:header.width,height:header.height}, stats,"
+                "viewHost: {top:viewHost.top,bottom:viewHost.bottom,height:viewHost.height},"
+                "view: {top:view.top,bottom:view.bottom,height:view.height},"
                 "headerHasPercent: headerElement.textContent.includes('%'),"
                 "columns: getComputedStyle(app).gridTemplateColumns.split(' ').filter(Boolean).length,"
                 "panel: {left: panel.left, right: panel.right, top: panel.top, "
-                "bottom: panel.bottom, width: panel.width},"
+                "bottom: panel.bottom, width: panel.width, height: panel.height,"
+                "clientHeight: panelElement.clientHeight, scrollHeight: panelElement.scrollHeight},"
                 "splitter: {left: splitter.left, right: splitter.right, width: splitter.width, "
                 "display: getComputedStyle(splitterElement).display, "
                 "ariaMax: Number(splitterElement.getAttribute('aria-valuemax'))},"
@@ -1867,6 +1875,15 @@ class ProductionPageQA:
                     and layout["splitter"]["ariaMax"] <= 650
                     and layout["map"]["width"] >= 480
                     and layout["map"]["width"] > layout["panel"]["width"]
+                    and layout["viewHost"]["bottom"] <= height + 1
+                    and abs(layout["viewHost"]["height"] - layout["view"]["height"])
+                    <= 1
+                    and layout["map"]["height"] >= layout["view"]["height"] - 18
+                    and layout["map"]["top"] >= layout["view"]["top"]
+                    and layout["map"]["top"] + layout["map"]["height"]
+                    <= layout["view"]["bottom"] + 1
+                    and layout["panel"]["scrollHeight"]
+                    > layout["panel"]["clientHeight"]
                     and layout["assistant"]["width"] <= 440,
                     f"{width}x{height} uses analysis | separator | map with a desktop Assistant",
                 )
@@ -1935,8 +1952,10 @@ class ProductionPageQA:
             time.sleep(0.1)
             legend_layout = self.evaluate(
                 "(() => {"
-                "const rect = selector => document.querySelector(selector)"
-                "?.getBoundingClientRect(); const legend = rect('#mapLegend');"
+                "const rect = selector => { const node = document.querySelector(selector);"
+                "if (!node) return null; const r = node.getBoundingClientRect(); return {"
+                "left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}; };"
+                "const legend = rect('#mapLegend');"
                 "const mapBox = rect('.map-shell'); const zoom = rect('.leaflet-control-zoom');"
                 "const attribution = rect('.leaflet-control-attribution');"
                 "const launcher = rect('#assistantLauncher');"
@@ -1967,6 +1986,14 @@ class ProductionPageQA:
                 and not legend_layout["horizontalOverflow"],
                 f"{width}x{height} bounds the expanded map legend without collisions",
                 json.dumps(legend_layout, sort_keys=True),
+            )
+            legend_screenshot = self.page.command(
+                "Page.captureScreenshot",
+                {"format": "png", "fromSurface": True},
+            ).get("data", "")
+            self.report.check(
+                len(legend_screenshot) > 1000,
+                f"{width}x{height} produced a map-position legend QA screenshot",
             )
             self.evaluate(
                 "document.querySelector('#mapLegend').open = false;"

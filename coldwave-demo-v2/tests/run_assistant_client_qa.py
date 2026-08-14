@@ -340,6 +340,8 @@ def static_checks() -> None:
         )
     )
     assert "@import" not in style and "@font-face" not in style
+    assert ".app-view-host {\n  height: 100%;\n  display: grid;" in style
+    assert ".app-view {\n  height: 100%;\n  overflow: hidden;" in style
     assert 'id="analysisSplitter"' in index
     assert 'role="separator"' in index
     assert 'aria-orientation="vertical"' in index
