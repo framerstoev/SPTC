@@ -131,7 +131,11 @@ let mapData;
 let controlLayer;
 let activeLayer = "observed_curve_resilience_score_v0";
 let selectedLeafletLayer = null;
+let selectedHaloLayer = null;
+let selectedCasingLayer = null;
+let selectedFeature = null;
 let selectedProps = null;
+let mapLegendControl = null;
 let assistantActionController = null;
 let assistantChatController = null;
 let ranges = {};
@@ -355,16 +359,94 @@ function featureStyle(feature) {
   };
 }
 
+function selectedLineWeights() {
+  const zoom = map ? map.getZoom() : 6;
+  const core = zoom >= 11 ? 6 : (zoom >= 8 ? 5.5 : 5);
+  return { core, casing: core + 3, halo: core + 6 };
+}
+
+function clearSelectedMapHighlight() {
+  if (selectedLeafletLayer && controlLayer) {
+    controlLayer.resetStyle(selectedLeafletLayer);
+  }
+  if (selectedHaloLayer && map) map.removeLayer(selectedHaloLayer);
+  if (selectedCasingLayer && map) map.removeLayer(selectedCasingLayer);
+  selectedHaloLayer = null;
+  selectedCasingLayer = null;
+  selectedLeafletLayer = null;
+  selectedProps = null;
+  selectedFeature = null;
+}
+
+function createSelectedMapHighlight(feature) {
+  const weights = selectedLineWeights();
+  selectedHaloLayer = L.geoJSON(feature, {
+    renderer: controlRenderer,
+    interactive: false,
+    style: {
+      color: "#ffffff",
+      weight: weights.halo,
+      opacity: 0.94,
+      lineCap: "round"
+    }
+  }).addTo(map);
+  selectedCasingLayer = L.geoJSON(feature, {
+    renderer: controlRenderer,
+    interactive: false,
+    style: {
+      color: "#0f172a",
+      weight: weights.casing,
+      opacity: 0.94,
+      lineCap: "round"
+    }
+  }).addTo(map);
+}
+
 function applySelectedStyle() {
   if (!selectedLeafletLayer) return;
-  const zoom = map ? map.getZoom() : 6;
-  const selectedWeight = zoom >= 11 ? 6 : (zoom >= 8 ? 5.5 : 5);
+  const weights = selectedLineWeights();
+  selectedHaloLayer?.setStyle({
+    color: "#ffffff",
+    weight: weights.halo,
+    opacity: 0.94
+  });
+  selectedCasingLayer?.setStyle({
+    color: "#0f172a",
+    weight: weights.casing,
+    opacity: 0.94
+  });
   selectedLeafletLayer.setStyle({
-    color: "#111827",
-    weight: selectedWeight,
+    color: featureColor(selectedProps || {}),
+    weight: weights.core,
     opacity: 1
   });
+  if (selectedHaloLayer?.bringToFront) selectedHaloLayer.bringToFront();
+  if (selectedCasingLayer?.bringToFront) selectedCasingLayer.bringToFront();
   if (selectedLeafletLayer.bringToFront) selectedLeafletLayer.bringToFront();
+}
+
+function setupMapLegendControl() {
+  const legendDetails = document.getElementById("mapLegend");
+  const legendToggle = document.getElementById("mapLegendToggle");
+  legendDetails.open = false;
+  legendToggle.setAttribute("aria-expanded", "false");
+  legendDetails.addEventListener("toggle", () => {
+    legendToggle.setAttribute("aria-expanded", String(legendDetails.open));
+  });
+  legendDetails.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !legendDetails.open) return;
+    event.preventDefault();
+    legendDetails.open = false;
+    legendToggle.focus();
+  });
+
+  mapLegendControl = L.control({ position: "bottomleft" });
+  mapLegendControl.onAdd = () => {
+    L.DomEvent.disableClickPropagation(legendDetails);
+    L.DomEvent.disableScrollPropagation(legendDetails);
+    return legendDetails;
+  };
+  mapLegendControl.addTo(map);
 }
 
 function updateLegend() {
@@ -512,9 +594,10 @@ function setupSearch() {
   });
 }
 
-function metricCard(label, value, className = "", help = "") {
+function metricCard(label, value, className = "", help = "", metricKey = "") {
   const helpHtml = help ? `<div class="metric-help">${help}</div>` : "";
-  return `<div class="metric-card small ${className}"><span>${label}</span><strong>${value}</strong>${helpHtml}</div>`;
+  const metricAttr = metricKey ? ` data-metric="${metricKey}"` : "";
+  return `<div class="metric-card small ${className}"${metricAttr}><span>${label}</span><strong>${value}</strong>${helpHtml}</div>`;
 }
 
 function phaseValue(props, field, formatter = fmt) {
@@ -525,6 +608,7 @@ function phaseValue(props, field, formatter = fmt) {
 function renderMetrics(props) {
   const noSustained = isNoSustainedDrop(props);
   const censored = isCensored(props);
+  document.getElementById("headlineMetrics").hidden = false;
   document.getElementById("curveMetricBlock").hidden = false;
   document.getElementById("selectedTitle").textContent = `${props.ROUTE_KEY || "Route unknown"} | CS ${props.CTRL_SECT_ || props.CTRL_SECT_NORM}`;
   document.getElementById("selectedSub").textContent = `${props.county_name || props.county || "County unknown"} | ${props.event_id || "coldwave_2026_01"}`;
@@ -535,19 +619,25 @@ function renderMetrics(props) {
   document.getElementById("statusBadges").innerHTML = [
     `<span class="badge ${badgeClass}">${statusLabel(status)}</span>`,
     `<span class="badge class-badge">v0 curve score class: ${cls ? cls.label : "N/A"}</span>`,
-    censored ? `<span class="badge warning">Censored recovery</span>` : "",
     `<span class="badge">NPMRDS support: ${hasCurve(props) ? "yes" : "no"}</span>`,
     `<span class="badge">TMCs: ${fmtInt(props.matched_tmc_count)}</span>`
   ].filter(Boolean).join("");
 
   document.getElementById("topMetrics").innerHTML = [
-    metricCard("Score v0", noSustained ? "N/A" : fmt(props.observed_curve_resilience_score_v0), "", "Experimental event/method-specific summary."),
-    metricCard("Minimum performance", noSustained ? "N/A" : fmt(props.q_min), "", "Share of baseline speed performance."),
-    metricCard("Loss area", phaseValue(props, "resilience_loss_area"), "", "Detected depth-duration performance loss."),
-    metricCard("Recovery duration", `${phaseValue(props, "recovery_duration_hours", fmtHours)}${censored ? " flagged" : ""}`, "", "Minimum-to-recovery duration; censored values are flagged.")
+    metricCard("Score v0", noSustained ? "N/A" : fmt(props.observed_curve_resilience_score_v0), "", "", "score_v0"),
+    metricCard("Minimum performance", noSustained ? "N/A" : fmt(props.q_min), "", "", "q_min"),
+    metricCard("Loss area", phaseValue(props, "resilience_loss_area"), "", "", "resilience_loss_area"),
+    metricCard(
+      "Recovery duration",
+      phaseValue(props, "recovery_duration_hours", fmtHours),
+      censored ? "caution" : "",
+      censored ? "Censored; lower-bound/flagged." : "",
+      "recovery_duration_hours"
+    )
   ].join("");
 
   const warning = document.getElementById("warningCard");
+  warning.setAttribute("aria-label", "Interpretation warning");
   warning.classList.remove("visible");
   warning.innerHTML = "";
   if (noSustained) {
@@ -568,7 +658,14 @@ function renderMetrics(props) {
     metricCard("Loss depth pct", phaseValue(props, "loss_depth_pct", fmtPct), "", "Loss depth divided by Q0."),
     metricCard("Degradation duration", phaseValue(props, "degradation_duration_hours", fmtHours), "", "Hours from detected onset to minimum performance."),
     metricCard("Degradation slope", phaseValue(props, "degradation_slope"), "", "Average rate of decline from Q0 to Q_min. Negative means performance decreased."),
-    metricCard("Recovery duration", `${phaseValue(props, "recovery_duration_hours", fmtHours)}${censored ? " lower-bound/flagged" : ""}`, "", "Hours from minimum performance to detected recovery endpoint."),
+    metricCard(
+      "Recovery duration",
+      phaseValue(props, "recovery_duration_hours", fmtHours),
+      censored ? "caution" : "",
+      censored
+        ? "Hours from minimum performance to detected recovery endpoint. Censored; lower-bound/flagged."
+        : "Hours from minimum performance to detected recovery endpoint."
+    ),
     metricCard("Recovery slope", phaseValue(props, "recovery_slope"), "", "Average rate of recovery from Q_min to recovery endpoint."),
     metricCard("Time to 80%", phaseValue(props, "time_to_80_hours", fmtHours), "", "Hours from minimum point to Q(t) >= 0.8."),
     metricCard("Time to 90%", phaseValue(props, "time_to_90_hours", fmtHours), "", "Hours from minimum point to Q(t) >= 0.9."),
@@ -895,7 +992,7 @@ const phaseOverlayPlugin = {
       ctx.save();
       ctx.strokeStyle = marker.color;
       ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(px, chartArea.top);
       ctx.lineTo(px, chartArea.bottom);
@@ -981,9 +1078,9 @@ async function renderCurve(props) {
         {
           label: "Raw Q(t) observations",
           data: q,
-          borderColor: "rgba(100, 116, 139, 0.48)",
-          backgroundColor: "rgba(100, 116, 139, 0.12)",
-          borderWidth: 1,
+          borderColor: "rgba(100, 116, 139, 0.42)",
+          backgroundColor: "rgba(100, 116, 139, 0.1)",
+          borderWidth: 0.9,
           pointRadius: 0,
           tension: 0
         },
@@ -991,7 +1088,7 @@ async function renderCurve(props) {
           label: "Centered six-observation rolling median",
           data: qSmooth,
           borderColor: "#0f766e",
-          borderWidth: 2,
+          borderWidth: 2.5,
           pointRadius: 0,
           tension: 0
         },
@@ -1027,7 +1124,14 @@ async function renderCurve(props) {
       animation: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+        legend: {
+          display: true,
+          labels: {
+            boxWidth: 12,
+            color: "#465864",
+            font: { size: 11 }
+          }
+        },
         tooltip: {
           callbacks: {
             title: items => shortDate(labels[items[0].dataIndex]),
@@ -1039,7 +1143,10 @@ async function renderCurve(props) {
         x: {
           type: "category",
           title: { display: true, text: "Time, Jan 1-Feb 3, 2026" },
+          grid: { color: "rgba(100, 116, 139, 0.1)" },
           ticks: {
+            color: "#62727f",
+            font: { size: 11 },
             maxTicksLimit: 6,
             maxRotation: 0,
             minRotation: 0,
@@ -1049,7 +1156,9 @@ async function renderCurve(props) {
         y: {
           min: 0,
           max: Math.min(2, Math.max(1.15, maxQ)),
-          title: { display: true, text: "Normalized speed performance Q(t)" }
+          title: { display: true, text: "Normalized speed performance Q(t)" },
+          grid: { color: "rgba(100, 116, 139, 0.12)" },
+          ticks: { color: "#62727f", font: { size: 11 } }
         }
       }
     }
@@ -1065,11 +1174,11 @@ async function renderCurve(props) {
 }
 
 async function selectFeature(feature, layer) {
-  if (selectedLeafletLayer && controlLayer) {
-    controlLayer.resetStyle(selectedLeafletLayer);
-  }
+  clearSelectedMapHighlight();
+  selectedFeature = feature;
   selectedLeafletLayer = layer;
   selectedProps = feature.properties || {};
+  createSelectedMapHighlight(selectedFeature);
   applySelectedStyle();
   renderMetrics(selectedProps);
   resetAssistantForSelection(selectedProps);
@@ -1097,14 +1206,14 @@ function onEachFeature(feature, layer) {
         layer.setStyle({ weight: 4.5, opacity: 1 });
         if (layer.bringToFront) layer.bringToFront();
       }
+      applySelectedStyle();
     },
     mouseout: () => {
       map.getContainer().style.cursor = "";
       if (layer !== selectedLeafletLayer && controlLayer) {
         controlLayer.resetStyle(layer);
-      } else {
-        applySelectedStyle();
       }
+      applySelectedStyle();
     }
   });
 }
@@ -1242,8 +1351,11 @@ async function initMap() {
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
+    className: "resilience-basemap-tile",
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
+
+  setupMapLegendControl();
 
   const [summary, geojson] = await Promise.all([
     fetch(SUMMARY_URL).then(r => r.json()),
