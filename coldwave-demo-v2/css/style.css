@@ -31,10 +31,11 @@ body {
 }
 
 .app-shell {
+  --analysis-panel-width: 420px;
   height: 100vh;
   display: grid;
-  grid-template-columns: minmax(380px, 30vw) minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: var(--analysis-panel-width) 10px minmax(0, 1fr);
+  gap: 0;
   padding: 8px;
   overflow: hidden;
 }
@@ -51,6 +52,43 @@ body {
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable;
+}
+
+.analysis-splitter {
+  position: relative;
+  min-width: 10px;
+  min-height: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.analysis-splitter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: #cbd5e1;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.analysis-splitter:hover::before,
+.analysis-splitter:focus-visible::before,
+body.is-analysis-resizing .analysis-splitter::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.14);
+}
+
+.analysis-splitter:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.45);
+  outline-offset: -2px;
+}
+
+body.is-analysis-resizing,
+body.is-analysis-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .hero {
@@ -1049,10 +1087,6 @@ button:disabled {
 }
 
 @media (max-width: 1100px) {
-  .app-shell {
-    grid-template-columns: minmax(360px, 34vw) minmax(0, 1fr);
-  }
-
   .hero h1 {
     font-size: 20px;
   }
@@ -1069,6 +1103,11 @@ button:disabled {
     height: auto;
     min-height: 100vh;
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .analysis-splitter {
+    display: none;
   }
 
   .panel {

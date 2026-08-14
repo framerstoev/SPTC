@@ -119,8 +119,8 @@
         <div class="metric-grid top-grid" id="topMetrics"></div>
       </section>
 
-      <details class="technical-details" id="curveDetails">
-        <summary>View Q(t) curve and phase metrics</summary>
+      <details class="technical-details" id="curveDetails" open>
+        <summary>Q(t) curve and phase metrics</summary>
         <div class="details-content">
           <div class="curve-card" id="curveCard">
             <div class="section-heading">
@@ -131,7 +131,7 @@
               <canvas id="curveChart"></canvas>
             </div>
             <div class="phase-marker-legend" id="phaseMarkerLegend"></div>
-            <div class="chart-note" id="curveNote">Select a control section to load its curve.</div>
+            <div class="chart-note" id="curveNote">Select a control section to view Q(t).</div>
           </div>
 
           <div class="detail-block">
@@ -180,6 +180,18 @@
         </div>
       </details>
     </aside>
+
+    <div
+      class="analysis-splitter"
+      id="analysisSplitter"
+      role="separator"
+      aria-label="Resize analysis panel"
+      aria-orientation="vertical"
+      aria-valuemin="320"
+      aria-valuemax="650"
+      aria-valuenow="420"
+      tabindex="0"
+    ></div>
 
     <main class="map-shell">
       <div id="map"></div>

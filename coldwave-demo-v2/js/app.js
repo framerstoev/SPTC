@@ -1,5 +1,10 @@
 const MAP_URL = "./data/data_driven_resilience_map_v0.geojson";
 const SUMMARY_URL = "./data/summary.json";
+const ANALYSIS_PANEL_DEFAULT_WIDTH = 420;
+const ANALYSIS_PANEL_MIN_WIDTH = 320;
+const ANALYSIS_PANEL_MAX_WIDTH = 650;
+const MAP_MIN_DESKTOP_WIDTH = 480;
+const ANALYSIS_PANEL_KEYBOARD_STEP = 16;
 
 const controlRenderer = L.canvas({
   padding: 0.5,
@@ -137,6 +142,9 @@ let featureByCtrl = new Map();
 let curveChart = null;
 let phaseOverlayState = null;
 let curveRequestId = 0;
+let analysisPanelWidth = ANALYSIS_PANEL_DEFAULT_WIDTH;
+let analysisResizeFrame = null;
+let analysisResizePointerId = null;
 
 function numberOrNull(value) {
   if (value === null || value === undefined) return null;
@@ -1067,6 +1075,123 @@ function setupCurveDetails() {
   });
 }
 
+function desktopAnalysisLayoutActive() {
+  return window.matchMedia("(min-width: 981px)").matches;
+}
+
+function analysisPanelWidthBounds() {
+  const shell = document.querySelector(".app-shell");
+  const splitter = document.getElementById("analysisSplitter");
+  const shellStyle = window.getComputedStyle(shell);
+  const horizontalPadding = Number.parseFloat(shellStyle.paddingLeft || "0")
+    + Number.parseFloat(shellStyle.paddingRight || "0");
+  const availableWidth = Math.max(0, shell.getBoundingClientRect().width - horizontalPadding);
+  const splitterWidth = splitter.getBoundingClientRect().width || 10;
+  const dynamicMaximum = availableWidth - splitterWidth - MAP_MIN_DESKTOP_WIDTH;
+  return {
+    min: ANALYSIS_PANEL_MIN_WIDTH,
+    max: Math.max(
+      ANALYSIS_PANEL_MIN_WIDTH,
+      Math.min(ANALYSIS_PANEL_MAX_WIDTH, dynamicMaximum)
+    )
+  };
+}
+
+function scheduleWorkspaceResize() {
+  if (analysisResizeFrame !== null) return;
+  analysisResizeFrame = window.requestAnimationFrame(() => {
+    analysisResizeFrame = null;
+    map?.invalidateSize({ pan: false, debounceMoveend: true });
+    curveChart?.resize();
+  });
+}
+
+function applyAnalysisPanelWidth(requestedWidth) {
+  if (!desktopAnalysisLayoutActive()) return analysisPanelWidth;
+  const shell = document.querySelector(".app-shell");
+  const splitter = document.getElementById("analysisSplitter");
+  const bounds = analysisPanelWidthBounds();
+  analysisPanelWidth = Math.round(Math.min(bounds.max, Math.max(bounds.min, requestedWidth)));
+  shell.style.setProperty("--analysis-panel-width", `${analysisPanelWidth}px`);
+  splitter.setAttribute("aria-valuemin", String(bounds.min));
+  splitter.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+  splitter.setAttribute("aria-valuenow", String(analysisPanelWidth));
+  splitter.setAttribute("aria-valuetext", `${analysisPanelWidth} pixels`);
+  scheduleWorkspaceResize();
+  return analysisPanelWidth;
+}
+
+function finishAnalysisResize(splitter) {
+  document.body.classList.remove("is-analysis-resizing");
+  if (
+    analysisResizePointerId !== null
+    && splitter.hasPointerCapture?.(analysisResizePointerId)
+  ) {
+    splitter.releasePointerCapture(analysisResizePointerId);
+  }
+  analysisResizePointerId = null;
+  scheduleWorkspaceResize();
+}
+
+function setupAnalysisSplitter() {
+  const shell = document.querySelector(".app-shell");
+  const splitter = document.getElementById("analysisSplitter");
+
+  splitter.addEventListener("pointerdown", event => {
+    if (!desktopAnalysisLayoutActive() || event.button !== 0) return;
+    analysisResizePointerId = event.pointerId;
+    splitter.setPointerCapture?.(event.pointerId);
+    document.body.classList.add("is-analysis-resizing");
+    event.preventDefault();
+  });
+
+  splitter.addEventListener("pointermove", event => {
+    if (analysisResizePointerId !== event.pointerId || !desktopAnalysisLayoutActive()) return;
+    const shellLeft = shell.getBoundingClientRect().left
+      + Number.parseFloat(window.getComputedStyle(shell).paddingLeft || "0");
+    applyAnalysisPanelWidth(event.clientX - shellLeft);
+    event.preventDefault();
+  });
+
+  splitter.addEventListener("pointerup", event => {
+    if (analysisResizePointerId !== event.pointerId) return;
+    finishAnalysisResize(splitter);
+  });
+  splitter.addEventListener("pointercancel", event => {
+    if (analysisResizePointerId !== event.pointerId) return;
+    finishAnalysisResize(splitter);
+  });
+
+  splitter.addEventListener("keydown", event => {
+    if (!desktopAnalysisLayoutActive()) return;
+    const bounds = analysisPanelWidthBounds();
+    let nextWidth = null;
+    if (event.key === "ArrowLeft") {
+      nextWidth = analysisPanelWidth - ANALYSIS_PANEL_KEYBOARD_STEP;
+    } else if (event.key === "ArrowRight") {
+      nextWidth = analysisPanelWidth + ANALYSIS_PANEL_KEYBOARD_STEP;
+    } else if (event.key === "Home") {
+      nextWidth = bounds.min;
+    } else if (event.key === "End") {
+      nextWidth = bounds.max;
+    }
+    if (nextWidth === null) return;
+    event.preventDefault();
+    applyAnalysisPanelWidth(nextWidth);
+  });
+
+  window.addEventListener("resize", () => {
+    if (desktopAnalysisLayoutActive()) {
+      applyAnalysisPanelWidth(analysisPanelWidth);
+    } else {
+      finishAnalysisResize(splitter);
+      scheduleWorkspaceResize();
+    }
+  });
+
+  applyAnalysisPanelWidth(ANALYSIS_PANEL_DEFAULT_WIDTH);
+}
+
 async function initMap() {
   map = L.map("map", {
     preferCanvas: true,
@@ -1124,6 +1249,7 @@ document.getElementById("layerSelect").addEventListener("change", event => {
 
 setupAssistant();
 setupCurveDetails();
+setupAnalysisSplitter();
 
 initMap().catch(error => {
   console.error(error);

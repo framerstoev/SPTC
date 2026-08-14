@@ -171,7 +171,21 @@ def static_checks() -> None:
     assert index.count('<aside class="panel left-panel">') == 1
     assert index.count('<main class="map-shell">') == 1
     assert "right-panel" not in index
-    assert "grid-template-columns: minmax(380px, 30vw) minmax(0, 1fr);" in style
+    assert 'id="curveDetails" open' in index
+    assert "Select a control section to view Q(t)." in index
+    assert 'id="contextDetails"' in index and 'id="contextDetails" open' not in index
+    assert '<details class="technical-details method-details">' in index
+    assert 'id="analysisSplitter"' in index
+    assert 'role="separator"' in index
+    assert 'aria-orientation="vertical"' in index
+    assert 'aria-label="Resize analysis panel"' in index
+    assert "--analysis-panel-width: 420px;" in style
+    assert "grid-template-columns: var(--analysis-panel-width) 10px minmax(0, 1fr);" in style
+    assert "map?.invalidateSize({ pan: false, debounceMoveend: true });" in app
+    assert "ANALYSIS_PANEL_MIN_WIDTH = 320" in app
+    assert "ANALYSIS_PANEL_MAX_WIDTH = 650" in app
+    assert "MAP_MIN_DESKTOP_WIDTH = 480" in app
+    assert "localStorage" not in app
     assert "html,\nbody {\n  height: 100%;\n  margin: 0;\n  overflow: hidden;" in style
     assert "const response = await fetch(props.curve_file);" in app
     assert 'label: "Raw Q(t) observations"' in app
