@@ -439,6 +439,34 @@ test totals, viewport observations, GPU allocation/VRAM, and real-AI latency for
 do not carry Phase 3G or Phase 3I numbers forward. Backend/model/data/launcher behavior is outside
 the Phase 3J change set, and conversational paraphrase robustness remains deferred.
 
+### Phase 3J acceptance run
+
+The 2026-08-14 acceptance run completed on the Phase 3J branch with Chrome
+`151.0.7922.138` and the accepted backend at
+`5edc4688514f2c47ae3e8c03f50b853c0f5d8108`:
+
+- static/resource QA passed; all 92 JavaScript tests passed (36 client, 29 actions, 19 chat, and
+  8 search);
+- the Phase 2A4 `full` production-page scenario passed 188 checks;
+- the GPU-backed Phase 3G `live` scenario passed 612 checks and all 16 cases, with 100% tool/control
+  selection accuracy, warning consistency, evidence consistency, safety, and unsupported-request
+  decline rates;
+- successful-workflow latency was 1.122 seconds median and 6.002 seconds p95/maximum for this run;
+- page-load Assistant requests, direct browser requests to port 11434, console errors, and uncaught
+  exceptions were all zero;
+- the RTX 4060 reported Code 0 with driver 610.88, `qwen3:8b` remained at 100% GPU, explicit warm-up
+  took 3.699 seconds, and independently sampled peak GPU memory use was 5,447 MiB;
+- ten temporary screenshots covered the four required viewports, including the map-position
+  expanded legend at every size and the open Assistant at desktop/mobile. Human image review found
+  no horizontal overflow or map/control/attribution collision; all PNGs and their exact temporary
+  directory were then deleted; and
+- the accepted Phase 3H launcher started and stopped successfully, unloaded the model, freed ports
+  8001/8080/11434, and left Ollama plus `qwen3:8b` installed.
+
+Headless Chrome again did not complete the native Clipboard success announcement. Exact validated
+Markdown/DOM and keyboard contracts passed, but this run does not claim a native OS clipboard write
+or full assistive-technology validation.
+
 ## Phase 2A4 Isolated Browser Acceptance
 
 The original accepted Phase 2A4 run used Google Chrome `150.0.7871.181`; the Phase 3G regression
@@ -488,15 +516,13 @@ http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 
 ### Manual Checks Still Outstanding
 
-- Run the full Phase 3I static, deterministic-live, four-viewport browser, real-model smoke, and
-  model-unavailable fallback matrix after the production changes are committed cleanly; record the
-  resulting counts and latency measurements rather than carrying Phase 3G values forward.
 - Confirm successful **Copy Markdown** behavior in a visible browser session where the reviewer
   grants native Clipboard permission.
-- Perform a human visible-window review at all four required viewports. Headless geometry and
-  internal screenshots do not substitute for human visual judgment or assistive-technology testing.
+- Perform the next Jason visible-window review and dedicated assistive-technology testing. Phase 3J
+  included human inspection of real headless screenshots and browser geometry, but does not claim
+  full screen-reader or OS-level interaction validation.
 - Evaluate conversational paraphrase robustness in a later routing phase; do not fold it into the
-  Phase 3I UI acceptance.
+  Phase 3J UI acceptance.
 
 ## Known Limitations
 
