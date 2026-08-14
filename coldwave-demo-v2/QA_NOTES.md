@@ -17,10 +17,18 @@ The large source CSV `control_section_q_timeseries_v0.csv` is not copied into th
 ## Intended Checks
 
 - Map loads from local server.
-- Layer selector updates color styling and legend.
+- Layer selector updates color styling and the collapsed map-overlay legend.
 - Search finds partial matches for CS IDs, `CS_` keys, routes, and counties.
 - Search result selection zooms to the control section, highlights it, updates the panel, and lazy-loads Q(t).
 - Clicking a control section updates the selected-section panel.
+- The shared application header shows the reviewed `10,029 / 3,842 / 3,473 / 18`
+  statewide counts exactly once; it adds no percentage or clickable statewide analysis.
+- Basemap softening is scoped only to OpenStreetMap tile images. Thematic Canvas geometry,
+  controls, Q(t), warnings, and Assistant content retain unfiltered colors.
+- The selected section retains its active thematic color inside a noninteractive casing/halo;
+  replacement, layer changes, zoom changes, and hover do not accumulate or strand highlights.
+- The legend is a collapsed keyboard-accessible Leaflet control outside the analysis sidebar;
+  its reviewed class/status meanings and numerical ranges are unchanged.
 - Q(t) is open by default, shows a compact no-selection placeholder, and loads lazily for sections
   with curve JSON without requiring a second disclosure click.
 - `no_sustained_drop` sections show the v0 warning and do not imply full resilience.
@@ -370,6 +378,66 @@ confirm ports 8001/8080 are free. Launcher tests are not required for Phase 3I b
 Conversational paraphrase robustness remains a documented deferred issue. Phase 3I acceptance must
 not weaken routing/security assertions or introduce routing, prompt, tool-description, backend, or
 model changes to address it.
+
+## Phase 3J Visual and Architecture QA
+
+Phase 3J retains all Phase 3I behavior and adds map-first visual-structure checks. The static suite
+now asserts the exact title and Prototype badge, one header-owned copy of each statewide count,
+one semantic Explorer view, no fake Overview UI, unchanged external dependencies, a tile-only
+basemap filter, noninteractive selection halo/casing, one map-overlay legend, and the absence of
+future aggregate tool names from production frontend code.
+
+The future-only design and deterministic aggregate boundary are documented in
+[OVERVIEW_ARCHITECTURE.md](OVERVIEW_ARCHITECTURE.md). The candidate tools are not implemented,
+registered, or available to the current Assistant. In particular, district aggregation remains
+unresolved because the current frontend GeoJSON has no canonical district field.
+
+Run from the nested frontend repository root:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = "1"
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py
+git diff --check
+```
+
+With the accepted Phase 3H local workflow running, execute the real production-page regressions:
+
+```powershell
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario full
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py `
+  --scenario live `
+  --cold-warmup-seconds <measured-seconds> `
+  --qwen-gpu-allocation "100% GPU" `
+  --peak-vram-mib <measured-peak-mib>
+```
+
+The shared browser contract verifies:
+
+- exact header identity and `10,029 / 3,842 / 3,473 / 18` values, with no duplicated count or
+  invented percentage;
+- unchanged CS_1081 headline evidence (`0.632`, `0.353`, `24.687`, `30.0 h`) and visible warning
+  callouts for CS_257, CS_3597, and CS_1;
+- selected thematic core plus halo/casing replacement across selection, layer, and zoom changes;
+- score-class breaks `0.343600 / 0.690711 / 0.734266 / 0.775293 / 0.833314 / 0.913378`, all
+  detection-status meanings, and continuous legend ranges;
+- keyboard legend open/close, no Assistant request from the legend, tile-only filtering, and no
+  overlap with zoom, attribution, or the collapsed Assistant launcher; and
+- retained splitter, Q(t), floating Assistant, provenance, cancellation/staleness, safe rendering,
+  endpoint allowlist, zero page-load query, and zero direct browser request to port 11434.
+
+Required visual viewports remain:
+
+| Viewport | Phase 3J expectation |
+| --- | --- |
+| `1440x900` | Compact one-row header; map wider than the analysis panel; visible splitter; unobtrusive collapsed legend and Assistant launcher. |
+| `1024x768` | Same three-track Explorer with at least 480 px map width and the header counts still in one compact row. |
+| `768x900` | Single-column Explorer, no splitter, compact header, reachable map legend, and inset Assistant bottom sheet. |
+| `390x844` | Two-row compact header without horizontal overflow; bounded scrolling legend; near-full-width Assistant bottom sheet; usable map after close. |
+
+Temporary screenshots are inspection artifacts only and must be removed after review. Record fresh
+test totals, viewport observations, GPU allocation/VRAM, and real-AI latency for the acceptance run;
+do not carry Phase 3G or Phase 3I numbers forward. Backend/model/data/launcher behavior is outside
+the Phase 3J change set, and conversational paraphrase robustness remains deferred.
 
 ## Phase 2A4 Isolated Browser Acceptance
 

@@ -1,4 +1,4 @@
-# Experimental Data-Driven Resilience Curve Prototype
+# Roadway Resilience Explorer — Prototype
 
 This is a local experimental frontend for the data-driven resilience curve v0 results. It is not the stable deployed `coldwave-demo` dashboard and should not replace the stable score formulas.
 
@@ -106,16 +106,16 @@ unchanged.
 
 ### Analysis sidebar and Q(t)
 
-The left panel is now reserved for analytical evidence, in this order:
+At the Phase 3I checkpoint, the left panel was reserved for analytical evidence.
+Phase 3J retains that evidence order while moving application identity and statewide
+counts into the shared header:
 
-1. compact page and event context;
-2. statewide summary counts;
-3. control-section search;
-4. map-layer selection;
-5. selected-section identity, warnings, and summary metrics;
-6. Q(t) curve and phase metrics;
-7. Tier 1/2 context and delay proxy; and
-8. method and limitations.
+1. control-section search;
+2. map-layer selection;
+3. selected-section identity, warnings, and summary metrics;
+4. Q(t) curve and phase metrics;
+5. Tier 1/2 context and delay proxy; and
+6. method and limitations.
 
 The Q(t) details region is open by default. Before selection it says **Select a control section to
 view Q(t).** Selecting a supported section still lazy-loads the existing curve JSON and renders the
@@ -232,6 +232,61 @@ unreviewed tools are declined.
 
 Conversational paraphrase robustness remains a deferred item. Phase 3I does not change routing,
 prompts, tool descriptions, or backend orchestration merely to accept additional wording variants.
+
+## Phase 3J Map-First Visual Polish
+
+Phase 3J changes frontend presentation and prepares a maintainable view seam only. The visible
+application title is **Roadway Resilience Explorer**, with a secondary **Prototype** badge and
+compact **Winter Weather Pilot · Data-driven Review** context. A thin shared header presents the
+four already-reviewed statewide values exactly once: 10,029 sections, 3,842 observed curves,
+3,473 valid phases, and 18 censored recoveries. They are informational, not clickable, and no
+percentage or new statewide metric is inferred.
+
+The root application shell now separates shared chrome from
+`#explorerView[data-app-view="explorer"]`. This is a stable insertion seam for a future real
+Overview and navigation, but Phase 3J deliberately adds no Overview control, statewide chart, or
+global AI behavior. See [OVERVIEW_ARCHITECTURE.md](OVERVIEW_ARCHITECTURE.md) for the future
+deterministic aggregate boundary and unresolved district source.
+
+### Explorer evidence and map
+
+- The map remains the dominant desktop workspace. The 420 px default resizable analysis panel,
+  320 px minimum, dynamic 650 px maximum, 480 px minimum map reserve, keyboard separator, and
+  throttled Leaflet/Chart resize behavior are retained.
+- Selected route/CS identity is visually primary. Detection/class/support/TMC badges remain
+  textual, and the no-sustained-drop, censored-recovery, and no-observed-support warnings now sit
+  directly in the selected-section evidence region rather than inside a collapsed method region.
+- Four unchanged headline values use a compact two-column value-first visual hierarchy. One
+  visible note carries their event/method limitation; a censored recovery qualification remains
+  explicit rather than color-only or hover-only.
+- Q(t) remains open and lazy-loaded. The raw observations are quieter, the existing centered
+  six-observation rolling median and event markers are visually stronger, and the chart spacing,
+  grid, and axis text are calmer. Data, smoothing, phase timing, mathematical domains, markers,
+  and warnings are unchanged; observations are not elapsed hours and missing hours are not
+  interpolated.
+- The current OpenStreetMap source is unchanged. A modest saturation/contrast/brightness filter is
+  scoped only to tile images; resilience Canvas geometry, controls, chart, warnings, and Assistant
+  are not filtered.
+- Selection now uses a white outer halo and dark casing around the existing thematic-color core.
+  The clones are noninteractive, are replaced on each selection, and refresh on layer/zoom changes
+  without changing classifications or unselected styles.
+- The unique reviewed legend is a collapsed, keyboard-accessible Leaflet map control. Its class
+  meanings, quantile breaks, status colors, continuous ranges, and p99-cap wording are unchanged.
+  The map-layer selector remains in the analysis panel and is not duplicated.
+
+### Retained Assistant boundary
+
+The floating Assistant remains collapsed by default, lower-right on desktop, and an inset bottom
+sheet on narrow screens. It retains the one timeline, deterministic **Verified result** actions,
+free-form **AI-assisted response**, safe rendering, cancellation/staleness protection, and zero
+request behavior on page load, section/layer changes, and open/close. Phase 3J aligns only its
+visual chrome with the refined interface. The browser still calls FastAPI only and never calls
+Ollama or port 11434 directly.
+
+Backend HEAD `5edc4688514f2c47ae3e8c03f50b853c0f5d8108`, model configuration,
+analytical data, Q(t), Candidate B, metrics, warning contracts, snapshots, and the accepted Phase
+3H launcher are unchanged. Statewide AI analytics and the candidate network-summary tools are not
+implemented. Conversational paraphrase robustness remains deferred.
 
 ### Accepted local demo launcher
 
