@@ -1069,7 +1069,8 @@ class ProductionPageQA:
 
         filters = self.evaluate(
             "(() => { const tile = document.querySelector("
-            "'.leaflet-tile-pane img.resilience-basemap-tile'); const overlay = "
+            "'.leaflet-tile-pane .resilience-basemap-tile img.leaflet-tile'); "
+            "const overlay = "
             "document.querySelector('.leaflet-overlay-pane canvas'); return {"
             "tile: tile ? getComputedStyle(tile).filter : '',"
             "overlay: overlay ? getComputedStyle(overlay).filter : 'none',"

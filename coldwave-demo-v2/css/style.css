@@ -1369,7 +1369,7 @@ button:disabled {
   height: 100%;
 }
 
-.leaflet-tile-pane img.resilience-basemap-tile {
+.leaflet-tile-pane .resilience-basemap-tile img.leaflet-tile {
   filter: saturate(0.72) contrast(0.9) brightness(1.04);
 }
 

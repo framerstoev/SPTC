@@ -315,7 +315,7 @@ def static_checks() -> None:
     assert 'mapLegendControl = L.control({ position: "bottomleft" })' in app
     assert app.index("setupMapLegendControl();") < app.index("updateLegend();")
     assert 'className: "resilience-basemap-tile"' in app
-    assert ".leaflet-tile-pane img.resilience-basemap-tile" in style
+    assert ".leaflet-tile-pane .resilience-basemap-tile img.leaflet-tile" in style
     assert "filter: saturate(0.72) contrast(0.9) brightness(1.04);" in style
     for forbidden_filter_target in (
         "#map {\n  filter:",
