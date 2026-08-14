@@ -525,6 +525,7 @@ function phaseValue(props, field, formatter = fmt) {
 function renderMetrics(props) {
   const noSustained = isNoSustainedDrop(props);
   const censored = isCensored(props);
+  document.getElementById("curveMetricBlock").hidden = false;
   document.getElementById("selectedTitle").textContent = `${props.ROUTE_KEY || "Route unknown"} | CS ${props.CTRL_SECT_ || props.CTRL_SECT_NORM}`;
   document.getElementById("selectedSub").textContent = `${props.county_name || props.county || "County unknown"} | ${props.event_id || "coldwave_2026_01"}`;
 
@@ -768,7 +769,7 @@ function buildLocalMetricActionText(layerName) {
     ? mapping[layerName]
     : null;
   if (!metricName) return null;
-  return `The current map layer maps to the reviewed API metric ${metricName}. This local template identifies the mapping only; it does not assign a preferred direction or interpret the selected section's relative standing.`;
+  return `The current map layer corresponds to the reviewed metric ${metricName}. This result identifies the metric only; it does not assign a preferred direction or interpret the selected section's relative standing.`;
 }
 
 function buildAssistantActionSnapshot(props) {
@@ -792,9 +793,44 @@ function setupAssistant() {
     assistantActionController = window.SPTCAssistantActions.createController({ document });
   }
   if (window.SPTCAssistantChat?.createController) {
-    assistantChatController = window.SPTCAssistantChat.createController({ document });
+    assistantChatController = window.SPTCAssistantChat.createController({
+      document,
+      resetTimelineOnContextChange: false,
+      showContextResetNotice: false
+    });
   }
   resetAssistantForSelection(null);
+}
+
+function setupFloatingAssistant() {
+  const launcher = document.getElementById("assistantLauncher");
+  const panel = document.getElementById("assistantPanel");
+  const close = document.getElementById("assistantClose");
+
+  function setExpanded(expanded, { restoreFocus = false } = {}) {
+    launcher.setAttribute("aria-expanded", expanded ? "true" : "false");
+    panel.hidden = !expanded;
+    panel.setAttribute("aria-hidden", expanded ? "false" : "true");
+    if (expanded) {
+      close.focus();
+    } else if (restoreFocus) {
+      launcher.focus();
+    }
+  }
+
+  launcher.addEventListener("click", () => setExpanded(true));
+  launcher.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setExpanded(true);
+  });
+  close.addEventListener("click", () => setExpanded(false, { restoreFocus: true }));
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || panel.hidden) return;
+    event.preventDefault();
+    setExpanded(false, { restoreFocus: true });
+  });
+  setExpanded(false);
 }
 
 function nearestIndex(labels, timestamp) {
@@ -881,6 +917,7 @@ function shortDate(label) {
 async function renderCurve(props) {
   const requestId = ++curveRequestId;
   const card = document.getElementById("curveCard");
+  const chartWrap = document.getElementById("curveChartWrap");
   const note = document.getElementById("curveNote");
   const markerLegend = document.getElementById("phaseMarkerLegend");
   if (curveChart) {
@@ -889,16 +926,20 @@ async function renderCurve(props) {
   }
   phaseOverlayState = null;
   markerLegend.innerHTML = "";
+  markerLegend.hidden = true;
 
   if (!hasCurve(props)) {
     card.style.display = "block";
+    chartWrap.hidden = true;
     note.textContent = "No Q(t) curve JSON is available for this control section.";
     return;
   }
 
+  chartWrap.hidden = false;
   note.textContent = "Loading full-window Q(t) curve...";
   const response = await fetch(props.curve_file);
   if (!response.ok) {
+    chartWrap.hidden = true;
     note.textContent = "Curve JSON could not be loaded.";
     return;
   }
@@ -922,6 +963,7 @@ async function renderCurve(props) {
   };
 
   if (!noSustained) {
+    markerLegend.hidden = false;
     markerLegend.innerHTML = `
       <span style="color:#b91c1c"><i></i>Detected onset</span>
       <span style="color:#7f1d1d"><i></i>Minimum Q(t)</span>
@@ -1145,7 +1187,7 @@ function setupAnalysisSplitter() {
     event.preventDefault();
   });
 
-  splitter.addEventListener("pointermove", event => {
+  window.addEventListener("pointermove", event => {
     if (analysisResizePointerId !== event.pointerId || !desktopAnalysisLayoutActive()) return;
     const shellLeft = shell.getBoundingClientRect().left
       + Number.parseFloat(window.getComputedStyle(shell).paddingLeft || "0");
@@ -1153,11 +1195,11 @@ function setupAnalysisSplitter() {
     event.preventDefault();
   });
 
-  splitter.addEventListener("pointerup", event => {
+  window.addEventListener("pointerup", event => {
     if (analysisResizePointerId !== event.pointerId) return;
     finishAnalysisResize(splitter);
   });
-  splitter.addEventListener("pointercancel", event => {
+  window.addEventListener("pointercancel", event => {
     if (analysisResizePointerId !== event.pointerId) return;
     finishAnalysisResize(splitter);
   });
@@ -1247,6 +1289,7 @@ document.getElementById("layerSelect").addEventListener("change", event => {
   resetAssistantForSelection(selectedProps);
 });
 
+setupFloatingAssistant();
 setupAssistant();
 setupCurveDetails();
 setupAnalysisSplitter();

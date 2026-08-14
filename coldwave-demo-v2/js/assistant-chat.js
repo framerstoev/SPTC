@@ -13,28 +13,28 @@
     clarification_required: "Clarification required",
     unsupported_request: "Unsupported request",
     assistant_disabled: "Assistant disabled",
-    model_unavailable: "Model unavailable",
+    model_unavailable: "AI unavailable",
     tool_error: "Tool error",
-    invalid_model_response: "Invalid model response"
+    invalid_model_response: "Response rejected"
   });
   const completionStatusText = Object.freeze({
-    completed: "Local Qwen response ready.",
+    completed: "",
     clarification_required: "Clarification required.",
     unsupported_request: "Request outside the reviewed assistant scope.",
-    assistant_disabled: "The local chatbot is not enabled.",
-    model_unavailable: "The local Qwen model is unavailable.",
+    assistant_disabled: "AI Assistant unavailable.",
+    model_unavailable: "AI Assistant unavailable.",
     tool_error: "The deterministic tool could not complete.",
-    invalid_model_response: "The local model response was not safely accepted."
+    invalid_model_response: "The AI response was not safely accepted."
   });
   const clientFailureText = Object.freeze({
-    invalid_request: "The question could not be sent because its local request was invalid.",
-    backend_unavailable: "The local assistant service is unavailable. The deterministic fixed actions remain available.",
-    request_timeout: "The local Qwen request did not complete. The deterministic fixed actions remain available.",
-    request_cancelled: "The local Qwen request was cancelled.",
-    backend_validation_error: "The local assistant service rejected the bounded request.",
-    invalid_json: "The local assistant returned an unreadable response.",
-    invalid_response: "The local assistant response did not pass frontend validation.",
-    unexpected_status: "The local assistant returned an unexpected status."
+    invalid_request: "The question could not be sent because the request was invalid.",
+    backend_unavailable: "AI Assistant unavailable. Verified quick actions remain available.",
+    request_timeout: "The AI request did not complete. Verified quick actions remain available.",
+    request_cancelled: "The AI request was cancelled.",
+    backend_validation_error: "The review service rejected the bounded request.",
+    invalid_json: "The AI Assistant returned an unreadable response.",
+    invalid_response: "The AI response did not pass frontend validation.",
+    unexpected_status: "The AI Assistant returned an unexpected status."
   });
 
   function createController(options = {}) {
@@ -59,7 +59,7 @@
       disclaimer: documentRef.getElementById("assistantDisclaimer"),
       interactionNote: documentRef.getElementById("assistantInteractionNote"),
       agentRegion: documentRef.getElementById("assistantAgent"),
-      chatMessages: documentRef.getElementById("assistantChatMessages"),
+      chatMessages: documentRef.getElementById("assistantMessages"),
       chatStatus: documentRef.getElementById("assistantChatStatus"),
       suggestions: documentRef.getElementById("assistantSuggestedQuestions"),
       composer: documentRef.getElementById("assistantComposer"),
@@ -71,6 +71,8 @@
     const suggestionButtons = Array.from(
       elements.suggestions?.querySelectorAll("button[data-assistant-question]") || []
     );
+    const resetTimelineOnContextChange = options.resetTimelineOnContextChange !== false;
+    const showContextResetNotice = options.showContextResetNotice !== false;
     let context = {
       sectionId: null,
       activeLayer: null,
@@ -105,9 +107,9 @@
 
     function responseSourceLabel(status) {
       if (["completed", "clarification_required", "unsupported_request"].includes(status)) {
-        return "Local Qwen3 8B + deterministic tools";
+        return "AI-assisted response";
       }
-      return "Local assistant status";
+      return "AI Assistant status";
     }
 
     function readableIdentifier(value) {
@@ -224,10 +226,10 @@
 
     function displayedAnswer(response) {
       const reviewedStatusText = {
-        assistant_disabled: "The local chatbot is not enabled. The deterministic fixed actions remain available.",
-        model_unavailable: "The local Qwen model is unavailable. The deterministic fixed actions remain available.",
+        assistant_disabled: "AI Assistant is unavailable. Verified quick actions remain available.",
+        model_unavailable: "AI Assistant is unavailable. Verified quick actions remain available.",
         tool_error: "The deterministic tool could not complete the request. No raw error was displayed.",
-        invalid_model_response: "The local model response could not be safely accepted. Rejected model text was not displayed."
+        invalid_model_response: "The AI response could not be safely accepted. Rejected response text was not displayed."
       };
       return reviewedStatusText[response.status] || response.answer;
     }
@@ -236,17 +238,20 @@
       const message = documentRef.createElement("article");
       message.className = `assistant-chat-message assistant status-${response.status}`;
       message.setAttribute("data-chat-role", "assistant");
+      message.setAttribute("data-result-kind", "ai-assisted");
       message.setAttribute("data-assistant-status", response.status);
       message.appendChild(textElement(
         "p",
         "assistant-chat-source",
         responseSourceLabel(response.status)
       ));
-      message.appendChild(textElement(
-        "p",
-        "assistant-chat-response-status",
-        `Status: ${responseStatusLabels[response.status] || "Unavailable"}`
-      ));
+      if (response.status !== "completed") {
+        message.appendChild(textElement(
+          "p",
+          "assistant-chat-response-status",
+          `Status: ${responseStatusLabels[response.status] || "Unavailable"}`
+        ));
+      }
       if (response.intent) {
         appendDefinition(message, "Intent", readableIdentifier(response.intent));
       }
@@ -302,7 +307,13 @@
 
     function setLoading(loading) {
       elements.agentRegion.setAttribute("aria-busy", loading ? "true" : "false");
-      elements.chatMessages.setAttribute("aria-busy", loading ? "true" : "false");
+      elements.chatMessages.setAttribute("data-chat-busy", loading ? "true" : "false");
+      elements.chatMessages.setAttribute(
+        "aria-busy",
+        loading || elements.chatMessages.getAttribute("data-action-busy") === "true"
+          ? "true"
+          : "false"
+      );
       elements.input.disabled = !agentMode || loading;
       elements.cancel.hidden = !loading;
       elements.cancel.disabled = !agentMode || !loading;
@@ -369,10 +380,13 @@
         generation += 1;
         history = [];
         elements.input.value = "";
-        elements.chatMessages.replaceChildren();
-        if (contextInitialized && agentMode) {
+        elements.chatStatus.textContent = "";
+        if (resetTimelineOnContextChange) {
+          elements.chatMessages.replaceChildren();
+        }
+        if (contextInitialized && agentMode && showContextResetNotice) {
           appendNotice(contextResetText(sectionChanged, metricChanged));
-          elements.chatStatus.textContent = "Chat context reset.";
+          elements.chatStatus.textContent = "Context reset.";
         }
       }
       contextInitialized = true;
@@ -438,7 +452,7 @@
       pending = request;
       appendUserMessage(message);
       elements.input.value = "";
-      elements.chatStatus.textContent = "Local Qwen is working…";
+      elements.chatStatus.textContent = "AI is working…";
       setLoading(true);
 
       try {
@@ -450,7 +464,7 @@
         renderAssistantResponse(response);
         boundedHistoryWith(message, response.answer);
         elements.chatStatus.textContent = completionStatusText[response.status]
-          || "Local assistant response ready.";
+          || "";
         setLoading(false);
         focusInput();
         return true;
@@ -467,8 +481,8 @@
 
     function cancel() {
       if (!abortPending()) return false;
-      appendNotice("Local Qwen request cancelled. No assistant result was added to history.");
-      elements.chatStatus.textContent = "Local Qwen request cancelled.";
+      appendNotice("AI request cancelled. No result was added to history.");
+      elements.chatStatus.textContent = "AI request cancelled.";
       focusInput();
       return true;
     }
@@ -483,12 +497,13 @@
       elements.cancel.hidden = true;
       elements.cancel.disabled = true;
       if (agentMode) {
-        elements.disclaimer.textContent = "Local Qwen explains evidence returned by reviewed deterministic tools. This local-only assistant is experimental and does not provide causal, predictive, or investment advice.";
-        elements.interactionNote.textContent = "The three fixed actions above remain deterministic. Free-form questions below use the local Qwen assistant endpoint.";
-        elements.chatStatus.textContent = "Ready for a local question.";
+        elements.disclaimer.textContent = "Ask about the selected roadway section and resilience evidence.";
+        elements.interactionNote.textContent = "Verified quick actions and AI-assisted responses remain distinct.";
+        elements.chatStatus.textContent = "";
       } else {
-        elements.disclaimer.textContent = "Deterministic local templates and reviewed read-only backend tools only. No language model is connected in this mode.";
-        elements.interactionNote.textContent = "Fixed reviewed actions only; free-form input is not available in this mode.";
+        elements.disclaimer.textContent = "Use quick actions to review the selected roadway section and current metric.";
+        elements.interactionNote.textContent = "Free-form questions are unavailable in this review mode.";
+        elements.chatStatus.textContent = "";
       }
       setLoading(false);
     }

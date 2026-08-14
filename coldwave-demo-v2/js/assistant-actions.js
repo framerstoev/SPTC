@@ -21,15 +21,20 @@
     review: "review"
   });
   const fallbackLabels = Object.freeze({
-    backend_unavailable: "Backend unavailable — local fallback",
-    request_timeout: "Backend timeout — local fallback",
-    section_not_found: "Section unavailable — local fallback",
-    metric_not_found: "Metric unavailable — local fallback",
-    backend_validation_error: "Backend rejected request — local fallback",
-    snapshot_unavailable: "Snapshot unavailable — local fallback",
-    invalid_json: "Backend response unavailable — local fallback",
-    invalid_response: "Backend response unavailable — local fallback",
-    unexpected_status: "Backend response unavailable — local fallback"
+    backend_unavailable: "Review service unavailable — showing a local result.",
+    request_timeout: "Review request timed out — showing a local result.",
+    section_not_found: "Section result unavailable — showing a local result.",
+    metric_not_found: "Metric result unavailable — showing a local result.",
+    backend_validation_error: "Review request was not accepted — showing a local result.",
+    snapshot_unavailable: "Reviewed snapshot unavailable — showing a local result.",
+    invalid_json: "Review result unavailable — showing a local result.",
+    invalid_response: "Review result unavailable — showing a local result.",
+    unexpected_status: "Review result unavailable — showing a local result."
+  });
+  const actionLabels = Object.freeze({
+    section: "Explain this section",
+    metric: "Explain the current metric",
+    review: "Generate review note"
   });
 
   function createController(options = {}) {
@@ -61,7 +66,6 @@
       status: documentRef.getElementById("assistantStatus"),
       messages: documentRef.getElementById("assistantMessages"),
       actionAvailability: documentRef.getElementById("assistantActionAvailability"),
-      reviewContainer: documentRef.getElementById("assistantReviewContainer"),
       sectionButton: documentRef.getElementById("assistantExplainSection"),
       metricButton: documentRef.getElementById("assistantExplainMetric"),
       reviewButton: documentRef.getElementById("assistantGenerateReviewNote")
@@ -92,6 +96,7 @@
       message.textContent = text;
       elements.messages.appendChild(message);
       elements.messages.scrollTop = elements.messages.scrollHeight;
+      return message;
     }
 
     function replaceMessage(text) {
@@ -107,9 +112,37 @@
       return element;
     }
 
-    function replaceStructuredMessage(message) {
-      elements.messages.replaceChildren(message);
-      elements.messages.scrollTop = 0;
+    function replaceTimelineEntry(current, replacement) {
+      const parent = current?.parentNode;
+      if (!parent) {
+        elements.messages.appendChild(replacement);
+      } else {
+        const children = Array.from(parent.children).map(child => (
+          child === current ? replacement : child
+        ));
+        parent.replaceChildren(...children);
+      }
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+    }
+
+    function appendActionInvocation(action) {
+      const message = textElement(
+        "div",
+        "assistant-message user quick-action",
+        actionLabels[action]
+      );
+      message.setAttribute("data-assistant-invocation", action);
+      elements.messages.appendChild(message);
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+    }
+
+    function verifiedTextMessage(text) {
+      const result = documentRef.createElement("div");
+      result.className = "assistant-message assistant assistant-result";
+      result.setAttribute("data-result-kind", "verified");
+      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
+      result.appendChild(textElement("p", "assistant-result-note", text));
+      return result;
     }
 
     function appendDefinition(result, label, value) {
@@ -130,7 +163,6 @@
 
     function clearReview() {
       activeReview = null;
-      elements.reviewContainer.replaceChildren();
     }
 
     function updateState(requestState, statusText, currentAction = null) {
@@ -144,9 +176,13 @@
         currentAction
       };
       if (statusText !== null) elements.status.textContent = statusText;
+      const actionBusy = requestState === requestStates.loading;
+      elements.messages.setAttribute("data-action-busy", actionBusy ? "true" : "false");
       elements.messages.setAttribute(
         "aria-busy",
-        requestState === requestStates.loading ? "true" : "false"
+        actionBusy || elements.messages.getAttribute("data-chat-busy") === "true"
+          ? "true"
+          : "false"
       );
     }
 
@@ -157,16 +193,16 @@
     }
 
     function baseStatusText() {
-      if (!context.sectionId) return "No section selected";
-      return backendActionsEnabled ? "Deterministic fixed actions ready" : "Local template preview";
+      if (!context.sectionId) return "Selected section required.";
+      return "";
     }
 
     function renderPreview() {
       clearReview();
       if (!context.sectionId) {
-        replaceMessage("Select a control section to ground the assistant context.");
+        replaceMessage("Select a control section to use section-based actions.");
       } else {
-        replaceMessage(context.localSectionText || "A local section preview is unavailable.");
+        replaceMessage(`Context updated to CS_${context.sectionId}. No request was sent.`);
       }
       updateState(baseRequestState(), baseStatusText());
     }
@@ -177,11 +213,14 @@
       elements.reviewButton.disabled = !hasSelection;
       elements.metricButton.disabled = !hasSelection || !context.activeMetric;
       if (!hasSelection) {
-        elements.actionAvailability.textContent = "Select a control section to enable the fixed actions.";
+        elements.actionAvailability.hidden = false;
+        elements.actionAvailability.textContent = "Select a control section to use section-based actions.";
       } else if (!context.activeMetric) {
+        elements.actionAvailability.hidden = false;
         elements.actionAvailability.textContent = "The current layer has no reviewed metric explanation. Section and review-note actions remain available.";
       } else {
-        elements.actionAvailability.textContent = "Three fixed reviewed actions are available for the current selection.";
+        elements.actionAvailability.textContent = "";
+        elements.actionAvailability.hidden = true;
       }
     }
 
@@ -191,6 +230,12 @@
       pending = null;
       generation += 1;
       request.controller.abort();
+      if (request.entry?.parentNode) {
+        replaceTimelineEntry(
+          request.entry,
+          textElement("div", "assistant-chat-notice", "Quick action cancelled.")
+        );
+      }
       updateState(requestStates.cancelledOrStale, null, request.action);
     }
 
@@ -224,7 +269,7 @@
       const identityChanged = normalized.sectionId !== context.sectionId
         || normalized.activeLayer !== context.activeLayer
         || normalized.activeMetric !== context.activeMetric;
-      if (!identityChanged && pending) {
+      if (!identityChanged) {
         context = normalized;
         updateAvailability();
         return;
@@ -238,19 +283,19 @@
 
     function renderLocalAction(action) {
       clearReview();
+      appendActionInvocation(action);
+      let text;
       if (action === actions.metric) {
-        replaceMessage(
-          context.localMetricText
-          || "The current layer does not map to a reviewed metric explanation."
-        );
+        text = context.localMetricText
+          || "The current layer does not map to a reviewed metric explanation.";
       } else if (action === actions.review) {
-        replaceMessage(
-          `A local deterministic backend is required to generate the review-note draft. ${context.localSectionText || "A concise local section preview is unavailable."}`
-        );
+        text = `The review-note service is required to generate the structured draft. ${context.localSectionText || "A concise local section result is unavailable."}`;
       } else {
-        replaceMessage(context.localSectionText || "A local section preview is unavailable.");
+        text = context.localSectionText || "A local section result is unavailable.";
       }
-      updateState(requestStates.idle, "Local template", action);
+      elements.messages.appendChild(verifiedTextMessage(text));
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+      updateState(requestStates.idle, "", action);
     }
 
     function localFallbackText(action) {
@@ -259,17 +304,22 @@
           || "The current layer does not map to a reviewed metric explanation.";
       }
       if (action === actions.review) {
-        return `The backend review-note draft is unavailable; no draft was generated. ${context.localSectionText || "A concise local section preview is unavailable."}`;
+        return `The structured review-note draft is unavailable; no draft was generated. ${context.localSectionText || "A concise local section result is unavailable."}`;
       }
-      return context.localSectionText || "A concise local section preview is unavailable.";
+      return context.localSectionText || "A concise local section result is unavailable.";
     }
 
-    function renderBackendFallback(action, errorCode) {
+    function renderBackendFallback(action, errorCode, request = null) {
       clearReview();
-      replaceMessage(localFallbackText(action));
+      const result = verifiedTextMessage(localFallbackText(action));
+      if (request?.entry) {
+        replaceTimelineEntry(request.entry, result);
+      } else {
+        elements.messages.appendChild(result);
+      }
       updateState(
         requestStates.fallbackSuccess,
-        fallbackLabels[errorCode] || "Backend response unavailable — local fallback",
+        fallbackLabels[errorCode] || "Review result unavailable — showing a local result.",
         action
       );
     }
@@ -287,10 +337,11 @@
       return block;
     }
 
-    function renderSectionResult(response) {
+    function renderSectionResult(response, request) {
       const result = documentRef.createElement("div");
       result.className = "assistant-message assistant assistant-result";
-      result.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
+      result.setAttribute("data-result-kind", "verified");
+      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
       result.appendChild(textElement("h3", null, response.identity.display_cs_id));
       appendDefinition(
         result,
@@ -374,13 +425,14 @@
         "assistant-result-note",
         "Planning context and observed Tier 3 evidence describe different parts of this event-specific review."
       ));
-      replaceStructuredMessage(result);
+      replaceTimelineEntry(request.entry, result);
     }
 
-    function renderMetricResult(response) {
+    function renderMetricResult(response, request) {
       const result = documentRef.createElement("div");
       result.className = "assistant-message assistant assistant-result";
-      result.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
+      result.setAttribute("data-result-kind", "verified");
+      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
       result.appendChild(textElement("h3", null, response.metric.display_name));
       result.appendChild(textElement(
         "p",
@@ -412,7 +464,7 @@
         "assistant-result-note",
         "This is a metric definition, not an interpretation of the selected section's relative standing."
       ));
-      replaceStructuredMessage(result);
+      replaceTimelineEntry(request.entry, result);
     }
 
     function reviewListBlock(title, items, listName) {
@@ -438,8 +490,9 @@
     function renderReviewResult(response, request) {
       const compact = documentRef.createElement("div");
       compact.className = "assistant-message assistant assistant-result";
+      compact.setAttribute("data-result-kind", "verified");
       compact.setAttribute("data-review-compact", "true");
-      compact.appendChild(textElement("p", "assistant-result-source", "Deterministic fixed action"));
+      compact.appendChild(textElement("p", "assistant-result-source", "Verified result"));
       compact.appendChild(textElement("h3", null, response.title));
       compact.appendChild(textElement(
         "p",
@@ -464,8 +517,6 @@
         "assistant-result-note",
         "Expand the full draft below for structured review and the human-review checklist."
       ));
-      replaceStructuredMessage(compact);
-
       const details = documentRef.createElement("details");
       details.className = "assistant-review-details";
       details.open = false;
@@ -499,7 +550,7 @@
         "human-review-checklist"
       ));
       details.appendChild(body);
-      elements.reviewContainer.appendChild(details);
+      compact.appendChild(details);
 
       const reviewToken = Object.freeze({
         generation: request.generation,
@@ -510,10 +561,9 @@
       const copyRow = documentRef.createElement("div");
       copyRow.className = "assistant-copy-row";
       const copyButton = textElement("button", null, "Copy Markdown");
-      copyButton.setAttribute("id", "assistantCopyMarkdown");
+      copyButton.className = "assistant-copy-markdown";
       copyButton.setAttribute("type", "button");
       const copyStatus = documentRef.createElement("span");
-      copyStatus.setAttribute("id", "assistantCopyStatus");
       copyStatus.className = "assistant-copy-status";
       copyStatus.setAttribute("role", "status");
       copyStatus.setAttribute("aria-live", "polite");
@@ -535,7 +585,8 @@
       });
       copyRow.appendChild(copyButton);
       copyRow.appendChild(copyStatus);
-      elements.reviewContainer.appendChild(copyRow);
+      compact.appendChild(copyRow);
+      replaceTimelineEntry(request.entry, compact);
     }
 
     function backendMethod(action) {
@@ -563,17 +614,15 @@
     function renderBackendSuccess(action, response, request) {
       clearReview();
       if (action === actions.section) {
-        renderSectionResult(response);
+        renderSectionResult(response, request);
       } else if (action === actions.metric) {
-        renderMetricResult(response);
+        renderMetricResult(response, request);
       } else {
         renderReviewResult(response, request);
       }
       updateState(
         requestStates.backendSuccess,
-        action === actions.review
-          ? "Deterministic draft for human review"
-          : "Deterministic backend result",
+        "",
         action
       );
     }
@@ -592,9 +641,11 @@
 
       const method = backendMethod(action);
       if (!method) {
+        appendActionInvocation(action);
         renderBackendFallback(action, "backend_unavailable");
         return;
       }
+      appendActionInvocation(action);
       const request = {
         generation,
         action,
@@ -603,14 +654,15 @@
         activeLayer: context.activeLayer,
         metricName: context.activeMetric
       };
-      pending = request;
       const loadingText = action === actions.metric
         ? "Loading the reviewed metric definition..."
         : action === actions.review
           ? "Loading the reviewed review-note draft..."
           : "Loading the reviewed section summary...";
-      replaceMessage(loadingText);
-      updateState(requestStates.loading, "Backend tools — loading", action);
+      request.entry = appendMessage(loadingText);
+      request.entry.className = "assistant-message assistant assistant-pending";
+      pending = request;
+      updateState(requestStates.loading, "Loading reviewed evidence…", action);
       try {
         const response = await method(request, request.controller.signal);
         if (!requestIsCurrent(request)) return;
@@ -625,19 +677,24 @@
           renderPreview();
           return;
         }
-        renderBackendFallback(action, errorCode);
+        renderBackendFallback(action, errorCode, request);
       }
     }
 
     function bindAction(button, action) {
       button.addEventListener("click", () => startAction(action));
+      button.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        startAction(action);
+      });
     }
 
-    elements.modeLabel.textContent = mode === modes.backendTools
-      ? "Backend tools"
-      : mode === modes.backendAgent
-        ? "Local Qwen + backend tools"
-        : "Local template";
+    elements.modeLabel.textContent = mode === modes.backendAgent
+      ? "AI Assistant"
+      : mode === modes.backendTools
+        ? "Review tools"
+        : "Local preview";
     bindAction(elements.sectionButton, actions.section);
     bindAction(elements.metricButton, actions.metric);
     bindAction(elements.reviewButton, actions.review);

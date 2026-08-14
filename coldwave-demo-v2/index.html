@@ -9,7 +9,7 @@
 </head>
 <body>
   <div class="app-shell">
-    <aside class="panel left-panel">
+    <aside class="panel left-panel" id="analysisPanel">
       <header class="hero">
         <h1>Experimental Roadway Resilience Explorer</h1>
         <p>Jan. 2026 Texas cold-wave case | Data-driven v2 review prototype</p>
@@ -65,56 +65,6 @@
         <div class="badge-row" id="statusBadges"></div>
       </section>
 
-      <section class="assistant-panel" aria-labelledby="assistantHeading">
-        <div class="assistant-heading">
-          <div>
-            <p class="eyebrow">Review support</p>
-            <h2 id="assistantHeading">Resilience Assistant</h2>
-          </div>
-          <div class="assistant-state-labels">
-            <span class="assistant-mode" id="assistantModeLabel">Local template</span>
-            <span class="assistant-status" id="assistantStatus" role="status" aria-live="polite" aria-atomic="true">No section selected</span>
-          </div>
-        </div>
-        <p class="assistant-disclaimer" id="assistantDisclaimer">Deterministic local templates and reviewed read-only backend tools only. No language model is connected in this mode.</p>
-        <div class="assistant-messages" id="assistantMessages" aria-label="Deterministic fixed-action result" aria-live="polite" aria-busy="false"></div>
-        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Fixed reviewed Assistant actions" aria-describedby="assistantActionAvailability">
-          <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
-          <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain the current metric</button>
-          <button id="assistantGenerateReviewNote" type="button" data-assistant-action="review" disabled>Generate review note</button>
-        </div>
-        <p class="assistant-action-availability" id="assistantActionAvailability" aria-live="polite" aria-atomic="true">Select a control section to enable the fixed actions.</p>
-        <div class="assistant-review-container" id="assistantReviewContainer"></div>
-        <p class="assistant-fixed-note" id="assistantInteractionNote">Fixed reviewed actions only; free-form input is not available in this mode.</p>
-        <div class="assistant-agent" id="assistantAgent" hidden aria-hidden="true" aria-busy="false">
-          <div class="assistant-chat-status" id="assistantChatStatus" role="status" aria-live="polite" aria-atomic="true"></div>
-          <div class="assistant-suggestion-grid" id="assistantSuggestedQuestions" role="group" aria-label="Suggested local Qwen questions">
-            <button type="button" data-assistant-question="What happened on the selected section?" data-requires-context="section">What happened on the selected section?</button>
-            <button type="button" data-assistant-question="Explain the current metric." data-requires-context="metric">Explain the current metric.</button>
-            <button type="button" data-assistant-question="Why is observed evidence unavailable here?" data-requires-context="section">Why is observed evidence unavailable here?</button>
-            <button type="button" data-assistant-question="What does the recovery-censored warning mean?" data-requires-context="section">What does the recovery-censored warning mean?</button>
-            <button type="button" data-assistant-question="Compare CS_1081 and CS_583693.">Compare CS_1081 and CS_583693.</button>
-            <button type="button" data-assistant-question="Generate a review note for this section." data-requires-context="section">Generate a review note for this section.</button>
-            <button type="button" data-assistant-question="What is the difference between planning context and observed evidence?">What is the difference between planning context and observed evidence?</button>
-            <button type="button" data-assistant-question="What kinds of questions are outside the scope of this assistant?">What kinds of questions are outside the scope of this assistant?</button>
-          </div>
-          <div class="assistant-chat-messages" id="assistantChatMessages" role="log" aria-label="Local Qwen conversation" aria-live="polite" aria-relevant="additions" aria-busy="false"></div>
-          <div class="assistant-composer" id="assistantComposer" hidden aria-hidden="true">
-            <label for="assistantInput">Ask the local Qwen assistant</label>
-            <textarea id="assistantInput" rows="3" maxlength="1000" autocomplete="off" aria-describedby="assistantComposerHint assistantCharacterCount" placeholder="Ask about reviewed sections, metrics, warnings, comparisons, or review notes." disabled></textarea>
-            <div class="assistant-composer-meta">
-              <span id="assistantComposerHint">Press Enter to send. Press Shift+Enter for a new line.</span>
-              <span id="assistantCharacterCount" aria-live="polite">0 / 1000</span>
-            </div>
-            <div class="assistant-composer-actions">
-              <button id="assistantSend" type="button" disabled>Send</button>
-              <button id="assistantCancel" type="button" hidden disabled>Cancel</button>
-            </div>
-          </div>
-          <p class="assistant-cold-start-note">First response may take longer if the local model was not pre-warmed.</p>
-        </div>
-      </section>
-
       <section class="supporting-metrics" aria-label="Selected control-section supporting metrics">
         <div class="metric-grid top-grid" id="topMetrics"></div>
       </section>
@@ -127,14 +77,14 @@
               <h3>Full-window Q(t) curve</h3>
               <p>Q(t) = speed / baseline speed profile. Q = 1 means baseline-level speed performance.</p>
             </div>
-            <div class="chart-wrap">
+            <div class="chart-wrap" id="curveChartWrap" hidden>
               <canvas id="curveChart"></canvas>
             </div>
-            <div class="phase-marker-legend" id="phaseMarkerLegend"></div>
+            <div class="phase-marker-legend" id="phaseMarkerLegend" hidden></div>
             <div class="chart-note" id="curveNote">Select a control section to view Q(t).</div>
           </div>
 
-          <div class="detail-block">
+          <div class="detail-block" id="curveMetricBlock" hidden>
             <h3>Data-driven observed curve metrics</h3>
             <div class="metric-grid" id="curveMetrics"></div>
           </div>
@@ -186,6 +136,7 @@
       id="analysisSplitter"
       role="separator"
       aria-label="Resize analysis panel"
+      aria-controls="analysisPanel"
       aria-orientation="vertical"
       aria-valuemin="320"
       aria-valuemax="650"
@@ -197,6 +148,93 @@
       <div id="map"></div>
     </main>
   </div>
+
+  <button
+    class="assistant-launcher"
+    id="assistantLauncher"
+    type="button"
+    aria-controls="assistantPanel"
+    aria-expanded="false"
+  >
+    <span class="assistant-launcher-icon" aria-hidden="true">AI</span>
+    <span>AI Assistant</span>
+  </button>
+
+  <section
+    class="assistant-panel assistant-floating-panel"
+    id="assistantPanel"
+    aria-labelledby="assistantHeading"
+    aria-hidden="true"
+    hidden
+  >
+    <header class="assistant-heading">
+      <div>
+        <p class="eyebrow">Review support</p>
+        <h2 id="assistantHeading" tabindex="-1">AI Assistant</h2>
+      </div>
+      <button class="assistant-close" id="assistantClose" type="button" aria-label="Close AI Assistant">Close</button>
+    </header>
+
+    <div class="assistant-panel-content">
+      <div class="assistant-guidance">
+        <p class="assistant-disclaimer" id="assistantDisclaimer">Ask about the selected roadway section and resilience evidence.</p>
+        <details class="assistant-scope-details">
+          <summary>Scope</summary>
+          <p>AI assists with evidence review. Predictive, causal, and investment recommendations are outside the current scope.</p>
+        </details>
+      </div>
+
+      <section class="assistant-quick-actions" aria-labelledby="assistantQuickActionsHeading">
+        <h3 id="assistantQuickActionsHeading">Quick actions</h3>
+        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Verified Assistant actions" aria-describedby="assistantActionAvailability">
+          <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
+          <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain the current metric</button>
+          <button id="assistantGenerateReviewNote" type="button" data-assistant-action="review" disabled>Generate review note</button>
+        </div>
+        <p class="assistant-action-availability" id="assistantActionAvailability" aria-live="polite" aria-atomic="true">Select a control section to use section-based actions.</p>
+      </section>
+
+      <div class="assistant-agent" id="assistantAgent" hidden aria-hidden="true" aria-busy="false">
+        <div class="assistant-chat-status" id="assistantChatStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="assistant-suggestions" id="assistantSuggestedQuestions" aria-label="Suggested AI questions">
+          <div class="assistant-suggestion-grid assistant-suggestion-primary" role="group" aria-label="Suggested questions">
+            <button type="button" data-assistant-question="What happened on the selected section?" data-requires-context="section">What happened here?</button>
+            <button type="button" data-assistant-question="What does the warning mean?" data-requires-context="section">Explain this warning.</button>
+            <button type="button" data-assistant-question="What is the difference between planning context and observed evidence?">Planning vs. observed evidence?</button>
+          </div>
+          <details class="assistant-more-suggestions">
+            <summary>More suggestions</summary>
+            <div class="assistant-suggestion-grid" role="group" aria-label="More suggested questions">
+              <button type="button" data-assistant-question="Explain the current metric." data-requires-context="metric">Explain the current metric.</button>
+              <button type="button" data-assistant-question="Why is observed evidence unavailable here?" data-requires-context="section">Why is observed evidence unavailable?</button>
+              <button type="button" data-assistant-question="Compare CS_1081 and CS_583693.">Compare two example sections.</button>
+              <button type="button" data-assistant-question="Generate a review note for this section." data-requires-context="section">Draft a review note.</button>
+              <button type="button" data-assistant-question="What kinds of questions are outside the scope of this assistant?">What is outside scope?</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="assistant-messages" id="assistantMessages" role="log" aria-label="Assistant conversation and results" aria-live="polite" aria-relevant="additions" aria-busy="false"></div>
+
+      <div class="assistant-composer" id="assistantComposer" hidden aria-hidden="true">
+        <label for="assistantInput">Ask a question</label>
+        <textarea id="assistantInput" rows="3" maxlength="1000" autocomplete="off" aria-describedby="assistantComposerHint assistantCharacterCount" placeholder="Ask about sections, metrics, warnings, comparisons, or review notes." disabled></textarea>
+        <div class="assistant-composer-meta">
+          <span id="assistantComposerHint">Enter to send; Shift+Enter for a new line.</span>
+          <span id="assistantCharacterCount" aria-live="polite">0 / 1000</span>
+        </div>
+        <div class="assistant-composer-actions">
+          <button id="assistantSend" type="button" disabled>Send</button>
+          <button id="assistantCancel" type="button" hidden disabled>Cancel</button>
+        </div>
+      </div>
+
+      <span class="visually-hidden" id="assistantModeLabel"></span>
+      <span class="visually-hidden" id="assistantInteractionNote"></span>
+      <span class="assistant-status" id="assistantStatus" role="status" aria-live="polite" aria-atomic="true"></span>
+    </div>
+  </section>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
