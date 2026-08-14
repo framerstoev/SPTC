@@ -305,6 +305,10 @@ def static_checks() -> None:
     assert "launcher.focus()" in floating_setup
     assert ".assistant-floating-panel[hidden]" in style
     assert ".assistant-more-suggestions > summary" in style
+    mobile_style = style[style.index("@media (max-width: 520px)") :]
+    assert ".assistant-agent {" in mobile_style
+    assert "max-height: 190px;" in mobile_style
+    assert "overflow-y: auto;" in mobile_style
     assert all(
         breakpoint in style
         for breakpoint in (

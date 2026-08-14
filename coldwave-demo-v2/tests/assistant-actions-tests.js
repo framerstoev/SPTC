@@ -1071,6 +1071,35 @@ module.exports = async function runAssistantActionsTests() {
     excludes(elements.assistantMessages.textContent, response.rendered_markdown);
   });
 
+  test("retained review copy remains active after a later quick action", async () => {
+    const response = reviewNoteFixture({
+      renderedMarkdown: "# Retained review\n\n- same section"
+    });
+    const copiedValues = [];
+    const clipboard = {
+      async writeText(value) {
+        copiedValues.push(value);
+      }
+    };
+    const client = {
+      async generateSectionReviewNote() {
+        return response;
+      },
+      async getSectionSummary() {
+        return summaryFixture();
+      }
+    };
+    const { controller, elements } = createHarness({ client, clipboard });
+    controller.setContext(selectedContext());
+    await controller.startAction("review");
+    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
+    await controller.startAction("section");
+    equal(byAttribute(elements.assistantMessages, "data-result-kind").length, 2);
+    await copyButton.click();
+    equal(copiedValues.length, 1);
+    equal(copiedValues[0], response.rendered_markdown);
+  });
+
   test("successful Markdown copy is announced accessibly", async () => {
     const clipboard = { async writeText() {} };
     const client = {

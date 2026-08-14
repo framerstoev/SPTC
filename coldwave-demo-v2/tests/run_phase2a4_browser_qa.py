@@ -1468,6 +1468,42 @@ class ProductionPageQA:
                         f"{width}x{height} uses a near-full-width Assistant bottom sheet",
                         json.dumps(layout, sort_keys=True),
                     )
+                if width == 390 and not self.evaluate(
+                    "document.querySelector('#assistantAgent').hidden"
+                ):
+                    self.evaluate(
+                        "document.querySelector('.assistant-more-suggestions').open = true"
+                    )
+                    time.sleep(0.1)
+                    expanded = self.evaluate(
+                        "(() => {"
+                        "const panel = document.querySelector('#assistantPanel')"
+                        ".getBoundingClientRect();"
+                        "const agentElement = document.querySelector('#assistantAgent');"
+                        "const composer = document.querySelector('#assistantComposer')"
+                        ".getBoundingClientRect();"
+                        "return {open: document.querySelector('.assistant-more-suggestions').open,"
+                        "overflowY: getComputedStyle(agentElement).overflowY,"
+                        "agentClientHeight: agentElement.clientHeight,"
+                        "agentScrollHeight: agentElement.scrollHeight,"
+                        "composerTop: composer.top, composerBottom: composer.bottom,"
+                        "panelTop: panel.top, panelBottom: panel.bottom};"
+                        "})()"
+                    )
+                    self.report.check(
+                        expanded["open"]
+                        and expanded["overflowY"] in {"auto", "scroll"}
+                        and expanded["agentScrollHeight"]
+                        > expanded["agentClientHeight"]
+                        and expanded["composerTop"] >= expanded["panelTop"] - 1
+                        and expanded["composerBottom"]
+                        <= expanded["panelBottom"] + 1,
+                        "390x844 bounds expanded suggestions without clipping the composer",
+                        json.dumps(expanded, sort_keys=True),
+                    )
+                    self.evaluate(
+                        "document.querySelector('.assistant-more-suggestions').open = false"
+                    )
             screenshot = self.page.command(
                 "Page.captureScreenshot",
                 {"format": "png", "fromSurface": True},

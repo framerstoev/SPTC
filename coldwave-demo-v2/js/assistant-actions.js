@@ -79,7 +79,6 @@
     };
     let generation = 0;
     let pending = null;
-    let activeReview = null;
     let state = {
       mode,
       requestState: requestStates.noSelection,
@@ -161,10 +160,6 @@
       return String(value).replaceAll("_", " ");
     }
 
-    function clearReview() {
-      activeReview = null;
-    }
-
     function updateState(requestState, statusText, currentAction = null) {
       state = {
         mode,
@@ -198,7 +193,6 @@
     }
 
     function renderPreview() {
-      clearReview();
       if (!context.sectionId) {
         replaceMessage("Select a control section to use section-based actions.");
       } else {
@@ -282,7 +276,6 @@
     }
 
     function renderLocalAction(action) {
-      clearReview();
       appendActionInvocation(action);
       let text;
       if (action === actions.metric) {
@@ -310,7 +303,6 @@
     }
 
     function renderBackendFallback(action, errorCode, request = null) {
-      clearReview();
       const result = verifiedTextMessage(localFallbackText(action));
       if (request?.entry) {
         replaceTimelineEntry(request.entry, result);
@@ -553,11 +545,13 @@
       compact.appendChild(details);
 
       const reviewToken = Object.freeze({
-        generation: request.generation,
         sectionId: request.sectionId,
         markdown: response.rendered_markdown
       });
-      activeReview = reviewToken;
+      const reviewEntryIsCurrent = () => (
+        compact.parentNode === elements.messages
+        && context.sectionId === reviewToken.sectionId
+      );
       const copyRow = documentRef.createElement("div");
       copyRow.className = "assistant-copy-row";
       const copyButton = textElement("button", null, "Copy Markdown");
@@ -569,17 +563,17 @@
       copyStatus.setAttribute("aria-live", "polite");
       copyStatus.setAttribute("aria-atomic", "true");
       copyButton.addEventListener("click", async () => {
-        if (activeReview !== reviewToken) return;
+        if (!reviewEntryIsCurrent()) return;
         if (!clipboard || typeof clipboard.writeText !== "function") {
           copyStatus.textContent = "Clipboard unavailable.";
           return;
         }
         try {
           await clipboard.writeText(reviewToken.markdown);
-          if (activeReview !== reviewToken) return;
+          if (!reviewEntryIsCurrent()) return;
           copyStatus.textContent = "Copied Markdown.";
         } catch {
-          if (activeReview !== reviewToken) return;
+          if (!reviewEntryIsCurrent()) return;
           copyStatus.textContent = "Copy failed.";
         }
       });
@@ -612,7 +606,6 @@
     }
 
     function renderBackendSuccess(action, response, request) {
-      clearReview();
       if (action === actions.section) {
         renderSectionResult(response, request);
       } else if (action === actions.metric) {
@@ -633,7 +626,6 @@
       if (action === actions.metric && !context.activeMetric) return;
       abortPending();
       generation += 1;
-      clearReview();
       if (!backendActionsEnabled) {
         renderLocalAction(action);
         return;

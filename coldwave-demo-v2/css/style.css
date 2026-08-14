@@ -1335,6 +1335,12 @@ button:disabled {
     min-height: 44px;
   }
 
+  .assistant-agent {
+    max-height: 190px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .assistant-composer textarea {
     min-height: 58px;
     max-height: 92px;
