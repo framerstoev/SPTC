@@ -742,6 +742,354 @@ class ProductionPageQA:
             True, "Assistant launcher, close control, and focus return work"
         )
 
+    def application_shell_acceptance(self) -> None:
+        shell = self.evaluate(
+            "(() => {"
+            "const header = document.querySelector('.app-header');"
+            "const sidebar = document.querySelector('#analysisPanel');"
+            "const view = document.querySelector('[data-app-view=explorer]');"
+            "const stats = Array.from(header.querySelectorAll('.statewide-status-item'))"
+            ".map(node => ({label: node.querySelector('dt').textContent.trim(), "
+            "value: node.querySelector('dd').textContent.trim()}));"
+            "return {"
+            "title: header.querySelector('h1').textContent.trim(),"
+            "badge: header.querySelector('.prototype-badge').textContent.trim(),"
+            "context: header.querySelector('.app-context').textContent.trim(),"
+            "stats, percent: header.textContent.includes('%'),"
+            "rootView: document.querySelector('[data-application-shell]')"
+            ".dataset.activeView,"
+            "viewRole: view.dataset.viewRole, viewCount: document.querySelectorAll("
+            "'[data-app-view]').length, overviewControls: Array.from("
+            "document.querySelectorAll('button,a')).filter(node => "
+            "node.textContent.trim() === 'Overview').length,"
+            "idsUnique: ['totalSections','curveSections','validDetections','censoredCount']"
+            ".every(id => document.querySelectorAll('#' + id).length === 1),"
+            "countsOutsideSidebar: ['totalSections','curveSections','validDetections',"
+            "'censoredCount'].every(id => !sidebar.contains(document.getElementById(id))),"
+            "assistantOutsideView: !view.contains(document.querySelector('#assistantPanel'))"
+            "};"
+            "})()"
+        )
+        self.report.check(
+            shell["title"] == "Roadway Resilience Explorer"
+            and shell["badge"] == "Prototype"
+            and shell["context"] == "Winter Weather Pilot · Data-driven Review",
+            "application header presents the reviewed product identity and context",
+            json.dumps(shell, sort_keys=True),
+        )
+        self.report.check(
+            shell["stats"]
+            == [
+                {"label": "Sections", "value": "10,029"},
+                {"label": "Observed curves", "value": "3,842"},
+                {"label": "Valid phases", "value": "3,473"},
+                {"label": "Censored", "value": "18"},
+            ]
+            and not shell["percent"]
+            and shell["idsUnique"]
+            and shell["countsOutsideSidebar"],
+            "statewide counts appear once in the header without a percentage",
+            json.dumps(shell, sort_keys=True),
+        )
+        self.report.check(
+            shell["rootView"] == "explorer"
+            and shell["viewRole"] == "section-explorer"
+            and shell["viewCount"] == 1
+            and shell["overviewControls"] == 0
+            and shell["assistantOutsideView"],
+            "Explorer uses one semantic view seam without a dead Overview control",
+        )
+
+    def selected_evidence_acceptance(self) -> None:
+        self.select_direct("1081")
+        self.wait_js(
+            "document.querySelectorAll('#topMetrics [data-metric]').length === 4",
+            "the selected-section headline evidence",
+        )
+        evidence = self.evaluate(
+            "(() => {"
+            "const cards = Array.from(document.querySelectorAll("
+            "'#topMetrics [data-metric]')).map(card => {"
+            "const label = card.querySelector('span'); const value = card.querySelector('strong');"
+            "return {key: card.dataset.metric, label: label.textContent.trim(), "
+            "value: value.textContent.trim(), valueTop: value.getBoundingClientRect().top, "
+            "labelTop: label.getBoundingClientRect().top}; });"
+            "return {title: document.querySelector('#selectedTitle').textContent.trim(),"
+            "sub: document.querySelector('#selectedSub').textContent.trim(),"
+            "badges: document.querySelector('#statusBadges').textContent, cards,"
+            "columns: getComputedStyle(document.querySelector('#topMetrics'))"
+            ".gridTemplateColumns.split(' ').filter(Boolean).length,"
+            "note: document.querySelector('#topMetricsNote').textContent.trim(),"
+            "headlineHidden: document.querySelector('#headlineMetrics').hidden};"
+            "})()"
+        )
+        expected = {
+            "score_v0": ("Score v0", "0.632"),
+            "q_min": ("Minimum performance", "0.353"),
+            "resilience_loss_area": ("Loss area", "24.687"),
+            "recovery_duration_hours": ("Recovery duration", "30.0 h"),
+        }
+        actual = {
+            card["key"]: (card["label"], card["value"])
+            for card in evidence["cards"]
+        }
+        self.report.check(
+            "FM_3310_" in evidence["title"]
+            and "CS 1081" in evidence["title"]
+            and "Rusk" in evidence["sub"]
+            and "Detected phase pattern" in evidence["badges"]
+            and "NPMRDS support: yes" in evidence["badges"]
+            and "TMCs: 2" in evidence["badges"],
+            "selected-section identity and evidence badges remain exact",
+            json.dumps(evidence, sort_keys=True),
+        )
+        self.report.check(
+            actual == expected
+            and evidence["columns"] == 2
+            and not evidence["headlineHidden"]
+            and all(card["valueTop"] <= card["labelTop"] for card in evidence["cards"]),
+            "headline KPI values are unchanged and visually precede their labels",
+            json.dumps(evidence, sort_keys=True),
+        )
+        self.report.check(
+            "event- and method-specific" in evidence["note"]
+            and "censored" in evidence["note"].lower(),
+            "headline evidence retains one visible interpretation limitation",
+        )
+
+        warning_cases = (
+            ("257", "No sustained drop detected under current v0 rule"),
+            ("3597", "Recovery endpoint censored"),
+            ("1", "No direct NPMRDS Q(t) curve is available"),
+        )
+        for section_id, expected_text in warning_cases:
+            self.select_direct(section_id)
+            warning = self.evaluate(
+                "(() => { const w = document.querySelector('#warningCard'); return {"
+                "text: w.textContent.trim(), visible: getComputedStyle(w).display !== 'none' "
+                "&& w.getBoundingClientRect().height > 0, inSelected: "
+                "document.querySelector('.selected').contains(w), "
+                "insideClosedDetails: Boolean(w.closest('details:not([open])'))}; })()"
+            )
+            self.report.check(
+                warning["visible"]
+                and warning["inSelected"]
+                and not warning["insideClosedDetails"]
+                and expected_text in warning["text"],
+                f"CS_{section_id} keeps its essential warning visible in selected evidence",
+                json.dumps(warning, sort_keys=True),
+            )
+        self.select_direct("1081")
+
+    def map_visual_acceptance(self) -> None:
+        self.select_direct("1081")
+        initial = self.evaluate(
+            "(() => {"
+            "const layer = layerByCtrl.get('1081'); const ordinary = layerByCtrl.get('257');"
+            "const halo = selectedHaloLayer.getLayers()[0];"
+            "const casing = selectedCasingLayer.getLayers()[0];"
+            "window.__phase3jSelection = {halo: selectedHaloLayer, "
+            "casing: selectedCasingLayer, core: layer, feature: selectedFeature, "
+            "zoom: map.getZoom()};"
+            "return {haloOnMap: map.hasLayer(selectedHaloLayer),"
+            "casingOnMap: map.hasLayer(selectedCasingLayer),"
+            "haloInteractive: halo.options.interactive,"
+            "casingInteractive: casing.options.interactive,"
+            "haloWeight: halo.options.weight, casingWeight: casing.options.weight,"
+            "coreWeight: layer.options.weight, ordinaryWeight: ordinary.options.weight,"
+            "coreColor: layer.options.color, thematicColor: featureColor(selectedProps),"
+            "coreOpacity: layer.options.opacity};"
+            "})()"
+        )
+        self.report.check(
+            initial["haloOnMap"]
+            and initial["casingOnMap"]
+            and not initial["haloInteractive"]
+            and not initial["casingInteractive"]
+            and initial["haloWeight"] > initial["casingWeight"] > initial["coreWeight"]
+            and initial["coreWeight"] > initial["ordinaryWeight"]
+            and initial["coreColor"] == initial["thematicColor"]
+            and initial["coreOpacity"] == 1,
+            "selected road uses noninteractive halo/casing around its thematic core",
+            json.dumps(initial, sort_keys=True),
+        )
+
+        self.select_direct("257")
+        replaced = self.evaluate(
+            "(() => { const old = window.__phase3jSelection; const oldStyle = "
+            "featureStyle(old.feature); return {oldHaloRemoved: !map.hasLayer(old.halo),"
+            "oldCasingRemoved: !map.hasLayer(old.casing), oldColor: old.core.options.color,"
+            "expectedOldColor: oldStyle.color, oldWeight: old.core.options.weight,"
+            "expectedOldWeight: oldStyle.weight, newHaloCount: selectedHaloLayer.getLayers().length,"
+            "newCasingCount: selectedCasingLayer.getLayers().length}; })()"
+        )
+        self.report.check(
+            replaced["oldHaloRemoved"]
+            and replaced["oldCasingRemoved"]
+            and replaced["oldColor"] == replaced["expectedOldColor"]
+            and abs(replaced["oldWeight"] - replaced["expectedOldWeight"]) < 0.01
+            and replaced["newHaloCount"] == 1
+            and replaced["newCasingCount"] == 1,
+            "selection replacement removes old casing and restores the old thematic style",
+            json.dumps(replaced, sort_keys=True),
+        )
+
+        self.set_layer("q_min")
+        self.evaluate("map.setZoom(Math.min(12, map.getZoom() + 2))")
+        self.wait_js(
+            "selectedLeafletLayer.options.color === featureColor(selectedProps)",
+            "selected thematic color after layer and zoom changes",
+        )
+        refreshed = self.evaluate(
+            "(() => { const h = selectedHaloLayer.getLayers()[0]; "
+            "const c = selectedCasingLayer.getLayers()[0]; return {"
+            "haloOnMap: map.hasLayer(selectedHaloLayer), casingOnMap: map.hasLayer(selectedCasingLayer),"
+            "coreColor: selectedLeafletLayer.options.color, thematicColor: featureColor(selectedProps),"
+            "haloWeight: h.options.weight, casingWeight: c.options.weight,"
+            "coreWeight: selectedLeafletLayer.options.weight}; })()"
+        )
+        self.report.check(
+            refreshed["haloOnMap"]
+            and refreshed["casingOnMap"]
+            and refreshed["coreColor"] == refreshed["thematicColor"]
+            and refreshed["haloWeight"] > refreshed["casingWeight"] > refreshed["coreWeight"],
+            "selected highlight survives map-layer and zoom changes without changing class color",
+            json.dumps(refreshed, sort_keys=True),
+        )
+        self.evaluate("map.setZoom(window.__phase3jSelection.zoom)")
+        self.set_layer("observed_curve_resilience_score_v0")
+        self.select_direct("1081")
+
+        assistant_was_open = not self.evaluate(
+            "document.querySelector('#assistantPanel').hidden"
+        )
+        if assistant_was_open:
+            self.click("#assistantClose")
+            self.wait_js(
+                "document.querySelector('#assistantPanel').hidden",
+                "the Assistant to close for legend geometry",
+            )
+        legend_mark = self.page.event_mark()
+        legend_initial = self.evaluate(
+            "(() => { const d = document.querySelector('#mapLegend'); return {"
+            "open: d.open, inControl: Boolean(d.closest('.leaflet-control-container')),"
+            "outsideSidebar: !document.querySelector('#analysisPanel').contains(d),"
+            "name: document.querySelector('#mapLegendToggle').textContent.trim(),"
+            "ariaExpanded: document.querySelector('#mapLegendToggle')"
+            ".getAttribute('aria-expanded')}; })()"
+        )
+        self.report.check(
+            not legend_initial["open"]
+            and legend_initial["inControl"]
+            and legend_initial["outsideSidebar"]
+            and legend_initial["name"] == "Legend"
+            and legend_initial["ariaExpanded"] == "false",
+            "map legend is one collapsed accessible Leaflet control",
+            json.dumps(legend_initial, sort_keys=True),
+        )
+        self.evaluate("document.querySelector('#mapLegendToggle').focus()")
+        self.press_key(" ", "Space", 32)
+        self.wait_js(
+            "document.querySelector('#mapLegend').open "
+            "&& document.querySelector('#mapLegendToggle').getAttribute('aria-expanded') === 'true'",
+            "keyboard opening of the map legend",
+        )
+        score_legend = self.evaluate(
+            "(() => ({breaks: scoreClassBreaks, rows: Array.from("
+            "document.querySelectorAll('#legend .legend-row')).map(row => ({"
+            "text: row.textContent.trim(), style: row.querySelector('.swatch')"
+            "?.getAttribute('style') || ''})), title: document.querySelector("
+            "'#legend .legend-title').textContent.trim()}))()"
+        )
+        expected_breaks = [
+            0.3436,
+            0.6907106,
+            0.7342658,
+            0.7752926,
+            0.833314,
+            0.913378,
+        ]
+        self.report.check(
+            score_legend["title"] == "Observed Curve Resilience Score v0"
+            and len(score_legend["rows"]) == 7
+            and all(
+                label in score_legend["rows"][index]["text"]
+                for index, label in enumerate(
+                    ("Very Low", "Low", "Moderate", "High", "Very High")
+                )
+            )
+            and "No sustained drop detected" in score_legend["rows"][5]["text"]
+            and "Missing / no observed score" in score_legend["rows"][6]["text"]
+            and all(
+                abs(float(actual) - expected) < 1e-6
+                for actual, expected in zip(score_legend["breaks"], expected_breaks)
+            ),
+            "score legend preserves reviewed classes, meanings, and quantile breaks",
+            json.dumps(score_legend, sort_keys=True),
+        )
+        self.set_layer("detection_status")
+        detection_rows = self.evaluate(
+            "Array.from(document.querySelectorAll('#legend .legend-row'))"
+            ".map(row => row.textContent.trim())"
+        )
+        self.report.check(
+            detection_rows
+            == [
+                "Detected phase pattern",
+                "No sustained drop detected",
+                "Recovery endpoint censored",
+                "No observed NPMRDS support",
+                "Too few points",
+                "Q0 unavailable",
+            ],
+            "detection legend preserves every reviewed status meaning",
+            json.dumps(detection_rows),
+        )
+        self.set_layer("q_min")
+        continuous = self.evaluate("document.querySelector('#legend').textContent")
+        self.report.check(
+            "Q_min" in continuous and "0.00" in continuous and "1.00" in continuous,
+            "continuous legend preserves its reviewed range",
+        )
+        self.set_layer("observed_curve_resilience_score_v0")
+        self.press_key("Escape", "Escape", 27)
+        self.wait_js(
+            "!document.querySelector('#mapLegend').open "
+            "&& document.activeElement === document.querySelector('#mapLegendToggle')",
+            "Escape closing of the map legend",
+        )
+        self.report.check(
+            not self.api_requests(legend_mark),
+            "legend interaction makes no Assistant API request",
+        )
+
+        filters = self.evaluate(
+            "(() => { const tile = document.querySelector("
+            "'.leaflet-tile-pane img.resilience-basemap-tile'); const overlay = "
+            "document.querySelector('.leaflet-overlay-pane canvas'); return {"
+            "tile: tile ? getComputedStyle(tile).filter : '',"
+            "overlay: overlay ? getComputedStyle(overlay).filter : 'none',"
+            "map: getComputedStyle(document.querySelector('#map')).filter,"
+            "control: getComputedStyle(document.querySelector('#mapLegend')).filter,"
+            "chart: getComputedStyle(document.querySelector('#curveChart')).filter,"
+            "assistant: getComputedStyle(document.querySelector('#assistantPanel')).filter}; })()"
+        )
+        self.report.check(
+            filters["tile"] not in ("", "none")
+            and all(
+                filters[key] == "none"
+                for key in ("overlay", "map", "control", "chart", "assistant")
+            ),
+            "visual softening applies only to basemap tiles",
+            json.dumps(filters, sort_keys=True),
+        )
+        if assistant_was_open:
+            self.click("#assistantLauncher")
+            self.wait_js(
+                "!document.querySelector('#assistantPanel').hidden",
+                "the Assistant to reopen after legend QA",
+            )
+
     def status(self) -> str:
         return self.evaluate("document.querySelector('#assistantStatus').textContent")
 
@@ -799,6 +1147,7 @@ class ProductionPageQA:
             not self.api_requests(page_mark),
             "local-template page load makes no Assistant API request",
         )
+        self.application_shell_acceptance()
         self.floating_assistant_structure_acceptance()
         selection_mark = self.page.event_mark()
         self.select_with_search("1081")
@@ -812,6 +1161,8 @@ class ProductionPageQA:
             ),
             "search result selects the correct control section",
         )
+        self.selected_evidence_acceptance()
+        self.map_visual_acceptance()
         for selector, expected in (
             ("#assistantExplainSection", "sustained speed-performance decline"),
             ("#assistantExplainMetric", "reviewed metric"),
@@ -1359,10 +1710,18 @@ class ProductionPageQA:
                 },
             )
             time.sleep(0.2)
+            self.evaluate("window.scrollTo(0, 0)")
             self.ensure_assistant_open()
             layout = self.evaluate(
                 "(() => {"
                 "const app = document.querySelector('.app-shell');"
+                "const headerElement = document.querySelector('.app-header');"
+                "const header = headerElement.getBoundingClientRect();"
+                "const stats = Array.from(headerElement.querySelectorAll("
+                "'.statewide-status-item')).map(node => { const r = node.getBoundingClientRect(); "
+                "return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,"
+                "label:node.querySelector('dt').textContent.trim(),value:"
+                "node.querySelector('dd').textContent.trim()}; });"
                 "const panel = document.querySelector('.left-panel').getBoundingClientRect();"
                 "const splitterElement = document.querySelector('#analysisSplitter');"
                 "const splitter = splitterElement.getBoundingClientRect();"
@@ -1381,6 +1740,10 @@ class ProductionPageQA:
                 "innerWidth: window.innerWidth, clientWidth: document.documentElement.clientWidth,"
                 "media768: window.matchMedia('(max-width: 768px)').matches,"
                 "scrollWidth: document.documentElement.scrollWidth,"
+                "headerScrollWidth: headerElement.scrollWidth,"
+                "header: {left:header.left,right:header.right,top:header.top,bottom:header.bottom,"
+                "width:header.width,height:header.height}, stats,"
+                "headerHasPercent: headerElement.textContent.includes('%'),"
                 "columns: getComputedStyle(app).gridTemplateColumns.split(' ').filter(Boolean).length,"
                 "panel: {left: panel.left, right: panel.right, top: panel.top, "
                 "bottom: panel.bottom, width: panel.width},"
@@ -1407,6 +1770,53 @@ class ProductionPageQA:
             self.report.check(
                 layout["scrollWidth"] <= layout["innerWidth"] + 1,
                 f"{width}x{height} has no unexpected horizontal overflow",
+            )
+            stats_do_not_overlap = all(
+                left["right"] <= right["left"] + 1
+                or left["bottom"] <= right["top"] + 1
+                or left["top"] >= right["bottom"] - 1
+                for index, left in enumerate(layout["stats"])
+                for right in layout["stats"][index + 1 :]
+            )
+            self.report.check(
+                layout["header"]["left"] >= 0
+                and layout["header"]["right"] <= layout["clientWidth"] + 1
+                and layout["headerScrollWidth"] <= layout["clientWidth"] + 1
+                and layout["header"]["top"] >= 0
+                and layout["panel"]["top"] >= layout["header"]["bottom"] - 1
+                and layout["map"]["top"] >= layout["header"]["bottom"] - 1
+                and layout["stats"]
+                == [
+                    {
+                        **layout["stats"][0],
+                        "label": "Sections",
+                        "value": "10,029",
+                    },
+                    {
+                        **layout["stats"][1],
+                        "label": "Observed curves",
+                        "value": "3,842",
+                    },
+                    {
+                        **layout["stats"][2],
+                        "label": "Valid phases",
+                        "value": "3,473",
+                    },
+                    {
+                        **layout["stats"][3],
+                        "label": "Censored",
+                        "value": "18",
+                    },
+                ]
+                and not layout["headerHasPercent"]
+                and stats_do_not_overlap
+                and (
+                    layout["header"]["height"] <= 62
+                    if width >= 768
+                    else layout["header"]["height"] <= 125
+                ),
+                f"{width}x{height} keeps the product header and exact counts compact",
+                json.dumps(layout, sort_keys=True),
             )
             self.report.check(
                 layout["mapReady"]
@@ -1451,6 +1861,7 @@ class ProductionPageQA:
                     and 320 <= layout["panel"]["width"] <= layout["splitter"]["ariaMax"]
                     and layout["splitter"]["ariaMax"] <= 650
                     and layout["map"]["width"] >= 480
+                    and layout["map"]["width"] > layout["panel"]["width"]
                     and layout["assistant"]["width"] <= 440,
                     f"{width}x{height} uses analysis | separator | map with a desktop Assistant",
                 )
@@ -1505,6 +1916,63 @@ class ProductionPageQA:
                     self.evaluate(
                         "document.querySelector('.assistant-more-suggestions').open = false"
                     )
+
+            self.click("#assistantClose")
+            self.wait_js(
+                "document.querySelector('#assistantPanel').hidden",
+                "the Assistant to close for responsive legend QA",
+            )
+            self.evaluate(
+                "document.querySelector('.map-shell').scrollIntoView({block:'start'});"
+                "document.querySelector('#mapLegend').open = true;"
+                "document.querySelector('#mapLegend').dispatchEvent(new Event('toggle'));"
+            )
+            time.sleep(0.1)
+            legend_layout = self.evaluate(
+                "(() => {"
+                "const rect = selector => document.querySelector(selector)"
+                "?.getBoundingClientRect(); const legend = rect('#mapLegend');"
+                "const mapBox = rect('.map-shell'); const zoom = rect('.leaflet-control-zoom');"
+                "const attribution = rect('.leaflet-control-attribution');"
+                "const launcher = rect('#assistantLauncher');"
+                "const overlaps = (a,b) => Boolean(a && b && !(a.right <= b.left || "
+                "a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom));"
+                "const body = document.querySelector('#legend'); return {legend,mapBox,"
+                "overflowY:getComputedStyle(body).overflowY,scrollHeight:body.scrollHeight,"
+                "clientHeight:body.clientHeight,overlapZoom:overlaps(legend,zoom),"
+                "overlapAttribution:overlaps(legend,attribution),"
+                "overlapLauncher:overlaps(legend,launcher),"
+                "horizontalOverflow:document.documentElement.scrollWidth > innerWidth + 1};"
+                "})()"
+            )
+            self.report.check(
+                legend_layout["legend"]["left"]
+                >= legend_layout["mapBox"]["left"] - 1
+                and legend_layout["legend"]["right"]
+                <= legend_layout["mapBox"]["right"] + 1
+                and legend_layout["legend"]["top"]
+                >= legend_layout["mapBox"]["top"] - 1
+                and legend_layout["legend"]["bottom"]
+                <= legend_layout["mapBox"]["bottom"] + 1
+                and legend_layout["overflowY"] in {"auto", "scroll"}
+                and legend_layout["scrollHeight"] >= legend_layout["clientHeight"]
+                and not legend_layout["overlapZoom"]
+                and not legend_layout["overlapAttribution"]
+                and not legend_layout["overlapLauncher"]
+                and not legend_layout["horizontalOverflow"],
+                f"{width}x{height} bounds the expanded map legend without collisions",
+                json.dumps(legend_layout, sort_keys=True),
+            )
+            self.evaluate(
+                "document.querySelector('#mapLegend').open = false;"
+                "document.querySelector('#mapLegend').dispatchEvent(new Event('toggle'));"
+                "window.scrollTo(0, 0);"
+            )
+            self.click("#assistantLauncher")
+            self.wait_js(
+                "!document.querySelector('#assistantPanel').hidden",
+                "the Assistant to reopen after responsive legend QA",
+            )
             screenshot = self.page.command(
                 "Page.captureScreenshot",
                 {"format": "png", "fromSurface": True},

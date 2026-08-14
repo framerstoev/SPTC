@@ -1,4 +1,4 @@
-"""Run no-build Phase 3I static, client, action, chat, search, and resource QA."""
+"""Run no-build Phase 3J static, client, action, chat, search, and resource QA."""
 
 from __future__ import annotations
 
@@ -234,10 +234,11 @@ def static_checks() -> None:
     assert index.count('id="assistantMessages"') == 1
     assert 'id="assistantChatMessages"' not in index
     assert 'id="assistantReviewContainer"' not in index
-    assert index.count('<aside class="panel left-panel" id="analysisPanel">') == 1
-    assert index.count('<main class="map-shell">') == 1
+    aside_marker = '<aside class="panel left-panel" id="analysisPanel"'
+    assert index.count(aside_marker) == 1
+    assert index.count('<section class="map-shell"') == 1
     assert "right-panel" not in index
-    aside_start = index.index('<aside class="panel left-panel" id="analysisPanel">')
+    aside_start = index.index(aside_marker)
     aside_end = index.index("</aside>", aside_start) + len("</aside>")
     assistant_launcher_start = index.index('id="assistantLauncher"')
     assistant_panel_start = index.index('id="assistantPanel"')
@@ -246,6 +247,9 @@ def static_checks() -> None:
     sidebar = index[aside_start:aside_end]
     assert "assistantLauncher" not in sidebar
     assert "assistantPanel" not in sidebar
+    assert 'id="layerSelect"' in sidebar
+    assert 'id="legend"' not in sidebar
+    assert "legend-details" not in sidebar
     assert 'id="assistantLauncher"' in index
     launcher_tag = index[
         index.rfind("<button", 0, assistant_launcher_start) : assistant_launcher_start + 200
@@ -262,6 +266,80 @@ def static_checks() -> None:
     assert 'class="detail-block" id="curveMetricBlock" hidden' in index
     assert 'id="contextDetails"' in index and 'id="contextDetails" open' not in index
     assert '<details class="technical-details method-details">' in index
+    selected_start = sidebar.index('<section class="selected"')
+    selected_end = sidebar.index("</section>", selected_start)
+    selected_section = sidebar[selected_start:selected_end]
+    assert 'id="warningCard"' in selected_section
+    method_start = sidebar.index('<details class="technical-details method-details">')
+    assert 'id="warningCard"' not in sidebar[method_start:]
+    assert 'id="headlineMetrics"' in index and "hidden" in index[
+        index.rfind("<section", 0, index.index('id="headlineMetrics"')) :
+        index.index(">", index.index('id="headlineMetrics"'))
+    ]
+    for metric_key in (
+        "score_v0",
+        "q_min",
+        "resilience_loss_area",
+        "recovery_duration_hours",
+    ):
+        assert f'"{metric_key}"' in app
+
+    assert index.count("Roadway Resilience Explorer") == 2
+    assert "Experimental Roadway Resilience Explorer" not in index
+    assert '<span class="prototype-badge"' in index and ">Prototype</span>" in index
+    assert 'data-application-shell data-active-view="explorer"' in index
+    assert 'id="appViewHost"' in index
+    assert index.count('data-app-view="explorer"') == 1
+    assert 'data-app-view="overview"' not in index.lower()
+    assert ">Overview<" not in index
+    assert "status-line" not in index
+    header_start = index.index('<header class="app-header">')
+    header_end = index.index("</header>", header_start) + len("</header>")
+    header = index[header_start:header_end]
+    for count_id in (
+        "totalSections",
+        "curveSections",
+        "validDetections",
+        "censoredCount",
+    ):
+        assert index.count(f'id="{count_id}"') == 1
+        assert f'id="{count_id}"' in header
+        assert f'id="{count_id}"' not in sidebar
+    assert "%" not in header
+    assert 'id="mapLegend"' in index
+    assert 'id="mapLegendToggle"' in index
+    assert index.count('id="legend"') == 1
+    map_shell_start = index.index('<section class="map-shell"')
+    map_shell_end = index.index("</section>", map_shell_start)
+    assert 'id="mapLegend"' in index[map_shell_start:map_shell_end]
+    assert 'mapLegendControl = L.control({ position: "bottomleft" })' in app
+    assert app.index("setupMapLegendControl();") < app.index("updateLegend();")
+    assert 'className: "resilience-basemap-tile"' in app
+    assert ".leaflet-tile-pane img.resilience-basemap-tile" in style
+    assert "filter: saturate(0.72) contrast(0.9) brightness(1.04);" in style
+    for forbidden_filter_target in (
+        "#map {\n  filter:",
+        ".leaflet-map-pane {\n  filter:",
+        ".leaflet-overlay-pane {\n  filter:",
+        ".leaflet-control {\n  filter:",
+    ):
+        assert forbidden_filter_target not in style
+    assert "function clearSelectedMapHighlight()" in app
+    assert "function createSelectedMapHighlight(feature)" in app
+    assert app.count("interactive: false") >= 2
+    assert 'color: featureColor(selectedProps || {})' in app
+    assert 'color: "#ffffff"' in app and 'color: "#0f172a"' in app
+    assert all(
+        candidate not in index + config + api + actions + chat + app
+        for candidate in (
+            "get_network_summary",
+            "count_sections_by_status",
+            "summarize_metric_distribution",
+            "summarize_support_coverage",
+            "summarize_by_district",
+        )
+    )
+    assert "@import" not in style and "@font-face" not in style
     assert 'id="analysisSplitter"' in index
     assert 'role="separator"' in index
     assert 'aria-orientation="vertical"' in index
@@ -315,7 +393,6 @@ def static_checks() -> None:
     assert all(
         breakpoint in style
         for breakpoint in (
-            "@media (max-width: 1100px)",
             "@media (max-width: 980px)",
             "@media (max-width: 768px)",
             "@media (max-width: 520px)",
@@ -335,6 +412,8 @@ def static_checks() -> None:
     )
     assert summary["total_control_sections"] == 10_029
     assert summary["sections_with_curve_json"] == 3_842
+    assert summary["valid_phase_detections"] == 3_473
+    assert summary["recovery_endpoint_censored"] == 18
     curve_index = json.loads(
         (V2_ROOT / "data" / "curve_index.json").read_text(encoding="utf-8")
     )
@@ -543,7 +622,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    print("Phase 3I static/resource regression QA passed")
+    print("Phase 3J static/resource regression QA passed")
     if client_result:
         print(client_result)
     if action_result:

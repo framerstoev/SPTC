@@ -1864,6 +1864,9 @@ class Phase3GProductionPageQA(ProductionPageQA):
         self.fixed_action_acceptance()
 
     def map_and_layout_acceptance(self) -> None:
+        self.application_shell_acceptance()
+        self.selected_evidence_acceptance()
+        self.map_visual_acceptance()
         self.report.check(
             self.evaluate(
                 "document.querySelector('#map').classList.contains('leaflet-container')"
