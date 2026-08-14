@@ -747,7 +747,11 @@ button:disabled {
 
 .assistant-agent {
   min-width: 0;
+  max-height: clamp(132px, calc(74vh - 436px), 224px);
+  max-height: clamp(132px, calc(74dvh - 436px), 224px);
   margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .assistant-chat-status {
@@ -1310,6 +1314,11 @@ button:disabled {
     padding-left: 9px;
   }
 
+  .assistant-agent {
+    max-height: clamp(132px, calc(72vh - 436px), 224px);
+    max-height: clamp(132px, calc(72dvh - 436px), 224px);
+  }
+
   .assistant-messages {
     min-height: 0;
   }
@@ -1337,8 +1346,6 @@ button:disabled {
 
   .assistant-agent {
     max-height: 190px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
   }
 
   .assistant-composer textarea {

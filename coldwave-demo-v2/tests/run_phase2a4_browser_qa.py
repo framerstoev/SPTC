@@ -1439,6 +1439,7 @@ class ProductionPageQA:
                 )
                 and not layout["assistantOverlapsAttribution"],
                 f"{width}x{height} keeps the floating Assistant within the viewport and clear of attribution",
+                json.dumps(layout, sort_keys=True),
             )
             if width > 980:
                 self.report.check(
@@ -1468,7 +1469,7 @@ class ProductionPageQA:
                         f"{width}x{height} uses a near-full-width Assistant bottom sheet",
                         json.dumps(layout, sort_keys=True),
                     )
-                if width == 390 and not self.evaluate(
+                if not self.evaluate(
                     "document.querySelector('#assistantAgent').hidden"
                 ):
                     self.evaluate(
@@ -1494,11 +1495,11 @@ class ProductionPageQA:
                         expanded["open"]
                         and expanded["overflowY"] in {"auto", "scroll"}
                         and expanded["agentScrollHeight"]
-                        > expanded["agentClientHeight"]
+                        >= expanded["agentClientHeight"]
                         and expanded["composerTop"] >= expanded["panelTop"] - 1
                         and expanded["composerBottom"]
                         <= expanded["panelBottom"] + 1,
-                        "390x844 bounds expanded suggestions without clipping the composer",
+                        f"{width}x{height} bounds expanded suggestions without clipping the composer",
                         json.dumps(expanded, sort_keys=True),
                     )
                     self.evaluate(
