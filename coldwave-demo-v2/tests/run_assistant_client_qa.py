@@ -1,4 +1,4 @@
-"""Run no-build Phase 3G static, client, action, chat, search, and resource QA."""
+"""Run no-build Phase 3I static, client, action, chat, search, and resource QA."""
 
 from __future__ import annotations
 
@@ -91,6 +91,9 @@ def static_checks() -> None:
         )
     )
     assert api.count("/api/v1/assistant/query") == 1
+    assert api.count("/api/v1/sections/") == 1
+    assert api.count("/api/v1/metrics/") == 1
+    assert api.count("/api/v1/reports/review-note") == 1
     assert api.count('credentials: "omit"') == 1
     assert api.count("global.fetch(url, requestOptions)") == 1
     assert "requestReviewedJson" in api
@@ -111,6 +114,14 @@ def static_checks() -> None:
     )
     assert "queryAssistant" not in actions
     assert all(
+        method in actions
+        for method in (
+            "getSectionSummary",
+            "explainMetric",
+            "generateSectionReviewNote",
+        )
+    )
+    assert all(
         token not in chat
         for token in (
             "innerHTML",
@@ -122,6 +133,15 @@ def static_checks() -> None:
             "localStorage",
             "sessionStorage",
             "Authorization",
+        )
+    )
+    assert "queryAssistant" in chat
+    assert all(
+        method not in chat
+        for method in (
+            "getSectionSummary",
+            "explainMetric",
+            "generateSectionReviewNote",
         )
     )
     assert all(
@@ -139,12 +159,35 @@ def static_checks() -> None:
     assert "/api/v1/" not in app
     assert "ASSISTANT_API_URL" not in app
     assert "11434" not in index + config + api + actions + chat + app
+    normal_ui_sources = index + actions + chat + app
+    assert all(
+        token not in normal_ui_sources
+        for token in ("Qwen", "Ollama", "FastAPI", "qwen3:8b", "GPU")
+    )
+    assert all(
+        phrase not in normal_ui_sources
+        for phrase in (
+            "Local Qwen explains",
+            "Local Qwen + backend tools",
+            "Local Qwen response ready",
+            "First response",
+            "Three fixed reviewed actions",
+            "Deterministic fixed actions ready",
+            "The three fixed actions above",
+        )
+    )
+    assert "Verified result" in actions
+    assert "AI-assisted response" in chat
     setup_start = app.index("function setupAssistant()")
     setup_end = app.index("\nfunction ", setup_start + 1)
     setup_assistant = app[setup_start:setup_end]
     assert "button[data-question]" not in setup_assistant
     assert "send.addEventListener" not in setup_assistant
     assert "input.addEventListener" not in setup_assistant
+    assert "startAction(" not in setup_assistant
+    assert "submitQuestion(" not in setup_assistant
+    assert "resetTimelineOnContextChange: false" in setup_assistant
+    assert "showContextResetNotice: false" in setup_assistant
     selection_start = app.index("async function selectFeature(")
     selection_end = app.index("\nfunction ", selection_start + 1)
     assert (
@@ -157,6 +200,26 @@ def static_checks() -> None:
     assert index.count("data-assistant-action=") == 3
     assert "data-question=" not in index
     assert index.count("data-assistant-question=") == 8
+    primary_start = index.index(
+        '<div class="assistant-suggestion-grid assistant-suggestion-primary"'
+    )
+    primary_end = index.index("</div>", primary_start)
+    primary_suggestions = index[primary_start:primary_end]
+    assert primary_suggestions.count("data-assistant-question=") == 3
+    assert all(
+        label in primary_suggestions
+        for label in (
+            "What happened here?",
+            "Explain this warning.",
+            "Planning vs. observed evidence?",
+        )
+    )
+    more_start = index.index('<details class="assistant-more-suggestions">')
+    more_end = index.index("</details>", more_start)
+    more_suggestions = index[more_start:more_end]
+    assert more_suggestions.count("data-assistant-question=") == 5
+    assert "More suggestions" in more_suggestions
+    assert '<details class="assistant-more-suggestions" open' not in index
     assert 'id="assistantAgent" hidden aria-hidden="true" aria-busy="false"' in index
     assert 'id="assistantComposer" hidden aria-hidden="true"' in index
     assert 'id="assistantInput"' in index and 'maxlength="1000"' in index
@@ -164,28 +227,93 @@ def static_checks() -> None:
     assert 'id="assistantSend" type="button" disabled' in index
     assert 'id="assistantCancel" type="button" hidden disabled' in index
     assert 'id="assistantCharacterCount" aria-live="polite"' in index
-    assert "Press Enter to send. Press Shift+Enter for a new line." in index
+    assert "Enter to send; Shift+Enter for a new line." in index
     assert (
         'id="assistantActionAvailability" aria-live="polite" aria-atomic="true"'
     ) in index
-    assert index.count('<aside class="panel left-panel">') == 1
+    assert index.count('id="assistantMessages"') == 1
+    assert 'id="assistantChatMessages"' not in index
+    assert 'id="assistantReviewContainer"' not in index
+    assert index.count('<aside class="panel left-panel" id="analysisPanel">') == 1
     assert index.count('<main class="map-shell">') == 1
     assert "right-panel" not in index
+    aside_start = index.index('<aside class="panel left-panel" id="analysisPanel">')
+    aside_end = index.index("</aside>", aside_start) + len("</aside>")
+    assistant_launcher_start = index.index('id="assistantLauncher"')
+    assistant_panel_start = index.index('id="assistantPanel"')
+    assert assistant_launcher_start > aside_end
+    assert assistant_panel_start > aside_end
+    sidebar = index[aside_start:aside_end]
+    assert "assistantLauncher" not in sidebar
+    assert "assistantPanel" not in sidebar
+    assert 'id="assistantLauncher"' in index
+    launcher_tag = index[
+        index.rfind("<button", 0, assistant_launcher_start) : assistant_launcher_start + 200
+    ]
+    assert 'aria-expanded="false"' in launcher_tag
+    assert 'id="assistantPanel"' in index
+    panel_tag_start = index.rfind("<section", 0, assistant_panel_start)
+    panel_tag_end = index.index(">", assistant_panel_start)
+    panel_tag = index[panel_tag_start:panel_tag_end]
+    assert 'aria-hidden="true"' in panel_tag and "hidden" in panel_tag
     assert 'id="curveDetails" open' in index
     assert "Select a control section to view Q(t)." in index
+    assert 'class="chart-wrap" id="curveChartWrap" hidden' in index
+    assert 'class="detail-block" id="curveMetricBlock" hidden' in index
     assert 'id="contextDetails"' in index and 'id="contextDetails" open' not in index
     assert '<details class="technical-details method-details">' in index
     assert 'id="analysisSplitter"' in index
     assert 'role="separator"' in index
     assert 'aria-orientation="vertical"' in index
     assert 'aria-label="Resize analysis panel"' in index
+    assert 'aria-controls="analysisPanel"' in index
+    assert 'aria-valuemin="320"' in index
+    assert 'aria-valuemax="650"' in index
+    assert 'aria-valuenow="420"' in index
+    assert 'tabindex="0"' in index
     assert "--analysis-panel-width: 420px;" in style
     assert "grid-template-columns: var(--analysis-panel-width) 10px minmax(0, 1fr);" in style
     assert "map?.invalidateSize({ pan: false, debounceMoveend: true });" in app
     assert "ANALYSIS_PANEL_MIN_WIDTH = 320" in app
     assert "ANALYSIS_PANEL_MAX_WIDTH = 650" in app
     assert "MAP_MIN_DESKTOP_WIDTH = 480" in app
-    assert "localStorage" not in app
+    assert "ANALYSIS_PANEL_KEYBOARD_STEP = 16" in app
+    assert all(token not in app for token in ("localStorage", "sessionStorage"))
+    splitter_start = app.index("function setupAnalysisSplitter()")
+    splitter_end = app.index("\nasync function ", splitter_start)
+    splitter_setup = app[splitter_start:splitter_end]
+    for event_name in (
+        '"pointerdown"',
+        '"pointermove"',
+        '"pointerup"',
+        '"pointercancel"',
+        '"keydown"',
+    ):
+        assert event_name in splitter_setup
+    for key_name in ('"ArrowLeft"', '"ArrowRight"', '"Home"', '"End"'):
+        assert key_name in splitter_setup
+    assert "applyAnalysisPanelWidth(ANALYSIS_PANEL_DEFAULT_WIDTH)" in splitter_setup
+    assert 'splitter.setAttribute("aria-valuenow"' in app
+    assert 'splitter.setAttribute("aria-valuetext"' in app
+    floating_start = app.index("function setupFloatingAssistant()")
+    floating_end = app.index("\nfunction ", floating_start + 1)
+    floating_setup = app[floating_start:floating_end]
+    assert "setExpanded(false);" in floating_setup
+    assert 'launcher.addEventListener("click"' in floating_setup
+    assert 'close.addEventListener("click"' in floating_setup
+    assert 'event.key !== "Escape"' in floating_setup
+    assert "launcher.focus()" in floating_setup
+    assert ".assistant-floating-panel[hidden]" in style
+    assert ".assistant-more-suggestions > summary" in style
+    assert all(
+        breakpoint in style
+        for breakpoint in (
+            "@media (max-width: 1100px)",
+            "@media (max-width: 980px)",
+            "@media (max-width: 768px)",
+            "@media (max-width: 520px)",
+        )
+    )
     assert "html,\nbody {\n  height: 100%;\n  margin: 0;\n  overflow: hidden;" in style
     assert "const response = await fetch(props.curve_file);" in app
     assert 'label: "Raw Q(t) observations"' in app
@@ -408,7 +536,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    print("Phase 3G static/resource regression QA passed")
+    print("Phase 3I static/resource regression QA passed")
     if client_result:
         print(client_result)
     if action_result:

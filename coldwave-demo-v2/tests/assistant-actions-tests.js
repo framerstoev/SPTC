@@ -127,7 +127,6 @@ module.exports = async function runAssistantActionsTests() {
         ["assistantStatus", "span"],
         ["assistantMessages", "div"],
         ["assistantActionAvailability", "p"],
-        ["assistantReviewContainer", "div"],
         ["assistantExplainSection", "button"],
         ["assistantExplainMetric", "button"],
         ["assistantGenerateReviewNote", "button"]
@@ -162,8 +161,10 @@ module.exports = async function runAssistantActionsTests() {
     return descendants(root).filter(element => element.tagName === canonicalTag);
   }
 
-  function byId(root, id) {
-    return descendants(root).find(element => element.id === id) || null;
+  function byClass(root, className) {
+    return descendants(root).find(element => (
+      String(element.className).split(/\s+/).includes(className)
+    )) || null;
   }
 
   function deferred() {
@@ -478,7 +479,15 @@ module.exports = async function runAssistantActionsTests() {
       await elements.assistantGenerateReviewNote.click();
       equal(callCount, 0, mode);
       equal(controller.getState().mode, "local-template", mode);
-      equal(elements.assistantModeLabel.textContent, "Local template", mode);
+      equal(elements.assistantModeLabel.textContent, "Local preview", mode);
+      equal(byAttribute(elements.assistantMessages, "data-assistant-invocation").length, 3);
+      equal(
+        descendants(elements.assistantMessages)
+          .filter(element => element.className === "assistant-result-source")
+          .map(element => element.textContent)
+          .join(","),
+        "Verified result,Verified result,Verified result"
+      );
       excludes(elements.assistantMessages.textContent, "Section\n", mode);
     }
   });
@@ -502,17 +511,27 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ mode: "backend-agent", client });
     controller.setContext(selectedContext());
     await elements.assistantExplainSection.click();
-    equal(elements.assistantStatus.textContent, "Deterministic backend result");
-    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
+    equal(elements.assistantStatus.textContent, "");
+    includes(elements.assistantMessages.textContent, "Verified result");
     await elements.assistantExplainMetric.click();
-    equal(elements.assistantStatus.textContent, "Deterministic backend result");
-    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
+    equal(elements.assistantStatus.textContent, "");
+    includes(elements.assistantMessages.textContent, "Verified result");
     await elements.assistantGenerateReviewNote.click();
     equal(calls.join(","), "section,metric,review");
     equal(controller.getState().mode, "backend-agent");
-    equal(elements.assistantModeLabel.textContent, "Local Qwen + backend tools");
-    equal(elements.assistantStatus.textContent, "Deterministic draft for human review");
-    includes(elements.assistantMessages.textContent, "Deterministic fixed action");
+    equal(elements.assistantModeLabel.textContent, "AI Assistant");
+    equal(elements.assistantStatus.textContent, "");
+    equal(byAttribute(elements.assistantMessages, "data-assistant-invocation").length, 3);
+    equal(
+      descendants(elements.assistantMessages)
+        .filter(element => element.className === "assistant-result-source")
+        .map(element => element.textContent)
+        .join(","),
+      "Verified result,Verified result,Verified result"
+    );
+    includes(elements.assistantMessages.textContent, "CS_29");
+    includes(elements.assistantMessages.textContent, "Minimum normalized Q");
+    includes(elements.assistantMessages.textContent, "Control Section CS_29 Review Note");
   });
 
   test("backend-tools remains dormant until an enabled action is activated", async () => {
@@ -529,7 +548,7 @@ module.exports = async function runAssistantActionsTests() {
     equal(callCount, 0);
     await elements.assistantExplainSection.click();
     equal(callCount, 1);
-    equal(elements.assistantModeLabel.textContent, "Backend tools");
+    equal(elements.assistantModeLabel.textContent, "Review tools");
   });
 
   test("action availability follows selection and the reviewed metric map", async () => {
@@ -577,18 +596,19 @@ module.exports = async function runAssistantActionsTests() {
     const actionPromise = controller.startAction("section");
     equal(controller.getState().requestState, "loading");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "true");
-    includes(elements.assistantStatus.textContent, "loading");
+    includes(elements.assistantStatus.textContent, "Loading");
     equal(calls.length, 1);
     equal(calls[0].sectionId, "29");
     assert(!calls[0].signal.aborted);
     pending.resolve(summaryFixture());
     await actionPromise;
     equal(controller.getState().requestState, "backend_success");
-    equal(elements.assistantStatus.textContent, "Deterministic backend result");
+    equal(elements.assistantStatus.textContent, "");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "false");
     includes(elements.assistantMessages.textContent, "CS_29");
     includes(elements.assistantMessages.textContent, "US_90_");
     includes(elements.assistantMessages.textContent, "METHOD_SCOPE");
+    includes(elements.assistantMessages.textContent, "Verified result");
     const observedCounts = byAttribute(elements.assistantMessages, "data-observed-metric-count");
     const planningCounts = byAttribute(elements.assistantMessages, "data-planning-metric-count");
     equal(observedCounts.length, 1);
@@ -611,7 +631,7 @@ module.exports = async function runAssistantActionsTests() {
     const actionPromise = controller.startAction("metric");
     equal(controller.getState().requestState, "loading");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "true");
-    includes(elements.assistantStatus.textContent, "loading");
+    includes(elements.assistantStatus.textContent, "Loading");
     equal(calls.length, 1);
     equal(calls[0].metricName, "q_min");
     pending.resolve(metricFixture({
@@ -619,7 +639,9 @@ module.exports = async function runAssistantActionsTests() {
     }));
     await actionPromise;
     equal(controller.getState().requestState, "backend_success");
+    equal(elements.assistantStatus.textContent, "");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "false");
+    includes(elements.assistantMessages.textContent, "Verified result");
     includes(elements.assistantMessages.textContent, "Minimum normalized Q");
     includes(elements.assistantMessages.textContent, "dimensionless");
     includes(elements.assistantMessages.textContent, "When unavailable");
@@ -681,11 +703,11 @@ module.exports = async function runAssistantActionsTests() {
     sectionPending.resolve(summaryFixture());
     await first;
     includes(elements.assistantMessages.textContent, "CURRENT METRIC RESULT");
-    excludes(elements.assistantMessages.textContent, "CS_29");
+    excludes(elements.assistantMessages.textContent, "US_90_");
     equal(controller.getState().currentAction, "metric");
   });
 
-  test("section change aborts a pending request and restores the new local preview", async () => {
+  test("section change aborts a pending request and restores the new context notice", async () => {
     const pending = deferred();
     let requestSignal;
     const client = {
@@ -704,7 +726,8 @@ module.exports = async function runAssistantActionsTests() {
     assert(requestSignal.aborted);
     pending.resolve(summaryFixture());
     await request;
-    includes(elements.assistantMessages.textContent, "NEW SECTION PREVIEW");
+    includes(elements.assistantMessages.textContent, "Context updated to CS_30");
+    includes(elements.assistantMessages.textContent, "No request was sent");
     excludes(elements.assistantMessages.textContent, "CS_29");
     equal(controller.getState().selectedSectionId, "30");
     equal(controller.getState().requestState, "idle");
@@ -757,11 +780,11 @@ module.exports = async function runAssistantActionsTests() {
     pending.resolve(metricFixture({ displayName: "STALE METRIC RESULT" }));
     await request;
     excludes(elements.assistantMessages.textContent, "STALE METRIC RESULT");
-    includes(elements.assistantMessages.textContent, "LOCAL SECTION PREVIEW");
+    includes(elements.assistantMessages.textContent, "Context updated to CS_29");
     equal(controller.getState().activeMetric, "event_rei");
   });
 
-  test("request_cancelled is silent and restores the local preview", async () => {
+  test("request_cancelled is silent and restores the current context notice", async () => {
     const client = {
       async getSectionSummary() {
         throw clientError("request_cancelled", "C:\\private\\cancel-detail.txt");
@@ -770,7 +793,7 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client });
     controller.setContext(selectedContext());
     await controller.startAction("section");
-    includes(elements.assistantMessages.textContent, "LOCAL SECTION PREVIEW");
+    includes(elements.assistantMessages.textContent, "Context updated to CS_29");
     excludes(elements.assistantStatus.textContent, "fallback");
     excludes(elements.assistantMessages.textContent, "private");
     equal(controller.getState().requestState, "idle");
@@ -821,7 +844,7 @@ module.exports = async function runAssistantActionsTests() {
       controller.setContext(selectedContext());
       await controller.startAction(action);
       equal(controller.getState().requestState, "fallback_success", code);
-      includes(elements.assistantStatus.textContent, "local fallback", code);
+      includes(elements.assistantStatus.textContent, "showing a local result", code);
       includes(
         elements.assistantMessages.textContent,
         action === "metric" ? "LOCAL METRIC MAPPING" : "LOCAL SECTION PREVIEW",
@@ -882,7 +905,7 @@ module.exports = async function runAssistantActionsTests() {
     equal(controller.getState().requestState, "loading");
     equal(controller.getState().currentAction, "review");
     includes(elements.assistantMessages.textContent, "Loading the reviewed review-note draft");
-    includes(elements.assistantStatus.textContent, "loading");
+    includes(elements.assistantStatus.textContent, "Loading");
     equal(calls.length, 1);
     equal(calls[0].sectionId, "29");
     assert(!calls[0].signal.aborted);
@@ -890,12 +913,13 @@ module.exports = async function runAssistantActionsTests() {
     await actionPromise;
     equal(controller.getState().requestState, "backend_success");
     equal(controller.getState().currentAction, "review");
-    equal(elements.assistantStatus.textContent, "Deterministic draft for human review");
+    equal(elements.assistantStatus.textContent, "");
+    includes(elements.assistantMessages.textContent, "Verified result");
     includes(elements.assistantMessages.textContent, "Control Section CS_29 Review Note");
     includes(elements.assistantMessages.textContent, "Draft for human review");
   });
 
-  test("review compact result excludes full bodies and copy-only Markdown", async () => {
+  test("review compact result keeps full bodies inside collapsed details and excludes copy-only Markdown", async () => {
     const response = reviewNoteFixture();
     const client = {
       async generateSectionReviewNote() {
@@ -905,17 +929,22 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const compactText = elements.assistantMessages.textContent;
+    const compact = byAttribute(elements.assistantMessages, "data-review-compact")[0];
+    const compactText = compact.children
+      .filter(element => element.tagName !== "DETAILS")
+      .map(element => element.textContent)
+      .join("");
+    const details = byTag(compact, "details")[0];
     includes(compactText, response.title);
     includes(compactText, `Evidence records: ${response.evidence.length}`);
     includes(compactText, `Limitations: ${response.limitations.length}`);
-    response.sections.forEach(section => excludes(compactText, section.body));
-    excludes(compactText, response.rendered_markdown);
-    equal(
-      byAttribute(elements.assistantMessages, "data-review-compact")[0]
-        .getAttribute("data-review-compact"),
-      "true"
-    );
+    response.sections.forEach(section => {
+      excludes(compactText, section.body);
+      includes(details.textContent, section.body);
+    });
+    equal(details.open, false);
+    excludes(compact.textContent, response.rendered_markdown);
+    equal(compact.getAttribute("data-review-compact"), "true");
   });
 
   test("review-note details remain collapsed initially", async () => {
@@ -927,7 +956,7 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const details = byTag(elements.assistantReviewContainer, "details");
+    const details = byTag(elements.assistantMessages, "details");
     equal(details.length, 1);
     equal(details[0].open, false);
     equal(details[0].getAttribute("data-report-section-count"), "6");
@@ -947,7 +976,7 @@ module.exports = async function runAssistantActionsTests() {
     controller.setContext(selectedContext());
     await controller.startAction("review");
     const renderedSections = byAttribute(
-      elements.assistantReviewContainer,
+      elements.assistantMessages,
       "data-report-section"
     );
     equal(renderedSections.length, 6);
@@ -976,7 +1005,7 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, document, elements } = createHarness({ client });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const listBlocks = byAttribute(elements.assistantReviewContainer, "data-review-list");
+    const listBlocks = byAttribute(elements.assistantMessages, "data-review-list");
     equal(
       listBlocks.map(block => block.getAttribute("data-review-list")).join(","),
       "warnings,limitations,human-review-checklist"
@@ -995,10 +1024,10 @@ module.exports = async function runAssistantActionsTests() {
       }
     };
     const failed = createHarness({ client: failureClient });
-    equal(byId(failed.elements.assistantReviewContainer, "assistantCopyMarkdown"), null);
+    equal(byClass(failed.elements.assistantMessages, "assistant-copy-markdown"), null);
     failed.controller.setContext(selectedContext());
     await failed.controller.startAction("review");
-    equal(byId(failed.elements.assistantReviewContainer, "assistantCopyMarkdown"), null);
+    equal(byClass(failed.elements.assistantMessages, "assistant-copy-markdown"), null);
 
     const successClient = {
       async generateSectionReviewNote() {
@@ -1008,9 +1037,9 @@ module.exports = async function runAssistantActionsTests() {
     const succeeded = createHarness({ client: successClient });
     succeeded.controller.setContext(selectedContext());
     await succeeded.controller.startAction("review");
-    const copyButton = byId(
-      succeeded.elements.assistantReviewContainer,
-      "assistantCopyMarkdown"
+    const copyButton = byClass(
+      succeeded.elements.assistantMessages,
+      "assistant-copy-markdown"
     );
     assert(copyButton);
     equal(copyButton.tagName, "BUTTON");
@@ -1035,11 +1064,11 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client, clipboard });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const copyButton = byId(elements.assistantReviewContainer, "assistantCopyMarkdown");
+    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
     await copyButton.click();
     equal(copiedValues.length, 1);
     equal(copiedValues[0], response.rendered_markdown);
-    excludes(elements.assistantReviewContainer.textContent, response.rendered_markdown);
+    excludes(elements.assistantMessages.textContent, response.rendered_markdown);
   });
 
   test("successful Markdown copy is announced accessibly", async () => {
@@ -1052,8 +1081,8 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client, clipboard });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const copyButton = byId(elements.assistantReviewContainer, "assistantCopyMarkdown");
-    const copyStatus = byId(elements.assistantReviewContainer, "assistantCopyStatus");
+    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
+    const copyStatus = byClass(elements.assistantMessages, "assistant-copy-status");
     await copyButton.click();
     equal(copyStatus.textContent, "Copied Markdown.");
     equal(copyStatus.getAttribute("role"), "status");
@@ -1070,12 +1099,12 @@ module.exports = async function runAssistantActionsTests() {
     const unavailable = createHarness({ client, clipboard: null });
     unavailable.controller.setContext(selectedContext());
     await unavailable.controller.startAction("review");
-    await byId(
-      unavailable.elements.assistantReviewContainer,
-      "assistantCopyMarkdown"
+    await byClass(
+      unavailable.elements.assistantMessages,
+      "assistant-copy-markdown"
     ).click();
     equal(
-      byId(unavailable.elements.assistantReviewContainer, "assistantCopyStatus").textContent,
+      byClass(unavailable.elements.assistantMessages, "assistant-copy-status").textContent,
       "Clipboard unavailable."
     );
 
@@ -1087,10 +1116,10 @@ module.exports = async function runAssistantActionsTests() {
     const rejected = createHarness({ client, clipboard: rejectingClipboard });
     rejected.controller.setContext(selectedContext());
     await rejected.controller.startAction("review");
-    await byId(rejected.elements.assistantReviewContainer, "assistantCopyMarkdown").click();
-    const rejectionStatus = byId(
-      rejected.elements.assistantReviewContainer,
-      "assistantCopyStatus"
+    await byClass(rejected.elements.assistantMessages, "assistant-copy-markdown").click();
+    const rejectionStatus = byClass(
+      rejected.elements.assistantMessages,
+      "assistant-copy-status"
     ).textContent;
     equal(rejectionStatus, "Copy failed.");
     excludes(rejectionStatus, "private");
@@ -1109,11 +1138,11 @@ module.exports = async function runAssistantActionsTests() {
       controller.setContext(selectedContext());
       await controller.startAction("review");
       equal(controller.getState().requestState, "fallback_success", code);
-      includes(elements.assistantStatus.textContent, "local fallback", code);
+      includes(elements.assistantStatus.textContent, "showing a local result", code);
       includes(elements.assistantMessages.textContent, "no draft was generated", code);
       includes(elements.assistantMessages.textContent, "LOCAL SECTION PREVIEW", code);
       excludes(elements.assistantMessages.textContent, "Draft for human review", code);
-      equal(byId(elements.assistantReviewContainer, "assistantCopyMarkdown"), null);
+      equal(byClass(elements.assistantMessages, "assistant-copy-markdown"), null);
     }
   });
 
@@ -1132,8 +1161,8 @@ module.exports = async function runAssistantActionsTests() {
     const { controller, elements } = createHarness({ client, clipboard });
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const copyButton = byId(elements.assistantReviewContainer, "assistantCopyMarkdown");
-    const staleCopyStatus = byId(elements.assistantReviewContainer, "assistantCopyStatus");
+    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
+    const staleCopyStatus = byClass(elements.assistantMessages, "assistant-copy-status");
     const copyPromise = copyButton.click();
     controller.setContext(selectedContext({
       sectionId: "30",
@@ -1142,8 +1171,8 @@ module.exports = async function runAssistantActionsTests() {
     writePending.resolve();
     await copyPromise;
     equal(staleCopyStatus.textContent, "");
-    equal(elements.assistantReviewContainer.children.length, 0);
-    includes(elements.assistantMessages.textContent, "REPLACEMENT SECTION PREVIEW");
+    equal(byClass(elements.assistantMessages, "assistant-copy-markdown"), null);
+    includes(elements.assistantMessages.textContent, "Context updated to CS_30");
   });
 
   let passed = 0;
@@ -1158,5 +1187,5 @@ module.exports = async function runAssistantActionsTests() {
   }
 
   assert(pendingTests.length === 0, "Phase 2A3 QA still contains pending review/copy cases");
-  return `${passed} Phase 2A3 Assistant action tests passed.`;
+  return `${passed} Phase 3I Assistant action regression tests passed.`;
 };

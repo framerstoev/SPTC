@@ -57,8 +57,8 @@ MODEL_RESPONSE_TIMEOUT = 90.0
 EXPECTED_DATA_RELEASE = "coldwave_2026_01_r1"
 EXPECTED_METHOD_VERSION = "data_driven_resilience_v0"
 
-SUCCESS_SOURCE_LABEL = "Local Qwen3 8B + deterministic tools"
-STATUS_SOURCE_LABEL = "Local assistant status"
+SUCCESS_SOURCE_LABEL = "AI-assisted response"
+STATUS_SOURCE_LABEL = "AI Assistant status"
 
 ALLOWED_REQUEST_FIELDS = frozenset(
     {"message", "selected_section_id", "active_metric", "history"}
@@ -549,12 +549,13 @@ class Phase3GProductionPageQA(ProductionPageQA):
         return int(
             self.evaluate(
                 "document.querySelectorAll("
-                "'#assistantChatMessages [data-chat-role=assistant]').length"
+                "'#assistantMessages [data-result-kind=ai-assisted]').length"
             )
             or 0
         )
 
     def set_chat_input(self, value: str) -> None:
+        self.ensure_assistant_open()
         encoded = json.dumps(value)
         self.evaluate(
             "(() => {"
@@ -570,13 +571,14 @@ class Phase3GProductionPageQA(ProductionPageQA):
         state = self.evaluate(
             "(() => {"
             "const nodes = Array.from(document.querySelectorAll("
-            "'#assistantChatMessages [data-chat-role=assistant]'));"
+            "'#assistantMessages [data-result-kind=ai-assisted]'));"
             "const node = nodes.at(-1);"
             "if (!node) return null;"
             "const text = selector => node.querySelector(selector)?.textContent || '';"
             "const texts = selector => Array.from(node.querySelectorAll(selector), "
             "item => item.textContent);"
             "return {"
+            "resultKind: node.dataset.resultKind || null,"
             "status: node.dataset.assistantStatus || null,"
             "source: text('.assistant-chat-source'),"
             "statusText: text('.assistant-chat-response-status'),"
@@ -711,6 +713,10 @@ class Phase3GProductionPageQA(ProductionPageQA):
             rendered.get("status") == actual_status,
             f"{expectation.case_id} status survives validated rendering",
         )
+        self.report.check(
+            rendered.get("resultKind") == "ai-assisted",
+            f"{expectation.case_id} is labeled as an AI-assisted timeline result",
+        )
         expected_source = (
             SUCCESS_SOURCE_LABEL
             if actual_status in QWEN_SOURCE_STATUSES
@@ -720,11 +726,25 @@ class Phase3GProductionPageQA(ProductionPageQA):
             rendered.get("source") == expected_source,
             f"{expectation.case_id} displays the correct source label",
         )
-        self.report.check(
-            str(actual_status).replace("_", " ")
-            in str(rendered.get("statusText", "")).lower(),
-            f"{expectation.case_id} displays its response status",
-        )
+        if actual_status == "completed":
+            self.report.check(
+                rendered.get("statusText") == "",
+                f"{expectation.case_id} keeps the successful response status silent",
+            )
+        else:
+            expected_status_labels = {
+                "clarification_required": "clarification required",
+                "unsupported_request": "unsupported request",
+                "assistant_disabled": "assistant disabled",
+                "model_unavailable": "ai unavailable",
+                "tool_error": "tool error",
+                "invalid_model_response": "response rejected",
+            }
+            self.report.check(
+                expected_status_labels.get(str(actual_status), "")
+                in str(rendered.get("statusText", "")).lower(),
+                f"{expectation.case_id} displays its neutral reviewed response status",
+            )
 
         tools = payload.get("tools_used", [])
         self.report.check(
@@ -872,12 +892,16 @@ class Phase3GProductionPageQA(ProductionPageQA):
         started = time.perf_counter()
         if suggestion_selector is not None:
             suggestion_message = self.evaluate(
-                f"document.querySelector({json.dumps(suggestion_selector)})"
-                ".getAttribute('data-assistant-question')"
+                "(() => {"
+                f"const suggestion = document.querySelector({json.dumps(suggestion_selector)});"
+                "const disclosure = suggestion.closest('details');"
+                "if (disclosure) disclosure.open = true;"
+                "return suggestion.getAttribute('data-assistant-question');"
+                "})()"
             )
             self.report.check(
                 suggestion_message == message,
-                f"{expectation.case_id} suggestion contains only its visible question",
+                f"{expectation.case_id} suggestion preserves its bounded submitted question",
             )
             self.click(suggestion_selector)
         else:
@@ -891,7 +915,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
             "(() => document.querySelector('#assistantAgent')"
             ".getAttribute('aria-busy') === 'true' || "
             "document.querySelectorAll("
-            "'#assistantChatMessages [data-chat-role=assistant]').length > "
+            "'#assistantMessages [data-result-kind=ai-assisted]').length > "
             f"{before_count})()",
             f"{expectation.case_id} request start or response",
             5,
@@ -899,7 +923,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
         self.wait_js(
             "(() => {"
             "const count = document.querySelectorAll("
-            "'#assistantChatMessages [data-chat-role=assistant]').length;"
+            "'#assistantMessages [data-result-kind=ai-assisted]').length;"
             "return count > "
             f"{before_count} && document.querySelector('#assistantAgent')"
             ".getAttribute('aria-busy') === 'false';"
@@ -923,6 +947,13 @@ class Phase3GProductionPageQA(ProductionPageQA):
         rendered = self.latest_assistant_render()
         assertions = self.assert_render_matches_payload(expectation, payload, rendered)
         actual_status = str(payload.get("status"))
+        if actual_status == "completed":
+            self.report.check(
+                self.evaluate(
+                    "document.querySelector('#assistantChatStatus').textContent === ''"
+                ),
+                f"{expectation.case_id} leaves no redundant ready status after success",
+            )
         self.report.check(
             http_status == EXPECTED_HTTP_BY_STATUS[actual_status],
             f"{expectation.case_id} uses its reviewed actual HTTP/status pairing",
@@ -972,62 +1003,162 @@ class Phase3GProductionPageQA(ProductionPageQA):
             and runtime.get("agent_timeout_ms") == 80000,
             "backend-agent mode uses fixed loopback runtime and separate timeouts",
         )
-        structure = self.evaluate(
+        self.page_load_query_count = len(self.query_requests(page_mark))
+        self.report.check(
+            self.page_load_query_count == 0,
+            "backend-agent page load makes no assistant query",
+        )
+
+        collapsed = self.evaluate(
             "(() => {"
-            "const input = document.querySelector('#assistantInput');"
-            "const label = document.querySelector('label[for=assistantInput]');"
-            "const suggestions = Array.from(document.querySelectorAll("
-            "'#assistantSuggestedQuestions button'));"
+            "const launcher = document.querySelector('#assistantLauncher');"
+            "const panel = document.querySelector('#assistantPanel');"
+            "const renderedControls = Array.from(panel.querySelectorAll("
+            "'button, textarea, [tabindex]')).filter(node => "
+            "node.getClientRects().length > 0 && node.tabIndex >= 0);"
             "return {"
-            "modeLabel: document.querySelector('#assistantModeLabel').textContent,"
-            "agentHidden: document.querySelector('#assistantAgent').hidden,"
-            "composerHidden: document.querySelector('#assistantComposer').hidden,"
-            "inputDisabled: input.disabled,"
-            "inputMaxLength: input.maxLength,"
-            "labelVisible: Boolean(label && label.getBoundingClientRect().height > 0),"
-            "sendType: document.querySelector('#assistantSend').type,"
-            "cancelType: document.querySelector('#assistantCancel').type,"
-            "suggestionCount: suggestions.length,"
-            "suggestionsAreButtons: suggestions.every(item => item.type === 'button'),"
-            "statusLive: document.querySelector('#assistantChatStatus')"
-            ".getAttribute('aria-live'),"
-            "logLive: document.querySelector('#assistantChatMessages')"
-            ".getAttribute('aria-live'),"
-            "fileInputs: document.querySelectorAll('#assistantAgent input[type=file]').length,"
-            "coldStartVisible: document.querySelector('.assistant-cold-start-note')"
-            ".getBoundingClientRect().height > 0"
+            "launcherType: launcher.type,"
+            "launcherExpanded: launcher.getAttribute('aria-expanded'),"
+            "panelHidden: panel.hidden,"
+            "panelAriaHidden: panel.getAttribute('aria-hidden'),"
+            "renderedControlCount: renderedControls.length"
             "};"
             "})()"
         )
         self.report.check(
-            structure["modeLabel"] == "Local Qwen + backend tools"
+            collapsed["launcherType"] == "button"
+            and collapsed["launcherExpanded"] == "false"
+            and collapsed["panelHidden"]
+            and collapsed["panelAriaHidden"] == "true"
+            and collapsed["renderedControlCount"] == 0,
+            "floating AI Assistant is collapsed by default with hidden controls untabbable",
+        )
+
+        open_close_mark = self.page.event_mark()
+        self.click("#assistantLauncher")
+        self.wait_js(
+            "!document.querySelector('#assistantPanel').hidden",
+            "the floating AI Assistant panel to open",
+        )
+        self.wait_js(
+            "document.activeElement.id === 'assistantClose'",
+            "Assistant open focus to move to the Close control",
+        )
+        structure = self.evaluate(
+            "(() => {"
+            "const input = document.querySelector('#assistantInput');"
+            "const label = document.querySelector('label[for=assistantInput]');"
+            "const panel = document.querySelector('#assistantPanel');"
+            "const suggestions = Array.from(panel.querySelectorAll("
+            "'#assistantSuggestedQuestions button'));"
+            "const primary = Array.from(panel.querySelectorAll("
+            "'.assistant-suggestion-primary button'));"
+            "const more = Array.from(panel.querySelectorAll("
+            "'.assistant-more-suggestions button'));"
+            "const visible = suggestions.filter(item => item.getClientRects().length > 0);"
+            "const visibleText = panel.innerText.toLowerCase();"
+            "return {"
+            "modeLabel: document.querySelector('#assistantModeLabel').textContent,"
+            "launcherExpanded: document.querySelector('#assistantLauncher')"
+            ".getAttribute('aria-expanded'),"
+            "panelHidden: panel.hidden,"
+            "panelAriaHidden: panel.getAttribute('aria-hidden'),"
+            "panelTitle: document.querySelector('#assistantHeading').textContent,"
+            "panelInSidebar: document.querySelector('.left-panel').contains(panel),"
+            "agentHidden: document.querySelector('#assistantAgent').hidden,"
+            "composerHidden: document.querySelector('#assistantComposer').hidden,"
+            "inputDisabled: input.disabled,"
+            "inputMaxLength: input.maxLength,"
+            "inputLabel: label?.textContent || '',"
+            "labelVisible: Boolean(label && label.getBoundingClientRect().height > 0),"
+            "sendType: document.querySelector('#assistantSend').type,"
+            "cancelType: document.querySelector('#assistantCancel').type,"
+            "suggestionCount: suggestions.length,"
+            "primarySuggestionCount: primary.length,"
+            "moreSuggestionCount: more.length,"
+            "visibleSuggestionCount: visible.length,"
+            "moreOpen: document.querySelector('.assistant-more-suggestions').open,"
+            "suggestionsAreButtons: suggestions.every(item => item.type === 'button'),"
+            "statusLive: document.querySelector('#assistantChatStatus')"
+            ".getAttribute('aria-live'),"
+            "logLive: document.querySelector('#assistantMessages')"
+            ".getAttribute('aria-live'),"
+            "fileInputs: document.querySelectorAll('#assistantAgent input[type=file]').length,"
+            "coldStartCount: document.querySelectorAll('.assistant-cold-start-note').length,"
+            "timelineCount: document.querySelectorAll('#assistantMessages').length,"
+            "legacyTimelineCount: document.querySelectorAll('#assistantChatMessages').length,"
+            "chatStatus: document.querySelector('#assistantChatStatus').textContent,"
+            "actionStatus: document.querySelector('#assistantStatus').textContent,"
+            "hasImplementationBranding: /qwen|ollama|fastapi|qwen3:8b/.test(visibleText)"
+            "};"
+            "})()"
+        )
+        self.report.check(
+            structure["modeLabel"] == "AI Assistant"
+            and structure["launcherExpanded"] == "true"
+            and not structure["panelHidden"]
+            and structure["panelAriaHidden"] == "false"
+            and structure["panelTitle"] == "AI Assistant"
+            and not structure["panelInSidebar"]
             and not structure["agentHidden"]
             and not structure["composerHidden"]
             and not structure["inputDisabled"],
-            "backend-agent composer is visibly enabled only in agent mode",
+            "backend-agent controls are enabled inside the independent floating panel",
         )
         self.report.check(
             structure["inputMaxLength"] == 1000
+            and structure["inputLabel"] == "Ask a question"
             and structure["labelVisible"]
             and structure["sendType"] == "button"
             and structure["cancelType"] == "button",
             "composer exposes its visible label and bounded native controls",
         )
         self.report.check(
-            structure["suggestionCount"] == 8 and structure["suggestionsAreButtons"],
-            "all eight suggested questions are native buttons",
+            structure["suggestionCount"] == 8
+            and structure["primarySuggestionCount"] == 3
+            and structure["moreSuggestionCount"] == 5
+            and structure["visibleSuggestionCount"] == 3
+            and not structure["moreOpen"]
+            and structure["suggestionsAreButtons"],
+            "three suggestions are primary and five remain under More suggestions",
+            json.dumps(structure, sort_keys=True),
         )
         self.report.check(
             structure["statusLive"] == "polite"
             and structure["logLive"] == "polite"
             and structure["fileInputs"] == 0
-            and structure["coldStartVisible"],
-            "agent status, no-upload, and cold-start structure is present",
+            and structure["coldStartCount"] == 0
+            and structure["timelineCount"] == 1
+            and structure["legacyTimelineCount"] == 0
+            and structure["chatStatus"] == ""
+            and structure["actionStatus"] == "Selected section required.",
+            "one unified timeline retains only the useful selection status and no cold-start clutter",
         )
-        self.page_load_query_count = len(self.query_requests(page_mark))
         self.report.check(
-            self.page_load_query_count == 0,
-            "backend-agent page load makes no assistant query",
+            not structure["hasImplementationBranding"],
+            "the expanded Assistant exposes no model or implementation branding",
+        )
+        self.report.check(
+            not self.query_requests(open_close_mark),
+            "opening the floating Assistant sends no assistant query",
+        )
+
+        close_mark = self.page.event_mark()
+        self.click("#assistantClose")
+        self.wait_js(
+            "document.querySelector('#assistantPanel').hidden "
+            "&& document.activeElement.id === 'assistantLauncher'",
+            "Assistant close to collapse the panel and restore launcher focus",
+        )
+        self.report.check(
+            not self.query_requests(close_mark),
+            "closing the floating Assistant sends no assistant query",
+        )
+        reopen_mark = self.page.event_mark()
+        self.ensure_assistant_open()
+        self.report.check(
+            not self.query_requests(reopen_mark),
+            "reopening the floating Assistant sends no assistant query",
         )
 
         resources = self.evaluate(
@@ -1088,18 +1219,23 @@ class Phase3GProductionPageQA(ProductionPageQA):
         state = self.evaluate(
             "(() => ({"
             "assistantCount: document.querySelectorAll("
-            "'#assistantChatMessages [data-chat-role=assistant]').length,"
-            "text: document.querySelector('#assistantChatMessages').textContent,"
-            "status: document.querySelector('#assistantChatStatus').textContent,"
+            "'#assistantMessages [data-result-kind=ai-assisted]').length,"
+            "verifiedCount: document.querySelectorAll("
+            "'#assistantMessages [data-result-kind=verified]').length,"
+            "text: document.querySelector('#assistantMessages').textContent,"
+            "chatStatus: document.querySelector('#assistantChatStatus').textContent,"
+            "actionStatus: document.querySelector('#assistantStatus').textContent,"
             "busy: document.querySelector('#assistantAgent').getAttribute('aria-busy')"
             "}))()"
         )
         self.report.check(
             state["assistantCount"] == 0
+            and state["verifiedCount"] == 0
             and expected_fragment in state["text"]
-            and "context reset" in state["status"].lower()
+            and state["chatStatus"] == ""
+            and state["actionStatus"] == ""
             and state["busy"] == "false",
-            "context change clears history and displays a reset notice",
+            "context change clears stale results and silently identifies current context",
         )
 
     def unsupported_metric_suggestion_acceptance(self) -> None:
@@ -1385,7 +1521,18 @@ class Phase3GProductionPageQA(ProductionPageQA):
             self.set_layer(reset_layer)
             self.submit_case(message, expectation)
 
+    def wait_for_verified_result(self, before_count: int, description: str) -> None:
+        self.wait_js(
+            "(() => {"
+            "const timeline = document.querySelector('#assistantMessages');"
+            "return timeline.querySelectorAll('[data-result-kind=verified]').length > "
+            f"{before_count} && timeline.getAttribute('data-action-busy') === 'false';"
+            "})()",
+            description,
+        )
+
     def fixed_action_acceptance(self) -> None:
+        self.ensure_assistant_open()
         self.select_direct("1081")
         self.set_layer("q_min")
         self.wait_js(
@@ -1403,33 +1550,59 @@ class Phase3GProductionPageQA(ProductionPageQA):
             "selected section still lazy-loads its local curve JSON",
         )
 
+        summary_before = self.verified_result_count()
+        summary_ai_before = self.chat_assistant_count()
         summary_mark = self.page.event_mark()
         self.click("#assistantExplainSection")
-        self.wait_status("Deterministic backend result")
+        self.wait_for_verified_result(
+            summary_before, "the verified section result in the unified timeline"
+        )
         summary_request = self.assert_one_request(
             summary_mark, "GET", "/api/v1/sections/1081"
         )
         self.assert_cors(summary_request)
         self.report.check(
-            "Deterministic fixed action" in self.message_text(),
-            "section fixed action remains visibly deterministic",
+            self.evaluate(
+                "(() => { const result = Array.from(document.querySelectorAll("
+                "'#assistantMessages [data-result-kind=verified]')).at(-1);"
+                "return result?.querySelector('.assistant-result-source')?.textContent "
+                "=== 'Verified result' && result?.parentElement?.id === 'assistantMessages'; })()"
+            )
+            and self.chat_assistant_count() == summary_ai_before
+            and self.status() == "",
+            "section action adds a silent Verified result to the unified timeline",
         )
 
+        metric_before = self.verified_result_count()
+        metric_ai_before = self.chat_assistant_count()
         metric_mark = self.page.event_mark()
         self.click("#assistantExplainMetric")
-        self.wait_status("Deterministic backend result")
+        self.wait_for_verified_result(
+            metric_before, "the verified metric result in the unified timeline"
+        )
         metric_request = self.assert_one_request(
             metric_mark, "GET", "/api/v1/metrics/q_min"
         )
         self.assert_cors(metric_request)
         self.report.check(
-            "Deterministic fixed action" in self.message_text(),
-            "metric fixed action remains visibly deterministic",
+            self.evaluate(
+                "(() => { const result = Array.from(document.querySelectorAll("
+                "'#assistantMessages [data-result-kind=verified]')).at(-1);"
+                "return result?.querySelector('.assistant-result-source')?.textContent "
+                "=== 'Verified result' && result?.parentElement?.id === 'assistantMessages'; })()"
+            )
+            and self.chat_assistant_count() == metric_ai_before
+            and self.status() == "",
+            "metric action adds a silent Verified result without using AI",
         )
 
+        review_before = self.verified_result_count()
+        review_ai_before = self.chat_assistant_count()
         review_mark = self.page.event_mark()
         self.click("#assistantGenerateReviewNote")
-        self.wait_status("Deterministic draft for human review")
+        self.wait_for_verified_result(
+            review_before, "the verified review-note result in the unified timeline"
+        )
         review_request = self.assert_one_request(
             review_mark, "POST", "/api/v1/reports/review-note"
         )
@@ -1441,21 +1614,27 @@ class Phase3GProductionPageQA(ProductionPageQA):
         )
         review_state = self.evaluate(
             "(() => {"
-            "const details = document.querySelector('.assistant-review-details');"
+            "const result = Array.from(document.querySelectorAll("
+            "'#assistantMessages [data-result-kind=verified]')).at(-1);"
+            "const details = result?.querySelector('.assistant-review-details');"
             "return {"
             "exists: Boolean(details),"
             "open: details?.open || false,"
-            "source: document.querySelector('.assistant-result-source')?.textContent || '',"
-            "copyButton: Boolean(document.querySelector('#assistantCopyMarkdown'))"
+            "source: result?.querySelector('.assistant-result-source')?.textContent || '',"
+            "copyButton: Boolean(result?.querySelector('.assistant-copy-markdown')),"
+            "inTimeline: result?.parentElement?.id === 'assistantMessages'"
             "};"
             "})()"
         )
         self.report.check(
             review_state["exists"]
             and not review_state["open"]
-            and review_state["source"] == "Deterministic fixed action"
-            and review_state["copyButton"],
-            "review fixed action remains collapsed, copyable, and deterministic",
+            and review_state["source"] == "Verified result"
+            and review_state["copyButton"]
+            and review_state["inTimeline"]
+            and self.chat_assistant_count() == review_ai_before
+            and self.status() == "",
+            "review action remains collapsed, copyable, verified, and in the timeline",
         )
         review_payload = self.response_payload(review_request)
         markdown = review_payload.get("rendered_markdown")
@@ -1464,6 +1643,41 @@ class Phase3GProductionPageQA(ProductionPageQA):
             "review fixed action returns validated Markdown for copying",
         )
         self.clipboard_acceptance(markdown)
+
+    def clipboard_acceptance(self, markdown: str) -> None:
+        try:
+            self.browser.command(
+                "Browser.grantPermissions",
+                {
+                    "origin": FRONTEND_ORIGIN,
+                    "permissions": ["clipboardReadWrite", "clipboardSanitizedWrite"],
+                },
+            )
+            available = self.evaluate("Boolean(navigator.clipboard?.writeText)")
+            if not available:
+                self.report.note(
+                    "Clipboard API unavailable in isolated headless Chrome"
+                )
+                return
+            self.evaluate(
+                "Array.from(document.querySelectorAll("
+                "'#assistantMessages .assistant-copy-markdown')).at(-1).focus()"
+            )
+            self.press_key("Enter", "Enter", 13)
+            self.wait_js(
+                "Array.from(document.querySelectorAll("
+                "'#assistantMessages .assistant-copy-status')).at(-1)?.textContent "
+                "=== 'Copied Markdown.'",
+                "clipboard success announcement",
+            )
+            copied = self.evaluate("navigator.clipboard.readText()")
+            self.report.check(
+                copied == markdown, "Copy Markdown copies the exact validated text"
+            )
+        except BrowserQAError as error:
+            self.report.note(
+                f"Clipboard verification unavailable in isolated Chrome: {error}"
+            )
 
     def wait_for_paused_query(self, mark: int, timeout: float = 10.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
@@ -1500,6 +1714,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
             pass
 
     def cancellation_and_staleness_acceptance(self) -> None:
+        self.ensure_assistant_open()
         self.page.command(
             "Fetch.enable",
             {
@@ -1537,7 +1752,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
                 and loading["sendDisabled"]
                 and not loading["cancelHidden"]
                 and not loading["cancelDisabled"]
-                and "Local Qwen is working" in loading["status"],
+                and "AI is working" in loading["status"],
                 "pending query exposes bounded cancellable loading state",
             )
             self.click("#assistantSend")
@@ -1578,7 +1793,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
                 and self.chat_assistant_count() == 0
                 and "CS_1"
                 in self.evaluate(
-                    "document.querySelector('#assistantChatMessages').textContent"
+                    "document.querySelector('#assistantMessages').textContent"
                 ),
                 "rapid section changes cancel and suppress the stale response",
             )
@@ -1604,9 +1819,9 @@ class Phase3GProductionPageQA(ProductionPageQA):
                 state.get("activeMetric") == "weather_rei"
                 and not state.get("pending")
                 and self.chat_assistant_count() == 0
-                and "weather_rei"
+                and "Context updated to CS_1081"
                 in self.evaluate(
-                    "document.querySelector('#assistantChatMessages').textContent"
+                    "document.querySelector('#assistantMessages').textContent"
                 ),
                 "rapid metric changes cancel and suppress the stale response",
             )
@@ -1642,8 +1857,9 @@ class Phase3GProductionPageQA(ProductionPageQA):
         self.report.check(
             rendered.get("source") == STATUS_SOURCE_LABEL
             and rendered.get("answer")
-            == "The local Qwen model is unavailable. The deterministic fixed actions remain available.",
-            "model-unavailable UI uses reviewed status text without false Qwen attribution",
+            == "AI Assistant is unavailable. Verified quick actions remain available.",
+            "model-unavailable UI uses neutral reviewed text without model attribution",
+            json.dumps(rendered, sort_keys=True),
         )
         self.fixed_action_acceptance()
 
@@ -1654,9 +1870,12 @@ class Phase3GProductionPageQA(ProductionPageQA):
             ),
             "Leaflet map remains initialized in backend-agent mode",
         )
+        self.report.check(
+            self.evaluate("document.querySelector('#curveDetails').open"),
+            "the Q(t) evidence panel is open by default",
+        )
         self.evaluate(
-            "(() => { const details = document.querySelector('#curveDetails');"
-            "details.open = true; details.dispatchEvent(new Event('toggle')); return true; })()"
+            "document.querySelector('#curveDetails').dispatchEvent(new Event('toggle'))"
         )
         self.wait_js(
             "document.querySelector('#curveChart').getBoundingClientRect().height > 0",
@@ -1737,7 +1956,7 @@ class Phase3GProductionPageQA(ProductionPageQA):
 
         assistant_output = self.evaluate(
             "Array.from(document.querySelectorAll("
-            "'#assistantChatMessages [data-chat-role=assistant]'), "
+            "'#assistantMessages [data-result-kind=ai-assisted]'), "
             "node => node.textContent).join('\\n')"
         )
         self.report.check(
@@ -1751,10 +1970,10 @@ class Phase3GProductionPageQA(ProductionPageQA):
         self.report.check(
             self.evaluate(
                 "document.querySelectorAll("
-                "'#assistantChatMessages [data-chat-role=assistant] "
-                "script, #assistantChatMessages [data-chat-role=assistant] img, "
-                "#assistantChatMessages [data-chat-role=assistant] [onerror], "
-                "#assistantChatMessages [data-chat-role=assistant] [onclick]').length"
+                "'#assistantMessages [data-result-kind=ai-assisted] script, "
+                "#assistantMessages [data-result-kind=ai-assisted] img, "
+                "#assistantMessages [data-result-kind=ai-assisted] [onerror], "
+                "#assistantMessages [data-result-kind=ai-assisted] [onclick]').length"
             )
             == 0,
             "assistant rendering contains no executable HTML",

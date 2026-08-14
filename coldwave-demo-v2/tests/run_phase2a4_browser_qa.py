@@ -657,11 +657,123 @@ class ProductionPageQA:
     def click(self, selector: str) -> None:
         self.evaluate(f"document.querySelector({json.dumps(selector)}).click()")
 
+    def ensure_assistant_open(self) -> None:
+        if not self.evaluate("document.querySelector('#assistantPanel').hidden"):
+            return
+        mark = self.page.event_mark()
+        self.click("#assistantLauncher")
+        self.wait_js(
+            "!document.querySelector('#assistantPanel').hidden "
+            "&& document.querySelector('#assistantLauncher').getAttribute('aria-expanded') "
+            "=== 'true'",
+            "the floating Assistant to open",
+        )
+        self.report.check(
+            not self.api_requests(mark),
+            "opening the floating Assistant makes no Assistant API request",
+        )
+
+    def floating_assistant_structure_acceptance(self) -> None:
+        structure = self.evaluate(
+            "(() => {"
+            "const panel = document.querySelector('#assistantPanel');"
+            "const launcher = document.querySelector('#assistantLauncher');"
+            "return {"
+            "panelHidden: panel.hidden, panelAriaHidden: panel.getAttribute('aria-hidden'),"
+            "launcherExpanded: launcher.getAttribute('aria-expanded'),"
+            "outsideSidebar: !document.querySelector('.left-panel').contains(panel),"
+            "timelineCount: document.querySelectorAll('#assistantMessages').length,"
+            "legacySurfaces: document.querySelectorAll('#assistantChatMessages, "
+            "#assistantReviewContainer').length,"
+            "curveOpen: document.querySelector('#curveDetails').open,"
+            "curvePlaceholder: document.querySelector('#curveNote').textContent.trim(),"
+            "contextOpen: document.querySelector('#contextDetails').open,"
+            "methodOpen: document.querySelector('.method-details').open"
+            "};"
+            "})()"
+        )
+        self.report.check(
+            structure["panelHidden"]
+            and structure["panelAriaHidden"] == "true"
+            and structure["launcherExpanded"] == "false",
+            "floating Assistant is collapsed by default",
+        )
+        self.report.check(
+            structure["outsideSidebar"]
+            and structure["timelineCount"] == 1
+            and structure["legacySurfaces"] == 0,
+            "Assistant is outside the analysis sidebar with one unified timeline",
+        )
+        self.report.check(
+            structure["curveOpen"]
+            and structure["curvePlaceholder"]
+            == "Select a control section to view Q(t).",
+            "Q(t) is open by default with the no-selection placeholder",
+        )
+        self.report.check(
+            not structure["contextOpen"] and not structure["methodOpen"],
+            "Tier 1/2 context and method details remain collapsed by default",
+        )
+
+        toggle_mark = self.page.event_mark()
+        self.evaluate("document.querySelector('#assistantLauncher').focus()")
+        self.press_key("Enter", "Enter", 13)
+        self.wait_js(
+            "!document.querySelector('#assistantPanel').hidden "
+            "&& document.activeElement === document.querySelector('#assistantClose')",
+            "keyboard opening and close-button focus",
+        )
+        self.click("#assistantClose")
+        self.wait_js(
+            "document.querySelector('#assistantPanel').hidden "
+            "&& document.activeElement === document.querySelector('#assistantLauncher')",
+            "Assistant close and launcher focus restoration",
+        )
+        self.click("#assistantLauncher")
+        self.wait_js(
+            "!document.querySelector('#assistantPanel').hidden",
+            "the floating Assistant to reopen",
+        )
+        self.report.check(
+            not self.api_requests(toggle_mark),
+            "opening and closing the Assistant sends no network request",
+        )
+        self.report.check(
+            True, "Assistant launcher, close control, and focus return work"
+        )
+
     def status(self) -> str:
         return self.evaluate("document.querySelector('#assistantStatus').textContent")
 
     def message_text(self) -> str:
         return self.evaluate("document.querySelector('#assistantMessages').textContent")
+
+    def verified_result_count(self) -> int:
+        return self.evaluate(
+            "document.querySelectorAll("
+            "'#assistantMessages [data-result-kind=verified]').length"
+        )
+
+    def wait_verified_result(
+        self,
+        previous_count: int,
+        expected_text: str,
+        timeout: float = ACTION_TIMEOUT,
+    ) -> int:
+        return self.wait_js(
+            "(() => {"
+            "const results = Array.from(document.querySelectorAll("
+            "'#assistantMessages [data-result-kind=verified]'));"
+            "const latest = results.at(-1);"
+            f"return results.length > {previous_count} "
+            "&& latest?.querySelector('.assistant-result-source')?.textContent "
+            "=== 'Verified result' "
+            f"&& latest.textContent.includes({json.dumps(expected_text)}) "
+            "? results.length : 0;"
+            "})()",
+            f"a new Verified result containing {expected_text!r}",
+            timeout,
+        )
 
     def wait_status(self, text: str, timeout: float = ACTION_TIMEOUT) -> str:
         return self.wait_js(
@@ -675,15 +787,19 @@ class ProductionPageQA:
 
     def local_template_acceptance(self) -> None:
         page_mark = self.navigate(LOCAL_URL)
+        mode_metadata = self.evaluate(
+            "(() => { const e = document.querySelector('#assistantModeLabel'); "
+            "return {text: e.textContent, hidden: e.classList.contains('visually-hidden')}; })()"
+        )
         self.report.check(
-            self.evaluate("document.querySelector('#assistantModeLabel').textContent")
-            == "Local template",
-            "local-template mode label is visible",
+            mode_metadata == {"text": "Local preview", "hidden": True},
+            "local-template mode remains hidden implementation metadata",
         )
         self.report.check(
             not self.api_requests(page_mark),
             "local-template page load makes no Assistant API request",
         )
+        self.floating_assistant_structure_acceptance()
         selection_mark = self.page.event_mark()
         self.select_with_search("1081")
         self.report.check(
@@ -698,15 +814,20 @@ class ProductionPageQA:
         )
         for selector, expected in (
             ("#assistantExplainSection", "sustained speed-performance decline"),
-            ("#assistantExplainMetric", "reviewed API metric"),
+            ("#assistantExplainMetric", "reviewed metric"),
             ("#assistantGenerateReviewNote", "required to generate"),
         ):
             action_mark = self.page.event_mark()
+            result_count = self.verified_result_count()
             self.click(selector)
-            self.wait_status("Local template")
+            self.wait_verified_result(result_count, expected)
             self.report.check(
                 expected in self.message_text(),
                 f"{selector} uses its reviewed local-template presentation",
+            )
+            self.report.check(
+                self.status() == "",
+                f"{selector} leaves the normal successful status silent",
             )
             self.report.check(
                 not self.api_requests(action_mark),
@@ -728,17 +849,15 @@ class ProductionPageQA:
             "!document.querySelector('#curveNote').textContent.startsWith('Select a')",
             "the selected local curve to load",
         )
-        self.evaluate(
-            "(() => { const d = document.querySelector('#curveDetails'); "
-            "d.open = true; d.dispatchEvent(new Event('toggle')); return true; })()"
-        )
         self.report.check(
             self.evaluate(
-                "document.querySelector('#curveChart').getBoundingClientRect().height > 0"
+                "document.querySelector('#curveDetails').open "
+                "&& document.querySelector('#curveChart').getBoundingClientRect().height > 0"
             ),
-            "local curve chart remains visible",
+            "selected Q(t) curve loads without a second expansion action",
         )
         self.keyboard_and_structure_acceptance()
+        self.splitter_acceptance()
 
     def keyboard_and_structure_acceptance(self) -> None:
         structure = self.evaluate(
@@ -774,9 +893,11 @@ class ProductionPageQA:
             and structure["messagesLive"] == "polite",
             "Assistant status regions expose structural live announcements",
         )
+        self.ensure_assistant_open()
+        result_count = self.verified_result_count()
         self.evaluate("document.querySelector('#assistantExplainSection').focus()")
         self.press_key("Enter", "Enter", 13)
-        self.wait_status("Local template")
+        self.wait_verified_result(result_count, "Verified result")
         self.report.check(
             self.evaluate(
                 "getComputedStyle(document.querySelector('#assistantExplainSection')).outlineStyle"
@@ -784,9 +905,10 @@ class ProductionPageQA:
             ),
             "keyboard focus remains visibly styled",
         )
+        result_count = self.verified_result_count()
         self.evaluate("document.querySelector('#assistantExplainMetric').focus()")
         self.press_key(" ", "Space", 32)
-        self.wait_status("Local template")
+        self.wait_verified_result(result_count, "reviewed metric")
         before = self.evaluate("document.querySelector('#curveDetails').open")
         self.evaluate("document.querySelector('#curveDetails > summary').focus()")
         self.press_key(" ", "Space", 32)
@@ -796,6 +918,171 @@ class ProductionPageQA:
         )
         self.report.check(True, "Enter and Space activate native controls")
 
+    def splitter_acceptance(self) -> None:
+        self.page.command(
+            "Emulation.setDeviceMetricsOverride",
+            {"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": False},
+        )
+        self.evaluate(
+            "(() => {"
+            "window.__phase2a4InvalidateCount = 0;"
+            "if (!map.__phase2a4InvalidateWrapped) {"
+            "const original = map.invalidateSize.bind(map);"
+            "map.invalidateSize = (...args) => {"
+            "window.__phase2a4InvalidateCount += 1; return original(...args); };"
+            "map.__phase2a4InvalidateWrapped = true;"
+            "}"
+            "return true;"
+            "})()"
+        )
+        splitter = self.evaluate(
+            "(() => {"
+            "const s = document.querySelector('#analysisSplitter');"
+            "const panel = document.querySelector('.left-panel').getBoundingClientRect();"
+            "const mapBox = document.querySelector('.map-shell').getBoundingClientRect();"
+            "const box = s.getBoundingClientRect();"
+            "return {role: s.getAttribute('role'), orientation: s.getAttribute('aria-orientation'),"
+            "label: s.getAttribute('aria-label'), tabIndex: s.tabIndex, display: getComputedStyle(s).display,"
+            "panelRight: panel.right, splitterLeft: box.left, splitterRight: box.right,"
+            "mapLeft: mapBox.left};"
+            "})()"
+        )
+        self.report.check(
+            splitter["role"] == "separator"
+            and splitter["orientation"] == "vertical"
+            and splitter["label"] == "Resize analysis panel"
+            and splitter["tabIndex"] >= 0
+            and splitter["display"] != "none",
+            "desktop splitter exposes keyboard-focusable separator semantics",
+        )
+        self.report.check(
+            splitter["panelRight"] <= splitter["splitterRight"] + 1
+            and splitter["mapLeft"] >= splitter["splitterLeft"] - 1,
+            "desktop workspace order is analysis panel, separator, then map",
+        )
+
+        self.evaluate("document.querySelector('#analysisSplitter').focus()")
+        self.press_key("Home", "Home", 36)
+        self.wait_js(
+            "document.querySelector('#analysisSplitter').getAttribute('aria-valuenow') === '320'",
+            "splitter keyboard minimum",
+        )
+        self.press_key("ArrowRight", "ArrowRight", 39)
+        self.wait_js(
+            "document.querySelector('#analysisSplitter').getAttribute('aria-valuenow') === '336'",
+            "splitter keyboard increment",
+        )
+        self.press_key("End", "End", 35)
+        self.wait_js(
+            "document.querySelector('#analysisSplitter').getAttribute('aria-valuenow') === '650'",
+            "splitter keyboard maximum",
+        )
+
+        def drag_splitter(target_x: float) -> None:
+            point = self.evaluate(
+                "(() => { const r = document.querySelector('#analysisSplitter')"
+                ".getBoundingClientRect(); return {x: r.left + r.width / 2, "
+                "y: r.top + Math.min(120, r.height / 2)}; })()"
+            )
+            self.page.command(
+                "Input.dispatchMouseEvent",
+                {
+                    "type": "mouseMoved",
+                    "x": point["x"],
+                    "y": point["y"],
+                    "button": "none",
+                    "buttons": 0,
+                    "pointerType": "mouse",
+                },
+            )
+            self.page.command(
+                "Input.dispatchMouseEvent",
+                {
+                    "type": "mousePressed",
+                    "x": point["x"],
+                    "y": point["y"],
+                    "button": "left",
+                    "buttons": 1,
+                    "clickCount": 1,
+                    "pointerType": "mouse",
+                },
+            )
+            self.wait_js(
+                "document.body.classList.contains('is-analysis-resizing')",
+                "splitter pointer-down capture",
+            )
+            for step in range(1, 9):
+                x = point["x"] + (target_x - point["x"]) * step / 8
+                self.page.command(
+                    "Input.dispatchMouseEvent",
+                    {
+                        "type": "mouseMoved",
+                        "x": x,
+                        "y": point["y"],
+                        "button": "none",
+                        "buttons": 1,
+                        "pointerType": "mouse",
+                    },
+                )
+            self.page.command(
+                "Input.dispatchMouseEvent",
+                {
+                    "type": "mouseReleased",
+                    "x": target_x,
+                    "y": point["y"],
+                    "button": "left",
+                    "buttons": 0,
+                    "clickCount": 1,
+                    "pointerType": "mouse",
+                },
+            )
+            self.wait_js(
+                "!document.body.classList.contains('is-analysis-resizing')",
+                "splitter pointer-up release",
+            )
+
+        drag_splitter(48)
+        self.wait_js(
+            "document.querySelector('#analysisSplitter').getAttribute('aria-valuenow') === '320'",
+            "pointer resize minimum clamp",
+        )
+        drag_splitter(1392)
+        self.wait_js(
+            "document.querySelector('#analysisSplitter').getAttribute('aria-valuenow') === '650'",
+            "pointer resize maximum clamp",
+        )
+        self.wait_js(
+            "window.__phase2a4InvalidateCount > 0",
+            "Leaflet invalidateSize after analysis-panel resizing",
+        )
+        self.wait_js(
+            "Math.abs(map.getSize().x - document.querySelector('.map-shell')"
+            ".getBoundingClientRect().width) <= 2",
+            "Leaflet size to match the resized map container",
+        )
+        final_state = self.evaluate(
+            "(() => {"
+            "const mapBox = document.querySelector('.map-shell').getBoundingClientRect();"
+            "return {mapWidth: mapBox.width, leafletWidth: map.getSize().x,"
+            "scrollWidth: document.documentElement.scrollWidth, innerWidth: innerWidth,"
+            "resizing: document.body.classList.contains('is-analysis-resizing'),"
+            "invalidations: window.__phase2a4InvalidateCount};"
+            "})()"
+        )
+        self.report.check(
+            final_state["mapWidth"] >= 480
+            and abs(final_state["mapWidth"] - final_state["leafletWidth"]) <= 2
+            and final_state["scrollWidth"] <= final_state["innerWidth"] + 1,
+            "splitter bounds preserve map usability without horizontal overflow",
+        )
+        self.report.check(
+            not final_state["resizing"] and final_state["invalidations"] > 0,
+            "pointer resize releases active state and notifies Leaflet",
+        )
+        self.evaluate("applyAnalysisPanelWidth(420)")
+        time.sleep(0.2)
+        self.page.command("Emulation.clearDeviceMetricsOverride")
+
     def backend_live_acceptance(self) -> str:
         page_mark = self.navigate(BACKEND_TOOLS_URL)
         runtime = self.evaluate("window.SPTCAssistant.runtime")
@@ -804,15 +1091,19 @@ class ProductionPageQA:
             and runtime["backend_base_url"] == BACKEND_ORIGIN,
             "backend-tools mode uses the fixed reviewed backend",
         )
+        mode_metadata = self.evaluate(
+            "(() => { const e = document.querySelector('#assistantModeLabel'); "
+            "return {text: e.textContent, hidden: e.classList.contains('visually-hidden')}; })()"
+        )
         self.report.check(
-            self.evaluate("document.querySelector('#assistantModeLabel').textContent")
-            == "Backend tools",
-            "backend-tools mode label is visible",
+            mode_metadata == {"text": "Review tools", "hidden": True},
+            "backend-tools mode remains hidden implementation metadata",
         )
         self.report.check(
             not self.api_requests(page_mark),
             "backend-tools page load makes no Assistant API request",
         )
+        self.floating_assistant_structure_acceptance()
         selection_mark = self.page.event_mark()
         self.select_with_search("1081")
         self.report.check(
@@ -821,8 +1112,13 @@ class ProductionPageQA:
         )
 
         summary_mark = self.page.event_mark()
+        result_count = self.verified_result_count()
         self.click("#assistantExplainSection")
-        self.wait_status("Deterministic backend result")
+        self.wait_verified_result(result_count, "Detection status")
+        self.report.check(
+            self.status() == "",
+            "successful section result has no developer status prose",
+        )
         summary_request = self.assert_one_request(
             summary_mark,
             "GET",
@@ -844,8 +1140,13 @@ class ProductionPageQA:
             "metric-layer change makes no Assistant API request",
         )
         metric_mark = self.page.event_mark()
+        result_count = self.verified_result_count()
         self.click("#assistantExplainMetric")
-        self.wait_status("Deterministic backend result")
+        self.wait_verified_result(result_count, "relative standing")
+        self.report.check(
+            self.status() == "",
+            "successful metric result has no developer status prose",
+        )
         metric_request = self.assert_one_request(
             metric_mark,
             "GET",
@@ -859,8 +1160,12 @@ class ProductionPageQA:
         )
 
         review_mark = self.page.event_mark()
+        result_count = self.verified_result_count()
         self.click("#assistantGenerateReviewNote")
-        self.wait_status("Deterministic draft for human review")
+        self.wait_verified_result(result_count, "Draft for human review")
+        self.report.check(
+            self.status() == "", "successful review note has no developer status prose"
+        )
         review_request = self.assert_one_request(
             review_mark,
             "POST",
@@ -877,6 +1182,8 @@ class ProductionPageQA:
             "(() => {"
             "const d = document.querySelector('.assistant-review-details');"
             "return {open: d.open, sections: d.dataset.reportSectionCount, "
+            "inTimeline: document.querySelector('#assistantMessages').contains(d), "
+            "verified: d.closest('[data-result-kind=verified]') !== null, "
             "warnings: Boolean(d.querySelector('[data-review-list=warnings]')), "
             "limitations: Boolean(d.querySelector('[data-review-list=limitations]')), "
             "checklist: Boolean(d.querySelector('[data-review-list=human-review-checklist]')), "
@@ -884,8 +1191,11 @@ class ProductionPageQA:
             "})()"
         )
         self.report.check(
-            not review_state["open"] and review_state["sections"] == "6",
-            "full review note is initially collapsed with six sections",
+            not review_state["open"]
+            and review_state["sections"] == "6"
+            and review_state["inTimeline"]
+            and review_state["verified"],
+            "verified review note is collapsed inside the unified timeline",
         )
         map_width_before = self.evaluate(
             "document.querySelector('.map-shell').getBoundingClientRect().width"
@@ -938,10 +1248,10 @@ class ProductionPageQA:
                     "Clipboard API unavailable in isolated headless Chrome"
                 )
                 return
-            self.evaluate("document.querySelector('#assistantCopyMarkdown').focus()")
+            self.evaluate("document.querySelector('.assistant-copy-markdown').focus()")
             self.press_key("Enter", "Enter", 13)
             self.wait_js(
-                "document.querySelector('#assistantCopyStatus').textContent "
+                "document.querySelector('.assistant-copy-status').textContent "
                 "=== 'Copied Markdown.'",
                 "clipboard success announcement",
             )
@@ -951,7 +1261,7 @@ class ProductionPageQA:
             )
             self.report.check(
                 self.evaluate(
-                    "document.querySelector('#assistantCopyStatus').getAttribute('aria-live')"
+                    "document.querySelector('.assistant-copy-status').getAttribute('aria-live')"
                 )
                 == "polite",
                 "copy success is structurally announced",
@@ -991,8 +1301,9 @@ class ProductionPageQA:
         for section_id, status, warning in cases:
             self.select_direct(section_id)
             mark = self.page.event_mark()
+            result_count = self.verified_result_count()
             self.click("#assistantExplainSection")
-            self.wait_status("Deterministic backend result")
+            self.wait_verified_result(result_count, "Detection status")
             request = self.assert_one_request(
                 mark,
                 "GET",
@@ -1048,21 +1359,47 @@ class ProductionPageQA:
                 },
             )
             time.sleep(0.2)
+            self.ensure_assistant_open()
             layout = self.evaluate(
                 "(() => {"
                 "const app = document.querySelector('.app-shell');"
                 "const panel = document.querySelector('.left-panel').getBoundingClientRect();"
+                "const splitterElement = document.querySelector('#analysisSplitter');"
+                "const splitter = splitterElement.getBoundingClientRect();"
                 "const map = document.querySelector('.map-shell').getBoundingClientRect();"
-                "const review = document.querySelector('.assistant-review-body');"
+                "const assistantElement = document.querySelector('#assistantPanel');"
+                "const assistant = assistantElement.getBoundingClientRect();"
+                "const timeline = document.querySelector('#assistantMessages');"
+                "const composerElement = document.querySelector('#assistantComposer');"
+                "const composer = composerElement.getBoundingClientRect();"
+                "const attribution = document.querySelector('.leaflet-control-attribution')"
+                "?.getBoundingClientRect();"
+                "const assistantOverlapsAttribution = attribution ? !("
+                "assistant.right <= attribution.left || assistant.left >= attribution.right || "
+                "assistant.bottom <= attribution.top || assistant.top >= attribution.bottom) : false;"
                 "return {"
-                "innerWidth: window.innerWidth, scrollWidth: document.documentElement.scrollWidth,"
-                "columns: getComputedStyle(app).gridTemplateColumns.split(' ').length,"
-                "panel: {left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom},"
+                "innerWidth: window.innerWidth, clientWidth: document.documentElement.clientWidth,"
+                "media768: window.matchMedia('(max-width: 768px)').matches,"
+                "scrollWidth: document.documentElement.scrollWidth,"
+                "columns: getComputedStyle(app).gridTemplateColumns.split(' ').filter(Boolean).length,"
+                "panel: {left: panel.left, right: panel.right, top: panel.top, "
+                "bottom: panel.bottom, width: panel.width},"
+                "splitter: {left: splitter.left, right: splitter.right, width: splitter.width, "
+                "display: getComputedStyle(splitterElement).display, "
+                "ariaMax: Number(splitterElement.getAttribute('aria-valuemax'))},"
                 "map: {left: map.left, right: map.right, top: map.top, width: map.width, height: map.height},"
+                "assistant: {left: assistant.left, right: assistant.right, top: assistant.top, "
+                "bottom: assistant.bottom, width: assistant.width, height: assistant.height, "
+                "position: getComputedStyle(assistantElement).position, hidden: assistantElement.hidden},"
+                "composer: {top: composer.top, bottom: composer.bottom, height: composer.height, "
+                "hidden: composerElement.hidden},"
+                "assistantOutsideSidebar: !document.querySelector('.left-panel').contains(assistantElement),"
+                "assistantOverlapsAttribution,"
                 "mapReady: document.querySelector('#map').classList.contains('leaflet-container'),"
                 "buttonsUsable: Array.from(document.querySelectorAll('[data-assistant-action]'))"
                 ".every(b => b.getBoundingClientRect().width > 0 && b.getBoundingClientRect().height > 0),"
-                "reviewScrollable: !review || ['auto','scroll'].includes(getComputedStyle(review).overflowY),"
+                "timelineScrollable: ['auto','scroll'].includes(getComputedStyle(timeline).overflowY),"
+                "curveOpen: document.querySelector('#curveDetails').open,"
                 "curveHeight: document.querySelector('#curveChart').getBoundingClientRect().height"
                 "};"
                 "})()"
@@ -1078,21 +1415,59 @@ class ProductionPageQA:
                 f"{width}x{height} keeps the Leaflet map usable",
             )
             self.report.check(
-                layout["buttonsUsable"] and layout["reviewScrollable"],
-                f"{width}x{height} keeps Assistant controls and details usable",
+                layout["buttonsUsable"]
+                and layout["timelineScrollable"]
+                and layout["curveOpen"]
+                and layout["curveHeight"] > 0,
+                f"{width}x{height} keeps Assistant controls, timeline, and Q(t) usable",
+            )
+            self.report.check(
+                not layout["assistant"]["hidden"]
+                and layout["assistant"]["position"] == "fixed"
+                and layout["assistantOutsideSidebar"]
+                and layout["assistant"]["left"] >= 0
+                and layout["assistant"]["top"] >= 0
+                and layout["assistant"]["right"] <= layout["innerWidth"] + 1
+                and layout["assistant"]["bottom"] <= height + 1
+                and (
+                    layout["composer"]["hidden"]
+                    or (
+                        layout["composer"]["top"] >= layout["assistant"]["top"] - 1
+                        and layout["composer"]["bottom"]
+                        <= layout["assistant"]["bottom"] + 1
+                    )
+                )
+                and not layout["assistantOverlapsAttribution"],
+                f"{width}x{height} keeps the floating Assistant within the viewport and clear of attribution",
             )
             if width > 980:
                 self.report.check(
-                    layout["columns"] == 2
-                    and layout["map"]["left"] >= layout["panel"]["right"] - 1,
-                    f"{width}x{height} retains the two-column map-centered layout",
+                    layout["columns"] == 3
+                    and layout["splitter"]["display"] != "none"
+                    and layout["splitter"]["width"] > 0
+                    and layout["splitter"]["left"] >= layout["panel"]["right"] - 1
+                    and layout["map"]["left"] >= layout["splitter"]["right"] - 1
+                    and 320 <= layout["panel"]["width"] <= layout["splitter"]["ariaMax"]
+                    and layout["splitter"]["ariaMax"] <= 650
+                    and layout["map"]["width"] >= 480
+                    and layout["assistant"]["width"] <= 440,
+                    f"{width}x{height} uses analysis | separator | map with a desktop Assistant",
                 )
             else:
                 self.report.check(
                     layout["columns"] == 1
+                    and layout["splitter"]["display"] == "none"
+                    and layout["panel"]["left"] >= 0
+                    and layout["panel"]["right"] <= layout["clientWidth"] + 1
                     and layout["map"]["top"] >= layout["panel"]["bottom"] - 1,
-                    f"{width}x{height} uses one responsive column without a third column",
+                    f"{width}x{height} disables the splitter in the one-column layout",
                 )
+                if width <= 768:
+                    self.report.check(
+                        layout["assistant"]["width"] >= layout["clientWidth"] - 26,
+                        f"{width}x{height} uses a near-full-width Assistant bottom sheet",
+                        json.dumps(layout, sort_keys=True),
+                    )
             screenshot = self.page.command(
                 "Page.captureScreenshot",
                 {"format": "png", "fromSurface": True},
@@ -1105,25 +1480,32 @@ class ProductionPageQA:
 
     def blocked_backend_fallback_acceptance(self) -> None:
         self.select_direct("1081")
+        self.ensure_assistant_open()
         self.page.command(
             "Network.setBlockedURLs",
             {"urls": [f"{BACKEND_ORIGIN}/api/v1/*"]},
         )
         try:
+            result_count = self.verified_result_count()
             self.click("#assistantExplainSection")
-            self.wait_status("Backend unavailable")
+            self.wait_status("Review service unavailable")
+            self.wait_verified_result(
+                result_count, "sustained speed-performance decline"
+            )
             self.report.check(
-                "local fallback" in self.status().lower()
+                "local result" in self.status().lower()
                 and "sustained speed-performance decline" in self.message_text(),
                 "browser-blocked backend renders the explicit local fallback",
             )
+            result_count = self.verified_result_count()
             self.click("#assistantGenerateReviewNote")
-            self.wait_status("Backend unavailable")
+            self.wait_status("Review service unavailable")
+            self.wait_verified_result(result_count, "no draft was generated")
             self.report.check(
                 "no draft was generated" in self.message_text().lower()
                 and not self.evaluate(
                     "Boolean(document.querySelector('.assistant-review-details, "
-                    "#assistantCopyMarkdown'))"
+                    ".assistant-copy-markdown'))"
                 ),
                 "unavailable review-note action does not claim a draft",
             )
@@ -1136,22 +1518,29 @@ class ProductionPageQA:
             not self.api_requests(mark),
             "unavailable-backend page load makes no Assistant API request",
         )
+        self.floating_assistant_structure_acceptance()
         self.select_with_search("1081")
         action_mark = self.page.event_mark()
+        result_count = self.verified_result_count()
         self.click("#assistantExplainSection")
-        self.wait_status("Backend unavailable", timeout=12)
+        self.wait_status("Review service unavailable", timeout=12)
+        self.wait_verified_result(
+            result_count, "sustained speed-performance decline", timeout=12
+        )
         requests = self.action_requests(action_mark)
         self.report.check(
             len(requests) == 1,
             "stopped backend receives only the explicit section attempt",
         )
         self.report.check(
-            "local fallback" in self.status().lower()
+            "local result" in self.status().lower()
             and "sustained speed-performance decline" in self.message_text(),
             "stopped backend produces a visible local fallback",
         )
+        result_count = self.verified_result_count()
         self.click("#assistantGenerateReviewNote")
-        self.wait_status("Backend unavailable", timeout=12)
+        self.wait_status("Review service unavailable", timeout=12)
+        self.wait_verified_result(result_count, "no draft was generated", timeout=12)
         self.report.check(
             "no draft was generated" in self.message_text().lower(),
             "stopped-backend review failure does not claim a draft",
@@ -1159,6 +1548,7 @@ class ProductionPageQA:
 
     def delayed_request_acceptance(self) -> None:
         self.navigate(BACKEND_TOOLS_URL)
+        self.ensure_assistant_open()
         self.select_with_search("1081")
         self.set_layer("q_min")
 
@@ -1176,6 +1566,7 @@ class ProductionPageQA:
         paused: list[str] = []
         try:
             timeout_mark = self.page.event_mark()
+            result_count = self.verified_result_count()
             self.click("#assistantExplainSection")
             timeout_request = self.page.wait_event(
                 "Fetch.requestPaused",
@@ -1184,9 +1575,12 @@ class ProductionPageQA:
                 timeout=5,
             )
             paused.append(timeout_request["requestId"])
-            self.wait_status("Backend timeout", timeout=12)
+            self.wait_status("Review request timed out", timeout=12)
+            self.wait_verified_result(
+                result_count, "sustained speed-performance decline", timeout=12
+            )
             self.report.check(
-                "local fallback" in self.status().lower(),
+                "local result" in self.status().lower(),
                 "a genuinely delayed browser fetch reaches timeout fallback",
             )
 
@@ -1212,7 +1606,11 @@ class ProductionPageQA:
             self.report.check(
                 "CS 257"
                 in self.evaluate("document.querySelector('#selectedTitle').textContent")
-                and "Backend unavailable" not in self.status(),
+                and self.status() == ""
+                and not self.evaluate(
+                    "Boolean(document.querySelector('#assistantMessages "
+                    "[data-result-kind=verified]'))"
+                ),
                 "switching section prevents stale result and fallback rendering",
             )
 
@@ -1238,13 +1636,17 @@ class ProductionPageQA:
                 pass
             time.sleep(0.5)
             self.report.check(
-                self.status() == "Deterministic fixed actions ready"
-                and "Backend unavailable" not in self.status(),
+                self.status() == ""
+                and not self.evaluate(
+                    "Boolean(document.querySelector('#assistantMessages "
+                    "[data-result-kind=verified]'))"
+                ),
                 "switching metric prevents stale metric rendering",
             )
 
             self.set_layer("q_min")
             replacement_mark = self.page.event_mark()
+            result_count = self.verified_result_count()
             self.click("#assistantExplainSection")
             first = self.page.wait_event(
                 "Fetch.requestPaused",
@@ -1267,12 +1669,16 @@ class ProductionPageQA:
                 {"requestId": second["requestId"]},
             )
             paused.remove(second["requestId"])
-            self.wait_status("Deterministic backend result")
+            self.wait_verified_result(result_count, "relative standing")
             self.report.check(
                 self.evaluate(
-                    "document.querySelectorAll('#assistantMessages > .assistant-message').length"
+                    "document.querySelectorAll('#assistantMessages "
+                    "[data-result-kind=verified]').length"
                 )
                 == 1
+                and not self.evaluate(
+                    "Boolean(document.querySelector('#assistantMessages .assistant-pending'))"
+                )
                 and "relative standing" in self.message_text(),
                 "a new action cancels the prior request without duplicate current responses",
             )
@@ -1325,14 +1731,26 @@ class ProductionPageQA:
             not any("/health" in item["request"]["url"] for item in api),
             "browser made no /health prerequisite request",
         )
+        all_request_urls = [
+            event.get("params", {}).get("request", {}).get("url", "")
+            for event in self.page.events_since(0, "Network.requestWillBeSent")
+        ]
+        self.report.check(
+            not any(
+                re.match(r"^https?://(?:127\.0\.0\.1|localhost):11434(?:/|$)", url)
+                for url in all_request_urls
+            ),
+            "browser never contacts the model runtime port directly",
+        )
         visible_text = self.evaluate("document.body.innerText")
         restricted = re.compile(
-            r"(?:[A-Za-z]:\\|file://|Traceback|services/resilience-agent|data/tier3)",
+            r"(?:[A-Za-z]:\\|file://|Traceback|services/resilience-agent|data/tier3|"
+            r"\bQwen(?:3)?\b|\bOllama\b|\bFastAPI\b|qwen3:8b)",
             re.IGNORECASE,
         )
         self.report.check(
             restricted.search(visible_text) is None,
-            "visible UI exposes no internal path or traceback",
+            "visible UI exposes no internal path, traceback, or implementation branding",
         )
 
 
