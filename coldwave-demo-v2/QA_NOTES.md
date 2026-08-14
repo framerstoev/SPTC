@@ -21,22 +21,31 @@ The large source CSV `control_section_q_timeseries_v0.csv` is not copied into th
 - Search finds partial matches for CS IDs, `CS_` keys, routes, and counties.
 - Search result selection zooms to the control section, highlights it, updates the panel, and lazy-loads Q(t).
 - Clicking a control section updates the selected-section panel.
-- Q(t) curve loads lazily for sections with curve JSON.
+- Q(t) is open by default, shows a compact no-selection placeholder, and loads lazily for sections
+  with curve JSON without requiring a second disclosure click.
 - `no_sustained_drop` sections show the v0 warning and do not imply full resilience.
 - `recovery_endpoint_censored` sections show the censored-recovery warning.
 - Tier 3 observed curve metrics are displayed separately from Tier 1/2 predictor/context fields.
-- Assistant mode is visibly labeled `Local template`, `Backend tools`, or
-  `Local Qwen + backend tools` as applicable.
-- The Assistant always preserves exactly three deterministic fixed actions. The chat composer is
-  visible and enabled only in exact loopback-HTTP `backend-agent` mode.
+- The analysis sidebar contains evidence only; Assistant controls live outside it in one floating
+  panel that is collapsed by default.
+- Desktop widths above 980 px expose a focusable 10 px separator with pointer and keyboard
+  resizing. Narrow layouts hide it and preserve the single-column map layout.
+- The Assistant always preserves exactly three deterministic quick actions. Their output appears in
+  the unified timeline as **Verified result**; free-form output is labeled **AI-assisted response**.
+- The free-form composer is visible and enabled only in exact loopback-HTTP `backend-agent` mode.
+- Exactly three suggestions are initially visible and five additional examples are collapsed under
+  **More suggestions**.
+- Normal user-facing UI contains no Qwen, Ollama, model-name, GPU, or FastAPI branding. Technical
+  tests and operations documentation retain those names where required.
 - No Assistant API request occurs on page load, mode resolution, section selection, or map-layer
   change.
 - Detection-status and supplemental-delay layers disable only the metric-explanation action and
   show a visible reason.
 - Pending requests are aborted and invalidated when replaced or when section/layer context changes;
-  late results never replace the current selection's content.
-- Deterministic fixed-action backend failures show an explicit local-fallback label rather than
-  silently presenting local text as a backend result.
+  late results never replace the current selection's content, history resets, the floating panel
+  stays open, and no replacement question is sent.
+- Deterministic quick actions remain available during AI/model unavailability. Backend failures use
+  an explicit local-fallback status while retaining **Verified result** provenance.
 - A successful review note remains compact until its native details control is expanded, and Copy
   Markdown copies only the validated backend string.
 - Chat comparison is limited to exactly two explicit reviewed sections. Filter, rank, curve-API,
@@ -70,6 +79,8 @@ Classification logic fix:
 
 ## Q(t) Chart Improvements
 
+- The Q(t) disclosure is open by default; before selection it shows **Select a control section to
+  view Q(t).** Tier 1/2 context and method disclosures remain closed by default.
 - Chart height increased for presentation readability.
 - X-axis label clarified as `Time, Jan 1-Feb 3, 2026`.
 - Date tick density reduced.
@@ -183,7 +194,9 @@ probe with zero automatic requests and exactly one section, metric, and review a
 
 Phase 3G keeps the accepted local-template, backend-tools, search, map, curve, review-note, and
 Clipboard regression suites and adds mocked client/chat coverage plus a dedicated production-page
-browser harness. From the nested frontend repository root, run:
+browser harness. This subsection records the pre-Phase 3I regression baseline; the Phase 3I section
+below supersedes its eight-suggestion and two-column layout assertions. From the nested frontend
+repository root, run:
 
 ```powershell
 D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py
@@ -214,74 +227,149 @@ or modified backend. The Phase 3G harness also passed AST/import/CLI validation 
 execution. The backend worktree remained clean at accepted HEAD
 `5edc4688514f2c47ae3e8c03f50b853c0f5d8108`.
 
-## Phase 3G Real-Browser Harness and Current Blocker
+## Phase 3G Real-Browser Acceptance
 
 `tests/run_phase3g_browser_qa.py` reuses the accepted Phase 2A4 isolated Chrome/CDP ownership
-layer. It has two explicit scenarios:
+layer. Its `live` scenario drives the production frontend through FastAPI and the local `qwen3:8b`
+workflow; `model-unavailable` keeps FastAPI available while the local model is unavailable and
+verifies that deterministic quick actions still work.
 
-- `live`: real browser -> production frontend -> FastAPI assistant endpoint -> local `qwen3:8b` ->
-  deterministic tool -> validated structured response -> safe DOM rendering;
-- `model-unavailable`: FastAPI remains running with the assistant enabled while Ollama is stopped,
-  then the browser verifies the reviewed unavailable state and all three deterministic fixed
-  actions.
+The accepted Phase 3G run completed the 16-case, five-section matrix for `CS_1081`, `CS_257`,
+`CS_3597`, `CS_1`, and `CS_583693`. It covered section and metric explanations, warning/status
+handling, comparison, review note, planning versus observed evidence, clarification, prediction
+and investment refusals, SQL/file/shell/prompt attempts, bounded history, Cancel, rapid context
+changes, fixed actions, curve loading, responsive layouts, safe rendering, and allowlisted network
+traffic. The run passed 543 checks. Successful-workflow latency was 1.604 seconds median and 7.961
+seconds p95/maximum for that acceptance run; these are run-specific observations, not a current
+response-time guarantee. Phase 3I reruns must record fresh values.
 
-The live matrix covers `CS_1081`, `CS_257`, `CS_3597`, `CS_1`, and `CS_583693`; selected-section
-and metric explanations; warning/status handling; comparison; review note; planning versus
-observed evidence; missing context; prediction and investment refusals; SQL/file/shell/prompt
-attempts; bounded four-message history; Cancel; rapid section/layer changes; fixed actions; local
-curve loading; four responsive viewports; console errors; allowlisted API traffic; and a complete
-browser-network assertion that no request or WebSocket uses port `11434`. Output is sanitized to
-case IDs, state/status/intent/tool/warning/evidence counts, HTTP status, latency, and summary counts;
-it does not print prompts, answers, bodies, paths, or provider payloads.
+The browser made zero Assistant query requests on page load, zero requests or WebSockets to port
+`11434`, and recorded zero console errors and uncaught exceptions. Tool/control selection, warning,
+evidence, unsupported-decline, and safety rates passed their reviewed gates. The accepted local tag
+`phase3g-local-qwen-chatbot-accepted` targets
+`58f04a9c8d608fa9622bf8a0133d446118970543`.
 
-The 2026-08-03 GPU precondition audit failed before the `live` scenario: `nvidia-smi` could not
-communicate with the NVIDIA driver, and Windows reported the RTX 4060 Laptop GPU with
-`Status=Error`, Config Manager error 43 (`CM_PROB_FAILED_POST_START`). The installed Ollama
-inventory still contained
-`qwen3:8b` (model ID `500a1f067a9f`, approximately 5.2 GB), but the Phase 3G requirement was to
-verify a healthy RTX 4060 and working `nvidia-smi` before real-Qwen browser QA. The live chain was
-therefore not run, and there is no Phase 3G real-Qwen visible-latency measurement. This result is
-not inferred from the accepted Phase 3F backend evaluation.
+The earlier RTX 4060 Code 43 condition is historical rather than a current Phase 3G blocker: the GPU
+was healthy before the accepted real-model run, `nvidia-smi` succeeded, and Ollama reported the
+reviewed model at 100% GPU allocation. The accepted Phase 3H launcher later preserved that workflow
+without changing frontend/backend Assistant semantics.
 
-The safe portions of real local QA did run against the production page and accepted backend:
-
-- the live deterministic client probe passed five section summaries, two metric definitions, and
-  two review notes (structured evidence counts 27/15), with zero automatic Assistant requests and
-  exactly one request for each fixed action;
-- the full Phase 2A4 isolated production-page regression passed **128 checks**, including fixed
-  endpoints, representative deterministic statuses, fallback, timeout, cancellation, stale-result,
-  map/layer, curve, responsive-layout, and network checks in Chrome `150.0.7871.187`;
-- with Ollama stopped and FastAPI still assistant-enabled, the Phase 3G `model-unavailable`
-  production-page scenario passed **100 checks**: one explicit query produced the reviewed HTTP
-  503 `model_unavailable` state with a 2.16-second visible end-to-end latency, all three deterministic
-  fixed actions remained usable, page load made no Assistant request, the browser made no request
-  to port `11434`, and the run recorded zero console errors and zero uncaught exceptions; and
-- both isolated Chrome runs closed with zero remaining Chrome processes and removed their exact
-  temporary profiles.
-
-Headless Chrome reported native Clipboard copying unavailable, so successful OS Clipboard copying
-is not claimed. The full five-section real-Qwen prompt matrix, visible Qwen latency, GPU execution,
-and human visual/assistive-technology review remain outstanding.
-
-After the NVIDIA driver/GPU precondition is healthy, use the exact startup commands in
-`README.md`, then run:
+The harness continues to accept the same operational inputs for a live rerun:
 
 ```powershell
-# After the GPU/driver precondition is healthy, with frontend, assistant-enabled FastAPI,
-# and pre-warmed Ollama running:
 $env:PYTHONDONTWRITEBYTECODE = "1"
-D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario full
-D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py --scenario live
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py `
+  --scenario live `
+  --cold-warmup-seconds <measured-seconds> `
+  --qwen-gpu-allocation "100% GPU" `
+  --peak-vram-mib <measured-peak-mib>
 
-# Stop Ollama only; keep FastAPI and the frontend running to repeat the fail-closed check:
-D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py --scenario model-unavailable
+# Keep the frontend and assistant-enabled FastAPI process available while the model is unavailable:
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py `
+  --scenario model-unavailable
 ```
 
 The normal harness creates, owns, closes, and removes its isolated profile. On a constrained host,
-the accepted `--isolated-profile` option may be used only with an outer-owned temporary profile
-following the Phase 2A4 ownership checks. Stop temporary servers and run `ollama stop qwen3:8b`
-afterward. No one-command launcher is included; the documented demo currently requires three
-terminals.
+`--isolated-profile` may be used only with an outer-owned temporary profile following the accepted
+Phase 2A4 ownership checks. Headless Chrome can report native Clipboard access unavailable; in that
+case exact DOM/Markdown and keyboard contracts are checked without claiming an OS clipboard write.
+
+## Phase 3I UI Simplification QA
+
+Phase 3I changes only the frontend information architecture and interaction surface. Tests must
+retain every accepted deterministic endpoint, free-form `/api/v1/assistant/query` path, response
+schema, grounding/warning gate, cancellation/staleness rule, and safe-rendering restriction.
+
+### Deterministic and static commands
+
+From the nested frontend repository root:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = "1"
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py
+git diff --check
+```
+
+With the accepted backend on `127.0.0.1:8080`, add the real deterministic client/action probe:
+
+```powershell
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_assistant_client_qa.py --live
+```
+
+The static/JavaScript suites now assert:
+
+- no permanent Assistant content in the sidebar and exactly one `#assistantMessages` timeline;
+- Q(t) open by default, with Tier 1/2 and method disclosures closed;
+- no-selection placeholder and unchanged lazy curve loading;
+- a 420 px default splitter, 320 px minimum, 650 px absolute/dynamic maximum, pointer cancellation,
+  Arrow Left/Right 16 px steps, Home/End bounds, no width persistence, and throttled Leaflet/Chart
+  resize notification;
+- collapsed launcher, open/close/Escape and focus return, with no open/close network request;
+- three primary suggestions plus five under **More suggestions**;
+- deterministic **Verified result** and free-form **AI-assisted response** entries in the same
+  timeline without changing either execution path;
+- neutral useful statuses, silent success, AI-unavailable deterministic fallback, and context reset;
+- inert script-like content, no raw JSON/reasoning/internal paths, preserved warnings, and no normal
+  UI branding for Qwen, Ollama, model details, GPU, or FastAPI; and
+- all prior section/metric cancellation, stale-response, history, request-bound, CORS, restricted
+  field, and network checks.
+
+### Production-page browser commands
+
+Serve the frontend on `127.0.0.1:8001` and the accepted backend on `127.0.0.1:8080`, then run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = "1"
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario full
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py `
+  --scenario live `
+  --cold-warmup-seconds <measured-seconds> `
+  --qwen-gpu-allocation "100% GPU" `
+  --peak-vram-mib <measured-peak-mib>
+```
+
+Repeat the fail-closed paths separately as applicable:
+
+```powershell
+# Backend genuinely unavailable:
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase2a4_browser_qa.py --scenario unavailable
+
+# Frontend and assistant-enabled FastAPI remain available; model is unavailable:
+D:\programming\Minicoda\python.exe coldwave-demo-v2\tests\run_phase3g_browser_qa.py --scenario model-unavailable
+```
+
+The required geometry viewports are:
+
+| Viewport | Expected layout |
+| --- | --- |
+| `1440x900` | Three grid tracks: analysis panel, visible separator, primary map; floating Assistant at most 440 px wide and clear of attribution. |
+| `1024x768` | Same desktop splitter layout; dynamic maximum preserves at least 480 px for the map. |
+| `768x900` | One column, splitter hidden, Assistant presented as a fixed inset bottom sheet. |
+| `390x844` | One column with no horizontal overflow; near-full-width bottom sheet, visible Close/composer, internally scrolling timeline, and recoverable map after close. |
+
+Every viewport must retain an initialized map, visible default-open Q(t), usable controls, no
+horizontal overflow, a panel fully within the viewport, no overlap with Leaflet attribution, and no
+permanent third content column. Pointer resizing must trigger bounded `map.invalidateSize()` rather
+than map reconstruction.
+
+### Real local AI smoke
+
+When GPU health, `nvidia-smi`, and the accepted launcher preflight pass, start the unchanged Phase 3H
+workflow:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\local-demo\start-local-chatbot-demo.ps1
+```
+
+Verify one supported-section **Verified result**, one grounded **AI-assisted response**, one
+unsupported investment decline, and the model-unavailable deterministic fallback. The browser must
+make no page-load query and must never contact port `11434`. Stop with the accepted stop script and
+confirm ports 8001/8080 are free. Launcher tests are not required for Phase 3I because no
+`local-demo/**` file or launcher behavior changes.
+
+Conversational paraphrase robustness remains a documented deferred issue. Phase 3I acceptance must
+not weaken routing/security assertions or introduce routing, prompt, tool-description, backend, or
+model changes to address it.
 
 ## Phase 2A4 Isolated Browser Acceptance
 
@@ -332,18 +420,15 @@ http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 
 ### Manual Checks Still Outstanding
 
-- Repair or restore the NVIDIA driver, confirm the RTX 4060 is healthy with `nvidia-smi`, pre-warm
-  `qwen3:8b`, then run the Phase 3G `live` scenario and record sanitized end-to-end
-  median/p95/maximum latency.
-- In that live-Qwen run, complete the five representative section/status cases, prompt-injection
-  refusals, cancellation, rapid section/metric changes, grounding review, zero browser requests to
-  port `11434`, and zero console errors. The model-unavailable/fixed-action fallback path is already
-  automated and passed.
+- Run the full Phase 3I static, deterministic-live, four-viewport browser, real-model smoke, and
+  model-unavailable fallback matrix after the production changes are committed cleanly; record the
+  resulting counts and latency measurements rather than carrying Phase 3G values forward.
 - Confirm successful **Copy Markdown** behavior in a visible browser session where the reviewer
   grants native Clipboard permission.
-- Perform a human visible-window design review if subjective visual polish is required. The
-  headless run inspected actual DOM geometry and screenshots, but is not a substitute for human
-  visual judgment or assistive-technology testing.
+- Perform a human visible-window review at all four required viewports. Headless geometry and
+  internal screenshots do not substitute for human visual judgment or assistive-technology testing.
+- Evaluate conversational paraphrase robustness in a later routing phase; do not fold it into the
+  Phase 3I UI acceptance.
 
 ## Known Limitations
 
@@ -356,7 +441,9 @@ http://127.0.0.1:8001/coldwave-demo-v2/?assistantMode=backend-tools
 - Local Qwen can fail closed with `invalid_model_response` or `model_unavailable`; deterministic
   evidence and the three fixed actions remain authoritative. No result should be inferred when a
   response is rejected.
-- Current startup uses three terminals. A one-command launcher and visible assistive-technology
-  validation remain future work.
+- The accepted Phase 3H launcher is local-only; visible assistive-technology validation remains
+  future work.
+- Conversational paraphrase robustness is deferred; Phase 3I intentionally leaves routing, prompts,
+  tool descriptions, backend orchestration, and model behavior unchanged.
 - Public hosting, licensing, authentication, canonical timezone, and backend-hosting decisions remain unresolved; this is not deployment readiness.
 - This v2 is not deployed and should not replace the stable `coldwave-demo`.
