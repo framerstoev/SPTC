@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roadway Resilience Explorer | Multi-Tier Prototype</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div class="application-shell" data-application-shell data-active-view="explorer">
+    <header class="app-header">
+      <div class="brand-mark" aria-hidden="true">TTI</div>
+      <div class="app-identity">
+        <div class="app-title-row">
+          <h1>Roadway Resilience Explorer</h1>
+          <span class="prototype-badge" aria-label="Prototype application">Prototype</span>
+        </div>
+        <p class="app-context">Multi-Tier Roadway Resilience Screening &amp; Observed Performance Review</p>
+      </div>
+
+      <dl class="statewide-status" aria-label="Statewide reviewed-data status">
+        <div class="statewide-status-item"><dt>Sections</dt><dd id="totalSections">-</dd></div>
+        <div class="statewide-status-item"><dt>Observed curves</dt><dd id="curveSections">-</dd></div>
+        <div class="statewide-status-item"><dt>Valid phases</dt><dd id="validDetections">-</dd></div>
+        <div class="statewide-status-item statewide-status-caution"><dt>Censored</dt><dd id="censoredCount">-</dd></div>
+      </dl>
+    </header>
+
+    <main class="app-view-host" id="appViewHost" aria-label="Application views">
+      <section id="explorerView" class="app-view explorer-view" data-app-view="explorer" data-view-role="section-explorer" aria-label="Roadway section Explorer">
+        <div class="app-shell">
+          <aside class="analysis-panel" id="analysisPanel" aria-labelledby="analysisPanelHeading">
+            <header class="analysis-panel-heading">
+              <div><p class="eyebrow">Selected-section workspace</p><h2 id="analysisPanelHeading">Section analysis</h2></div>
+            </header>
+
+            <section class="control-module" aria-label="Section and tier controls">
+              <div class="search-control">
+                <label for="csSearch">Find control section</label>
+                <div class="search-row">
+                  <input id="csSearch" type="search" autocomplete="off" placeholder="Search CS_5998, IH_35_, Dallas..." />
+                  <button id="clearSearch" class="secondary-button" type="button" aria-label="Clear search">Clear</button>
+                </div>
+                <div class="search-results" id="searchResults" aria-live="polite"></div>
+              </div>
+
+              <fieldset class="tier-control" id="analysisTierControl">
+                <legend>Analytical tier</legend>
+                <div class="tier-segments" role="radiogroup" aria-label="Analytical tier">
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier1"><span>Tier 1</span><strong>Weather</strong></button>
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier2"><span>Tier 2</span><strong>Network</strong></button>
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="potential"><span>Tier 1+2</span><strong>Potential</strong></button>
+                  <button type="button" role="radio" aria-checked="true" tabindex="0" data-analysis-layer="tier3"><span>Tier 3</span><strong>Observed</strong></button>
+                </div>
+              </fieldset>
+
+              <label class="tier-select-label" for="tierSelect">Analytical tier</label>
+              <select id="tierSelect" class="tier-select" aria-label="Analytical tier">
+                <option value="tier1">Tier 1 — Weather</option>
+                <option value="tier2">Tier 2 — Network</option>
+                <option value="potential">Tier 1+2 — Potential</option>
+                <option value="tier3" selected>Tier 3 — Observed Resilience</option>
+              </select>
+              <p class="layer-note" id="layerNote"></p>
+            </section>
+
+            <section class="selected-module" aria-live="polite">
+              <div class="selected-heading">
+                <div><p class="eyebrow">Selected roadway section</p><h2 id="selectedTitle">No section selected</h2><p id="selectedSub">Click a control section on the map or use search.</p></div>
+                <span class="active-tier-chip" id="activeTierChip">Tier 3 — Observed Resilience</span>
+              </div>
+              <div class="badge-row" id="statusBadges"></div>
+              <div class="warning-card" id="warningCard" role="note" hidden></div>
+            </section>
+
+            <section class="tier-analysis-module" id="tierAnalysisPanel" aria-live="polite" aria-labelledby="tierPanelHeading">
+              <header class="module-heading"><div><p class="eyebrow" id="tierPanelEyebrow">Tier 3</p><h2 id="tierPanelHeading">Observed Resilience</h2></div></header>
+              <div class="tier-empty-state" id="tierEmptyState">Select a control section to view its Tier 3 evidence.</div>
+              <div class="metric-grid" id="tierMetrics" hidden></div>
+              <p class="tier-footnote" id="tierFootnote" hidden></p>
+            </section>
+
+            <section class="curve-module" id="curvePanel" aria-labelledby="curvePanelHeading">
+              <header class="module-heading"><div><p class="eyebrow">Tier 3 evidence</p><h2 id="curvePanelHeading">Q(t) performance</h2></div></header>
+              <div class="curve-card" id="curveCard">
+                <div class="chart-wrap" id="curveChartWrap" hidden><canvas id="curveChart" role="img" aria-label="Observed Q(t) performance curve for the selected roadway section"></canvas></div>
+                <div class="phase-marker-legend" id="phaseMarkerLegend" hidden></div>
+                <div class="chart-note" id="curveNote">Select a control section to view Q(t).</div>
+              </div>
+            </section>
+          </aside>
+
+          <section class="map-shell" aria-label="Roadway resilience map">
+            <div id="map"></div>
+            <details class="map-legend-control" id="mapLegend"><summary id="mapLegendToggle" aria-controls="legend" aria-expanded="false">Legend</summary><div class="legend" id="legend"></div></details>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <button class="assistant-launcher" id="assistantLauncher" type="button" aria-controls="assistantPanel" aria-expanded="false"><span class="assistant-launcher-icon" aria-hidden="true">AI</span><span>AI Assistant</span></button>
+
+  <section class="assistant-panel assistant-floating-panel" id="assistantPanel" aria-labelledby="assistantHeading" aria-hidden="true" hidden>
+    <header class="assistant-heading">
+      <div><p class="eyebrow">Evidence-grounded analysis</p><h2 id="assistantHeading" tabindex="-1">AI Assistant</h2></div>
+      <button class="assistant-close secondary-button" id="assistantClose" type="button" aria-label="Close AI Assistant">Close</button>
+    </header>
+
+    <div class="assistant-panel-content">
+      <p class="assistant-disclaimer" id="assistantDisclaimer">Ask about sections, tiers, statewide rankings, alignment, or county evidence.</p>
+      <div class="assistant-agent" id="assistantAgent" hidden aria-hidden="true" aria-busy="false">
+        <div class="assistant-suggestions" id="assistantSuggestedQuestions" aria-label="Suggested AI questions">
+          <div class="assistant-suggestion-grid" role="group" aria-label="Demo questions">
+            <button type="button" data-assistant-question="Rank control sections by Tier 3 observed resilience.">Rank Tier 3 sections</button>
+            <button type="button" data-assistant-question="How consistent are Potential Resilience and Tier 3 Observed Resilience? Show counts and examples of mismatches.">Compare potential &amp; observed</button>
+            <button type="button" data-assistant-question="How did roadway sections in Dallas County perform during this event?">Summarize Dallas County</button>
+          </div>
+        </div>
+      </div>
+
+      <details class="assistant-quick-actions">
+        <summary>Quick actions</summary>
+        <div class="assistant-prompt-grid" id="assistantPromptButtons" role="group" aria-label="Verified Assistant actions" aria-describedby="assistantActionAvailability">
+          <button id="assistantExplainSection" type="button" data-assistant-action="section" disabled>Explain this section</button>
+          <button id="assistantExplainMetric" type="button" data-assistant-action="metric" disabled>Explain current metric</button>
+          <button id="assistantGenerateReviewNote" type="button" data-assistant-action="review" disabled>Generate review note</button>
+        </div>
+        <p class="assistant-action-availability" id="assistantActionAvailability" aria-live="polite" aria-atomic="true">Select a control section to use section-based actions.</p>
+      </details>
+
+      <div class="assistant-chat-status" id="assistantChatStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div class="assistant-messages" id="assistantMessages" role="log" aria-label="Assistant conversation and results" aria-live="polite" aria-relevant="additions" aria-busy="false"></div>
+
+      <div class="assistant-composer" id="assistantComposer" hidden aria-hidden="true">
+        <label for="assistantInput">Ask a question</label>
+        <textarea id="assistantInput" rows="3" maxlength="1000" autocomplete="off" aria-describedby="assistantComposerHint assistantCharacterCount" placeholder="Ask about sections, tiers, rankings, alignment, or county evidence." disabled></textarea>
+        <div class="assistant-composer-meta"><span id="assistantComposerHint">Enter to send; Shift+Enter for a new line.</span><span id="assistantCharacterCount" aria-live="polite">0 / 1000</span></div>
+        <div class="assistant-composer-actions"><button id="assistantSend" type="button" disabled>Send</button><button id="assistantCancel" class="secondary-button" type="button" hidden disabled>Cancel</button></div>
+      </div>
+
+      <span class="visually-hidden" id="assistantModeLabel"></span>
+      <span class="visually-hidden" id="assistantInteractionNote"></span>
+      <span class="assistant-status" id="assistantStatus" role="status" aria-live="polite" aria-atomic="true"></span>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="./js/deployment-config.js"></script>
+  <script src="./js/assistant-config.js"></script>
+  <script src="./js/assistant-api.js"></script>
+  <script src="./js/assistant-actions.js"></script>
+  <script src="./js/assistant-chat.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
