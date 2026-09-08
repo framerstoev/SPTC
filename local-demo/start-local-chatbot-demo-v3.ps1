@@ -10,6 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Keep private cleanup helpers in the entry scope used by GetNewClosure.
 # One shared lifecycle; V2 defaults are never inferred or repointed.
-& (Join-Path $PSScriptRoot "start-local-chatbot-demo.ps1") `
+. (Join-Path $PSScriptRoot "start-local-chatbot-demo.ps1") `
     -LauncherProfile v3 @PSBoundParameters

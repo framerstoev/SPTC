@@ -7,5 +7,6 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-& (Join-Path $PSScriptRoot "stop-local-chatbot-demo.ps1") `
+# The unload closure must resolve the shared script's private cleanup helper.
+. (Join-Path $PSScriptRoot "stop-local-chatbot-demo.ps1") `
     -LauncherProfile v3 @PSBoundParameters

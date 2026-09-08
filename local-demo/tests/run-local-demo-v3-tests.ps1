@@ -212,6 +212,74 @@ function Invoke-FixtureServiceContracts {
     } { Assert-V3DemoServiceContracts -Layout ([pscustomobject]@{}) }
 }
 
+function Invoke-WrapperScopeFixture {
+    param([ValidateSet("start", "stop")][string]$Operation,
+        [ValidateSet("success", "failure", "negative_call_operator")][string]$Mode)
+    $fixtureRoot = Join-Path $temporaryRoot ("wrapper-scope-" + $Operation + "-" + $Mode)
+    [void](New-Item -ItemType Directory -Path $fixtureRoot)
+    $wrapperName = "$Operation-local-chatbot-demo-v3.ps1"
+    $wrapperPath = Join-Path $fixtureRoot $wrapperName
+    $sourcePath = Join-Path $demoRoot $wrapperName
+    # The positive/error cases execute the actual entry file byte-for-byte.
+    # Only the negative control substitutes the formerly broken call operator.
+    Copy-Item -LiteralPath $sourcePath -Destination $wrapperPath
+    Assert-Equal (Get-FileHash -LiteralPath $wrapperPath).Hash `
+        (Get-FileHash -LiteralPath $sourcePath).Hash "Actual wrapper fixture is unchanged"
+    if ($Mode -eq "negative_call_operator") {
+        $wrapper = Get-Content -LiteralPath $wrapperPath -Raw
+        $pattern = '(?m)^\. (?=\(Join-Path \$PSScriptRoot)'
+        Assert-Equal ([regex]::Matches($wrapper, $pattern).Count) 1 "One explicit shared-script invocation"
+        [IO.File]::WriteAllText($wrapperPath, ([regex]::Replace($wrapper, $pattern, '& ')))
+    }
+    $moduleSource = @'
+Set-StrictMode -Version Latest
+function Invoke-FixtureModuleCallback {
+    param([scriptblock]$Action)
+    & $Action
+}
+Export-ModuleMember -Function Invoke-FixtureModuleCallback
+'@
+    [IO.File]::WriteAllText((Join-Path $fixtureRoot "Fixture.Lifecycle.psm1"), $moduleSource)
+    $helperName = if ($Operation -eq "stop") { "Register-FailedStopHelper" } else { "Register-FailedDemoHelper" }
+    $sharedSource = @'
+param(
+    [string]$LauncherProfile = "v2",
+    [switch]$NoBrowser,
+    [int]$WarmupTimeoutSeconds = 120,
+    [int]$ServiceTimeoutSeconds = 30,
+    [int]$GraceSeconds = 3
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSScriptRoot "Fixture.Lifecycle.psm1") -Force
+function __HELPER__ {
+    param([string]$Profile)
+    "HELPER_READY profile=$Profile"
+}
+$callback = {
+    __HELPER__ -Profile $LauncherProfile
+}.GetNewClosure()
+$result = Invoke-FixtureModuleCallback -Action $callback
+if ($result -ne "HELPER_READY profile=v3") { throw "Fixture lost the V3 profile or helper result." }
+Write-Output $result
+if ($env:SPTC_V3_SCOPE_FIXTURE_MODE -eq "failure") {
+    throw "EXPECTED_FIXTURE_FAILURE_AFTER_PRIVATE_HELPER"
+}
+Write-Output ("FORWARDED no_browser={0} service_timeout={1} grace={2}" -f $NoBrowser, $ServiceTimeoutSeconds, $GraceSeconds)
+Write-Output "WRAPPER_SCOPE_FIXTURE_COMPLETE"
+'@
+    [IO.File]::WriteAllText((Join-Path $fixtureRoot "$Operation-local-chatbot-demo.ps1"),
+        $sharedSource.Replace("__HELPER__", $helperName))
+    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $wrapperPath)
+    if ($Operation -eq "start") { $arguments += @("-NoBrowser", "-ServiceTimeoutSeconds", "17") }
+    else { $arguments += @("-GraceSeconds", "2") }
+    $result = Invoke-DemoCapturedProcess -FilePath (Join-Path $PSHOME "powershell.exe") `
+        -ArgumentList $arguments -Environment @{ SPTC_V3_SCOPE_FIXTURE_MODE = $Mode } -TimeoutSeconds 10
+    Assert-Equal $result.TimedOut $false "Wrapper scope fixture finishes without services"
+    Assert-Equal $result.CleanupFailed $false "Owned fixture process cleanup succeeds"
+    $result
+}
+
 try {
     [void](New-Item -ItemType Directory -Path $temporaryRoot)
     Import-Module (Join-Path $demoRoot "lib\LocalDemo.Core.psm1") -Force
@@ -759,6 +827,30 @@ try {
         foreach ($name in @("start", "stop")) {
             $wrapper = Get-Content -LiteralPath (Join-Path $demoRoot "$name-local-chatbot-demo-v3.ps1") -Raw
             Assert-True ($wrapper -match '-LauncherProfile v3 @PSBoundParameters') "Explicit V3 wrapper: $name"
+        }
+    }
+    foreach ($operation in @("start", "stop")) {
+        Invoke-V3Test ("actual_" + $operation + "_wrapper_preserves_private_helper_closure_scope") {
+            $result = Invoke-WrapperScopeFixture -Operation $operation -Mode "success"
+            Assert-Equal $result.ExitCode 0 "Actual wrapper/private callback succeeds"
+            Assert-True ($result.Output -match "HELPER_READY profile=v3") "Private helper resolved through module callback"
+            Assert-True ($result.Output -match "WRAPPER_SCOPE_FIXTURE_COMPLETE") "Wrapper completed"
+            $forwarded = if ($operation -eq "start") { "no_browser=True service_timeout=17 grace=3" } else { "no_browser=False service_timeout=30 grace=2" }
+            Assert-True ($result.Output -match [regex]::Escape($forwarded)) "Operator parameters forwarded unchanged"
+        }
+        Invoke-V3Test ("actual_" + $operation + "_wrapper_propagates_callback_lifecycle_failure") {
+            $result = Invoke-WrapperScopeFixture -Operation $operation -Mode "failure"
+            Assert-True ($result.ExitCode -ne 0) "Shared lifecycle failure propagates out of wrapper"
+            Assert-True ($result.Output -match "HELPER_READY profile=v3") "Helper resolved before intended failure"
+            Assert-True ($result.ErrorOutput -match "EXPECTED_FIXTURE_FAILURE_AFTER_PRIVATE_HELPER") "Exact failure remains visible"
+            Assert-True ($result.Output -notmatch "WRAPPER_SCOPE_FIXTURE_COMPLETE") "No false success after shared failure"
+        }
+        Invoke-V3Test ("negative_call_operator_" + $operation + "_reproduces_private_helper_scope_defect") {
+            $result = Invoke-WrapperScopeFixture -Operation $operation -Mode "negative_call_operator"
+            Assert-True ($result.ExitCode -ne 0) "Original call operator reproduces lifecycle failure"
+            $helper = if ($operation -eq "stop") { "Register-FailedStopHelper" } else { "Register-FailedDemoHelper" }
+            Assert-True ($result.ErrorOutput -match [regex]::Escape($helper)) "Failure identifies missing private cleanup helper"
+            Assert-True ($result.Output -notmatch "WRAPPER_SCOPE_FIXTURE_COMPLETE") "Negative control cannot falsely pass"
         }
     }
     Invoke-V3Test "reviewed_loopback_backend_configuration_unchanged" {
