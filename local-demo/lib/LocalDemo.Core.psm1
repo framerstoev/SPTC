@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("v2", "v3")]
+    [string]$LauncherProfile = "v2"
+)
+
 Set-StrictMode -Version Latest
 
 $script:AcceptedFrontendCommit = "58f04a9c8d608fa9622bf8a0133d446118970543"
@@ -8,6 +13,15 @@ $script:BackendUrl = "http://127.0.0.1:8080"
 $script:OllamaUrl = "http://127.0.0.1:11434"
 $script:ModelName = "qwen3:8b"
 $script:RuntimeSchemaVersion = 1
+
+# Explicit per-invocation configuration; never inferred from environment or HEAD.
+if ($LauncherProfile -eq "v3") {
+    $script:AcceptedFrontendCommit = "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d"
+    $script:AcceptedFrontendTag = "phase4a-v3-tier-aware-explorer-accepted"
+    $script:AcceptedBackendCommit = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
+    $script:BrowserUrl = "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent"
+    $script:RuntimeSchemaVersion = 3
+}
 
 function Get-LocalDemoConstants {
     [CmdletBinding()]
@@ -65,7 +79,8 @@ function Get-LocalDemoLayout {
             )
         }
     }
-    $runtimeRoot = Join-Path $demoRoot ".runtime"
+    $runtimeName = if ($LauncherProfile -eq "v3") { ".runtime-v3" } else { ".runtime" }
+    $runtimeRoot = Join-Path $demoRoot $runtimeName
 
     [pscustomobject]@{
         DemoRoot = $demoRoot

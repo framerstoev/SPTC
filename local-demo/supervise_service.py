@@ -286,7 +286,9 @@ def supervise(
         pass
 
 
-def main() -> int:
+def main(runtime_name: str = ".runtime") -> int:
+    if runtime_name not in {".runtime", ".runtime-v3"}:
+        raise ValueError("Unsupported launcher runtime namespace.")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--executable", required=True)
     parser.add_argument("--working-directory", required=True)
@@ -301,7 +303,7 @@ def main() -> int:
     if _is_reparse(script_path):
         raise ValueError("The supervisor script must not be a reparse point.")
     demo_root = script_path.parent
-    logs_root = demo_root / ".runtime" / "logs"
+    logs_root = demo_root / runtime_name / "logs"
     executable = Path(options.executable).resolve(strict=True)
     working_directory = Path(options.working_directory).resolve(strict=True)
     if not executable.is_file() or not working_directory.is_dir():

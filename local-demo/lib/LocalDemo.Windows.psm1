@@ -1,7 +1,15 @@
+param(
+    [ValidateSet("v2", "v3")]
+    [string]$LauncherProfile = "v2"
+)
+
 Set-StrictMode -Version Latest
 
 $coreModule = Join-Path $PSScriptRoot "LocalDemo.Core.psm1"
-Import-Module $coreModule
+Import-Module $coreModule -ArgumentList $LauncherProfile
+if ($LauncherProfile -eq "v3") {
+    . (Join-Path $PSScriptRoot "LocalDemo.V3.ps1")
+}
 
 $script:AllowedDemoLogNames = @(
     "ollama.stdout.log", "ollama.stderr.log",
@@ -129,6 +137,10 @@ function Assert-DemoRepositoryCheckpoints {
         [string]$GitPath
     )
 
+    if ($LauncherProfile -eq "v3") {
+        Assert-V3DemoRepositoryCheckpoints -Layout $Layout -GitPath $GitPath
+        return
+    }
     $constants = Get-LocalDemoConstants
     foreach ($repository in @($Layout.FrontendRepository, $Layout.BackendRepository)) {
         if (-not (Test-Path -LiteralPath $repository -PathType Container) -or
@@ -1833,3 +1845,11 @@ Export-ModuleMember -Function @(
     "Remove-OldDemoLogSessions",
     "Open-DemoBrowser"
 )
+if ($LauncherProfile -eq "v3") {
+    Export-ModuleMember -Function @(
+        "Get-V3DemoAllowedChanges", "Assert-V3DemoCheckpointFacts",
+        "Assert-V3DemoRepositoryCheckpoints", "Enter-V3DemoCompatibilityLock",
+        "Assert-V3DemoAvailablePorts", "Assert-V3DemoServiceContracts",
+        "Open-V3DemoBrowser", "Write-V3DemoStatus"
+    )
+}

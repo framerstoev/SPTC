@@ -4,14 +4,18 @@
 param(
     [Parameter(Mandatory = $false)]
     [ValidateRange(1, 10)]
-    [int]$GraceSeconds = 3
+    [int]$GraceSeconds = 3,
+
+    [Parameter(DontShow = $true)]
+    [ValidateSet("v2", "v3")]
+    [string]$LauncherProfile = "v2"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Core.psm1") -Force
-Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Windows.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Core.psm1") -Force -ArgumentList $LauncherProfile
+Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Windows.psm1") -Force -ArgumentList $LauncherProfile
 
 $constants = Get-LocalDemoConstants
 $layout = Get-LocalDemoLayout -ScriptRoot $PSScriptRoot
@@ -322,7 +326,9 @@ try {
     } else {
         Write-Warning "The qwen3:8b manifest is no longer present; the launcher did not remove it."
     }
-    Write-Host "Jason local chatbot demo is stopped."
+    if ($LauncherProfile -eq "v3") {
+        Write-Host "V3 Roadway Resilience demo is stopped."
+    } else { Write-Host "Jason local chatbot demo is stopped." }
 } finally {
     if ($null -ne $lifecycleLock) {
         $lifecycleLock.Dispose()

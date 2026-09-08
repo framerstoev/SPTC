@@ -11,18 +11,23 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateRange(10, 60)]
-    [int]$ServiceTimeoutSeconds = 30
+    [int]$ServiceTimeoutSeconds = 30,
+
+    [Parameter(DontShow = $true)]
+    [ValidateSet("v2", "v3")]
+    [string]$LauncherProfile = "v2"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Core.psm1") -Force
-Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Windows.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Core.psm1") -Force -ArgumentList $LauncherProfile
+Import-Module (Join-Path $PSScriptRoot "lib\LocalDemo.Windows.psm1") -Force -ArgumentList $LauncherProfile
 
 $constants = Get-LocalDemoConstants
 $layout = Get-LocalDemoLayout -ScriptRoot $PSScriptRoot
 $lifecycleLock = $null
+$compatibilityLock = $null
 $state = $null
 $ollamaPath = $null
 $nvidiaSmiPath = $null
@@ -30,6 +35,12 @@ $stage = "initialization"
 $startupWatch = [Diagnostics.Stopwatch]::StartNew()
 $activeExistingState = $null
 $preservedExistingSession = $false
+$supervisorName = if ($LauncherProfile -eq "v3") {
+    "supervise_service_v3.py"
+} else { "supervise_service.py" }
+$stopScriptName = if ($LauncherProfile -eq "v3") {
+    "stop-local-chatbot-demo-v3.ps1"
+} else { "stop-local-chatbot-demo.ps1" }
 
 function Save-CurrentDemoState {
     Write-DemoState -State $state -StatePath $layout.StatePath
@@ -189,7 +200,7 @@ function Start-TrackedDemoProcess {
     try {
         $process = Start-DemoSupervisedProcess `
             -SupervisorPython $layout.BackendSupervisorPython `
-            -SupervisorScript (Join-Path $PSScriptRoot "supervise_service.py") `
+            -SupervisorScript (Join-Path $PSScriptRoot $supervisorName) `
             -ServiceFilePath $FilePath -ServiceArguments $ArgumentList `
             -WorkingDirectory $WorkingDirectory -Environment $Environment `
             -StandardOutputLog $StandardOutputLog `
@@ -401,6 +412,9 @@ function Invoke-LaunchFailureRollback {
 }
 
 try {
+    if ($LauncherProfile -eq "v3") {
+        $compatibilityLock = Enter-V3DemoCompatibilityLock -Layout $layout
+    }
     Initialize-DemoRuntime -Layout $layout
     $lifecycleLock = Enter-DemoLifecycleLock -LockPath $layout.LockPath
 
@@ -422,8 +436,10 @@ try {
             )
         }
         if ($disposition -eq "stale") {
-            Limit-DemoSessionLogs -LogDirectory $existingState.log_directory `
-                -LogsRoot $layout.LogsRoot
+            if ($LauncherProfile -eq "v2") {
+                Limit-DemoSessionLogs -LogDirectory $existingState.log_directory `
+                    -LogsRoot $layout.LogsRoot
+            }
             Remove-Item -LiteralPath $layout.StatePath -Force
             Write-Host "Removed a stale launcher state file; no recorded process identity matched."
         }
@@ -449,6 +465,9 @@ try {
     }
     $gitPath = Resolve-DemoExecutable -CommandName "git.exe"
     Assert-DemoRepositoryCheckpoints -Layout $layout -GitPath $gitPath
+    if ($LauncherProfile -eq "v3") {
+        Assert-V3DemoAvailablePorts
+    }
 
     $ollamaCandidates = @()
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
@@ -535,14 +554,16 @@ try {
             -TimeoutSeconds $ServiceTimeoutSeconds
         Assert-DemoFrontendResponse -HttpStatus $frontendStatus
         if (-not $NoBrowser) {
-            Open-DemoBrowser -Url $constants.BrowserUrl
+            if ($LauncherProfile -eq "v3") {
+                Open-V3DemoBrowser -Url $constants.BrowserUrl
+            } else { Open-DemoBrowser -Url $constants.BrowserUrl }
         }
         Write-Host "The launcher-owned local demo is already running and healthy."
         Write-Host "Browser: $($activeExistingState.browser_url)"
         Write-Host "Model: $($constants.ModelName) ($allocation)"
         Write-Host (
             "Stop with: powershell.exe -NoProfile -File `"{0}`"" -f
-            (Join-Path $PSScriptRoot "stop-local-chatbot-demo.ps1")
+            (Join-Path $PSScriptRoot $stopScriptName)
         )
         return
     }
@@ -670,7 +691,7 @@ try {
     }.GetNewClosure()
     $warmup = Invoke-DemoBoundedProcess `
         -SupervisorPython $layout.BackendSupervisorPython `
-        -SupervisorScript (Join-Path $PSScriptRoot "supervise_service.py") `
+        -SupervisorScript (Join-Path $PSScriptRoot $supervisorName) `
         -FilePath $layout.BackendPython `
         -ArgumentList @("-m", "resilience_agent.assistant_warmup") `
         -WorkingDirectory $layout.BackendRepository `
@@ -709,6 +730,7 @@ try {
     Save-CurrentDemoState
 
     $stage = "FastAPI startup"
+    $backendWatch = [Diagnostics.Stopwatch]::StartNew()
     $backendStdout = Join-Path $logDirectory "backend.stdout.log"
     $backendStderr = Join-Path $logDirectory "backend.stderr.log"
     $backendLaunch = Start-TrackedDemoProcess -Role "backend" `
@@ -731,8 +753,10 @@ try {
     $health = Wait-DemoHttpJson -Url "$($constants.BackendUrl)/health" `
         -TimeoutSeconds $ServiceTimeoutSeconds
     Assert-DemoBackendHealth -Health $health
+    $backendSeconds = $backendWatch.Elapsed.TotalSeconds
 
     $stage = "frontend startup"
+    $frontendWatch = [Diagnostics.Stopwatch]::StartNew()
     $frontendStdout = Join-Path $logDirectory "frontend.stdout.log"
     $frontendStderr = Join-Path $logDirectory "frontend.stderr.log"
     $frontendLaunch = Start-TrackedDemoProcess -Role "frontend" `
@@ -753,6 +777,10 @@ try {
     $frontendStatus = Wait-DemoHttpStatus -Url $constants.BrowserUrl `
         -TimeoutSeconds $ServiceTimeoutSeconds
     Assert-DemoFrontendResponse -HttpStatus $frontendStatus
+    $frontendSeconds = $frontendWatch.Elapsed.TotalSeconds
+    if ($LauncherProfile -eq "v3") {
+        Assert-V3DemoServiceContracts -Layout $layout
+    }
 
     $state.status = "ready"
     $state.ready_at_utc = [DateTime]::UtcNow.ToString("o")
@@ -761,10 +789,16 @@ try {
 
     $stage = "browser open"
     if (-not $NoBrowser) {
-        Open-DemoBrowser -Url $constants.BrowserUrl
+        if ($LauncherProfile -eq "v3") {
+            Open-V3DemoBrowser -Url $constants.BrowserUrl
+        } else { Open-DemoBrowser -Url $constants.BrowserUrl }
     }
     Write-Host ""
-    Write-Host "Jason local chatbot demo is READY."
+    if ($LauncherProfile -eq "v3") {
+        Write-Host "V3 Roadway Resilience demo is READY"
+        Write-Host ("Backend startup: {0:F3} sec; frontend startup: {1:F3} sec" -f
+            $backendSeconds, $frontendSeconds)
+    } else { Write-Host "Jason local chatbot demo is READY." }
     Write-Host "Browser: $($constants.BrowserUrl)"
     Write-Host "GPU: $($gpuAfterWarmup.Name), status OK, Code 0"
     Write-Host "Model: $($constants.ModelName) ($allocation)"
@@ -775,7 +809,7 @@ try {
     Write-Host "Logs: $logDirectory"
     Write-Host (
         "Stop: powershell.exe -NoProfile -File `"{0}`"" -f
-        (Join-Path $PSScriptRoot "stop-local-chatbot-demo.ps1")
+        (Join-Path $PSScriptRoot $stopScriptName)
     )
 } catch {
     $failureMessage = $_.Exception.Message
@@ -798,5 +832,8 @@ try {
 } finally {
     if ($null -ne $lifecycleLock) {
         $lifecycleLock.Dispose()
+    }
+    if ($null -ne $compatibilityLock) {
+        $compatibilityLock.Dispose()
     }
 }
