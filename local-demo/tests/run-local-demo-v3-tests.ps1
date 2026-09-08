@@ -71,7 +71,7 @@ function New-CheckpointFacts {
         FrontendCommitExists = $true
         FrontendTagTarget = "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d"
         FrontendContainsAcceptedCommit = $true
-        BackendHead = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
+        BackendHead = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee"
         BackendTagTarget = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
         FrontendChanges = @()
         FrontendStatus = @()
@@ -310,7 +310,7 @@ try {
     Invoke-V3Test "v3_exact_constants_and_separate_namespace" {
         $constants = Get-LocalDemoConstants
         Assert-Equal $constants.AcceptedFrontendCommit "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d" "V3 frontend"
-        Assert-Equal $constants.AcceptedBackendCommit "b550f11ca75b8c4921667a264ae7a3ca78710ea9" "V3 backend"
+        Assert-Equal $constants.AcceptedBackendCommit "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee" "V3 backend"
         Assert-Equal $constants.AcceptedFrontendTag "phase4a-v3-tier-aware-explorer-accepted" "V3 tag"
         Assert-Equal $constants.BrowserUrl "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent" "V3 browser"
         Assert-Equal $constants.RuntimeSchemaVersion 3 "V3 schema"
@@ -327,6 +327,8 @@ try {
             @{ Name = "wrong_frontend_tag"; Key = "FrontendTagTarget"; Value = "0000000000000000000000000000000000000000" },
             @{ Name = "unrelated_frontend_head"; Key = "FrontendContainsAcceptedCommit"; Value = $false },
             @{ Name = "wrong_backend_head"; Key = "BackendHead"; Value = "5edc4688514f2c47ae3e8c03f50b853c0f5d8108" },
+            @{ Name = "old_backend_baseline_runtime_rejected"; Key = "BackendHead"; Value = "b550f11ca75b8c4921667a264ae7a3ca78710ea9" },
+            @{ Name = "moved_backend_baseline_tag_rejected"; Key = "BackendTagTarget"; Value = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee" },
             @{ Name = "wrong_backend_tag"; Key = "BackendTagTarget"; Value = "wrong" }
         )) {
         Invoke-V3Test $mutation.Name {

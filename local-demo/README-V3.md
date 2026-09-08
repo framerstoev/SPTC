@@ -53,8 +53,11 @@ repository branch names, or a browser preference.
 
 - Frontend: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
 - Immutable frontend tag: `phase4a-v3-tier-aware-explorer-accepted`
-- Backend: `b550f11ca75b8c4921667a264ae7a3ca78710ea9`
-- Immutable backend tag: `phase4a-v3-network-assistant-accepted`
+- Backend runtime with reviewed response-contract fix:
+  `e289aeb9ecf92d8d3d2f937dbc2d693342a35bee`
+- Immutable Phase 4A backend baseline:
+  `b550f11ca75b8c4921667a264ae7a3ca78710ea9`
+- Immutable backend baseline tag: `phase4a-v3-network-assistant-accepted`
 
 Adding the launcher necessarily advances frontend HEAD. V3 therefore verifies
 the exact accepted application checkpoint/tag, requires its ancestry, and compares
@@ -65,7 +68,11 @@ launcher-documentation and ignore-file paths returned by
 allowlisted. This is application-content equivalence, not a claim that the new
 launcher commit has the same Git hash as Phase 4A.
 
-The backend HEAD and accepted backend tag must both equal the exact hash above.
+The backend HEAD must equal the exact reviewed runtime fix hash above. The
+Phase 4A backend tag must still target the original baseline hash, independently
+of runtime HEAD. Neither an arbitrary descendant nor the old baseline as runtime
+HEAD is accepted. This explicit V3 pin update does not change V2 checkpoint rules
+or move either Phase 4A tag.
 Both worktrees must be clean, including untracked files, except for the previously
 accepted **untracked root `debug.log`** in the frontend. A tracked change to that
 file or another debug/log filename is not accepted. No user file is deleted.

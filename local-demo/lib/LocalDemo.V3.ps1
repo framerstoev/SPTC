@@ -36,9 +36,10 @@ function Assert-V3DemoCheckpointFacts {
         -not $FrontendContainsAcceptedCommit) {
         throw "V3 frontend does not match the accepted Phase 4A checkpoint/tag ancestry."
     }
+    # The reviewed response-contract fix advances runtime HEAD, never the Phase 4A tag.
     if ($BackendHead -cne $constants.AcceptedBackendCommit -or
-        $BackendTagTarget -cne $constants.AcceptedBackendCommit) {
-        throw "V3 backend does not match the exact accepted Phase 4A checkpoint/tag."
+        $BackendTagTarget -cne "b550f11ca75b8c4921667a264ae7a3ca78710ea9") {
+        throw "V3 backend does not match the exact reviewed runtime checkpoint/tag baseline."
     }
     $allowed = @(Get-V3DemoAllowedChanges)
     foreach ($path in $FrontendChanges) {
