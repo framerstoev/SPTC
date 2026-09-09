@@ -71,6 +71,8 @@ function New-CheckpointFacts {
         FrontendCommitExists = $true
         FrontendTagTarget = "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d"
         FrontendContainsAcceptedCommit = $true
+        FrontendApplicationCommitExists = $true
+        FrontendContainsApplicationCommit = $true
         BackendHead = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee"
         BackendTagTarget = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
         FrontendChanges = @()
@@ -319,11 +321,14 @@ try {
         Assert-True ($layout.StatePath -notmatch '\\.runtime\\') "V3 must not use V2 state."
     }
     Invoke-V3Test "accepted_frontend_and_backend_checkpoint" {
+        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "1861bfc9e4a6ddd4691d4d7256980de5a43a895a" "Phase 4B content pin"
         $facts = New-CheckpointFacts
         Assert-V3DemoCheckpointFacts @facts
     }
     foreach ($mutation in @(
             @{ Name = "missing_frontend_commit"; Key = "FrontendCommitExists"; Value = $false },
+            @{ Name = "missing_phase4b_application_commit"; Key = "FrontendApplicationCommitExists"; Value = $false },
+            @{ Name = "unrelated_phase4b_application_head"; Key = "FrontendContainsApplicationCommit"; Value = $false },
             @{ Name = "wrong_frontend_tag"; Key = "FrontendTagTarget"; Value = "0000000000000000000000000000000000000000" },
             @{ Name = "unrelated_frontend_head"; Key = "FrontendContainsAcceptedCommit"; Value = $false },
             @{ Name = "wrong_backend_head"; Key = "BackendHead"; Value = "5edc4688514f2c47ae3e8c03f50b853c0f5d8108" },

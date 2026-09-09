@@ -1,6 +1,11 @@
 # Private V3 policies, loaded only by the explicit V3 Windows module instance.
 # Lifecycle/process primitives stay in the shared, regression-tested modules.
 
+function Get-V3DemoApplicationCheckpoint {
+    # Reviewed Phase 4B content; immutable Phase 4A tags remain independently checked.
+    "1861bfc9e4a6ddd4691d4d7256980de5a43a895a"
+}
+
 function Get-V3DemoAllowedChanges {
     @(
         ".gitignore",
@@ -24,6 +29,8 @@ function Assert-V3DemoCheckpointFacts {
         [bool]$FrontendCommitExists,
         [string]$FrontendTagTarget,
         [bool]$FrontendContainsAcceptedCommit,
+        [bool]$FrontendApplicationCommitExists,
+        [bool]$FrontendContainsApplicationCommit,
         [string]$BackendHead,
         [string]$BackendTagTarget,
         [AllowEmptyCollection()][string[]]$FrontendChanges = @(),
@@ -35,6 +42,9 @@ function Assert-V3DemoCheckpointFacts {
         $FrontendTagTarget -cne $constants.AcceptedFrontendCommit -or
         -not $FrontendContainsAcceptedCommit) {
         throw "V3 frontend does not match the accepted Phase 4A checkpoint/tag ancestry."
+    }
+    if (-not $FrontendApplicationCommitExists -or -not $FrontendContainsApplicationCommit) {
+        throw "V3 frontend does not match the reviewed Phase 4B application checkpoint/tag ancestry."
     }
     # The reviewed response-contract fix advances runtime HEAD, never the Phase 4A tag.
     if ($BackendHead -cne $constants.AcceptedBackendCommit -or
@@ -64,6 +74,11 @@ function Assert-V3DemoRepositoryCheckpoints {
     $constants = Get-LocalDemoConstants
     $front = $Layout.FrontendRepository
     $back = $Layout.BackendRepository
+    $application = Get-V3DemoApplicationCheckpoint
+    $applicationCommit = Invoke-DemoGit -GitPath $GitPath -Repository $front `
+        -Arguments @("cat-file", "-e", "${application}^{commit}") -AllowFailure
+    $applicationAncestor = Invoke-DemoGit -GitPath $GitPath -Repository $front `
+        -Arguments @("merge-base", "--is-ancestor", $application, "HEAD") -AllowFailure
     $commit = Invoke-DemoGit -GitPath $GitPath -Repository $front `
         -Arguments @("cat-file", "-e", "$($constants.AcceptedFrontendCommit)^{commit}") -AllowFailure
     $tag = Invoke-DemoGit -GitPath $GitPath -Repository $front `
@@ -74,13 +89,15 @@ function Assert-V3DemoRepositoryCheckpoints {
     $backTag = Invoke-DemoGit -GitPath $GitPath -Repository $back `
         -Arguments @("rev-parse", "phase4a-v3-network-assistant-accepted^{commit}")
     $changes = Invoke-DemoGit -GitPath $GitPath -Repository $front `
-        -Arguments @("diff", "--name-only", "--no-renames", $constants.AcceptedFrontendCommit, "HEAD", "--")
+        -Arguments @("diff", "--name-only", "--no-renames", $application, "HEAD", "--")
     $frontStatus = Invoke-DemoGit -GitPath $GitPath -Repository $front `
         -Arguments @("status", "--porcelain=v1", "--untracked-files=all")
     $backStatus = Invoke-DemoGit -GitPath $GitPath -Repository $back `
         -Arguments @("status", "--porcelain=v1", "--untracked-files=all")
     Assert-V3DemoCheckpointFacts -FrontendCommitExists ($commit.ExitCode -eq 0) `
         -FrontendTagTarget $tag.Output -FrontendContainsAcceptedCommit ($ancestor.ExitCode -eq 0) `
+        -FrontendApplicationCommitExists ($applicationCommit.ExitCode -eq 0) `
+        -FrontendContainsApplicationCommit ($applicationAncestor.ExitCode -eq 0) `
         -BackendHead $head.Output -BackendTagTarget $backTag.Output `
         -FrontendChanges @($changes.Output -split "`n") `
         -FrontendStatus @($frontStatus.Output -split "`n") `
@@ -185,7 +202,7 @@ function Write-V3DemoStatus {
     Write-Host "Browser: $($constants.BrowserUrl)"
     $gitPath = Resolve-DemoExecutable -CommandName "git.exe"
     foreach ($entry in @(
-            @("Frontend", $Layout.FrontendRepository, $constants.AcceptedFrontendCommit),
+            @("Frontend", $Layout.FrontendRepository, (Get-V3DemoApplicationCheckpoint)),
             @("Backend", $Layout.BackendRepository, $constants.AcceptedBackendCommit)
         )) {
         $head = Invoke-DemoGit -GitPath $gitPath -Repository $entry[1] -Arguments @("rev-parse", "HEAD")

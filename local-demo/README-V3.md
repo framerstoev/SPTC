@@ -51,7 +51,8 @@ repository branch names, or a browser preference.
 
 ## Accepted application checkpoints
 
-- Frontend: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
+- Reviewed Phase 4B frontend content: `1861bfc9e4a6ddd4691d4d7256980de5a43a895a`
+- Immutable Phase 4A frontend baseline: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
 - Immutable frontend tag: `phase4a-v3-tier-aware-explorer-accepted`
 - Backend runtime with reviewed response-contract fix:
   `e289aeb9ecf92d8d3d2f937dbc2d693342a35bee`
@@ -60,13 +61,16 @@ repository branch names, or a browser preference.
 - Immutable backend baseline tag: `phase4a-v3-network-assistant-accepted`
 
 Adding the launcher necessarily advances frontend HEAD. V3 therefore verifies
-the exact accepted application checkpoint/tag, requires its ancestry, and compares
-the **entire repository** against that checkpoint with renames disabled. The only
+the immutable Phase 4A baseline/tag ancestry and the exact reviewed Phase 4B
+application commit ancestry. It compares the **entire repository** against the
+Phase 4B content commit with renames disabled. The only
 permitted committed differences are the exact launcher, launcher-test,
 launcher-documentation and ignore-file paths returned by
 `Get-V3DemoAllowedChanges` in `lib/LocalDemo.V3.ps1`. No application path is
 allowlisted. This is application-content equivalence, not a claim that the new
-launcher commit has the same Git hash as Phase 4A.
+launcher commit has the same Git hash as either application checkpoint. The
+private V3 policy alone advances the content pin; V2 and shared lifecycle,
+GPU checks, process ownership, port safety, and state handling are unchanged.
 
 The backend HEAD must equal the exact reviewed runtime fix hash above. The
 Phase 4A backend tag must still target the original baseline hash, independently
