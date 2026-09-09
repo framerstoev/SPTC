@@ -55,7 +55,7 @@ repository branch names, or a browser preference.
 - Immutable Phase 4A frontend baseline: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
 - Immutable frontend tag: `phase4a-v3-tier-aware-explorer-accepted`
 - Backend runtime with reviewed response-contract fixes and analytical depth:
-  `d110b56453a412399d32c9ffe026ce1cd1653b0e`
+  `e6b0ad5600e1d0056cd927ba9034bda6243b6030`
 - Immutable Phase 4A backend baseline:
   `b550f11ca75b8c4921667a264ae7a3ca78710ea9`
 - Immutable backend baseline tag: `phase4a-v3-network-assistant-accepted`

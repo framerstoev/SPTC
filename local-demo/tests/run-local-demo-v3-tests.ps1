@@ -73,7 +73,7 @@ function New-CheckpointFacts {
         FrontendContainsAcceptedCommit = $true
         FrontendApplicationCommitExists = $true
         FrontendContainsApplicationCommit = $true
-        BackendHead = "d110b56453a412399d32c9ffe026ce1cd1653b0e"
+        BackendHead = "e6b0ad5600e1d0056cd927ba9034bda6243b6030"
         BackendTagTarget = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
         FrontendChanges = @()
         FrontendStatus = @()
@@ -312,7 +312,7 @@ try {
     Invoke-V3Test "v3_exact_constants_and_separate_namespace" {
         $constants = Get-LocalDemoConstants
         Assert-Equal $constants.AcceptedFrontendCommit "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d" "V3 frontend"
-        Assert-Equal $constants.AcceptedBackendCommit "d110b56453a412399d32c9ffe026ce1cd1653b0e" "V3 backend"
+        Assert-Equal $constants.AcceptedBackendCommit "e6b0ad5600e1d0056cd927ba9034bda6243b6030" "V3 backend"
         Assert-Equal $constants.AcceptedFrontendTag "phase4a-v3-tier-aware-explorer-accepted" "V3 tag"
         Assert-Equal $constants.BrowserUrl "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent" "V3 browser"
         Assert-Equal $constants.RuntimeSchemaVersion 3 "V3 schema"

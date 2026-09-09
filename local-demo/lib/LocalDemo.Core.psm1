@@ -18,7 +18,7 @@ $script:RuntimeSchemaVersion = 1
 if ($LauncherProfile -eq "v3") {
     $script:AcceptedFrontendCommit = "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d"
     $script:AcceptedFrontendTag = "phase4a-v3-tier-aware-explorer-accepted"
-    $script:AcceptedBackendCommit = "d110b56453a412399d32c9ffe026ce1cd1653b0e"
+    $script:AcceptedBackendCommit = "e6b0ad5600e1d0056cd927ba9034bda6243b6030"
     $script:BrowserUrl = "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent"
     $script:RuntimeSchemaVersion = 3
 }
