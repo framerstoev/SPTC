@@ -73,7 +73,7 @@ function New-CheckpointFacts {
         FrontendContainsAcceptedCommit = $true
         FrontendApplicationCommitExists = $true
         FrontendContainsApplicationCommit = $true
-        BackendHead = "cc30a34dae57c2046c81c2ac9ed7d82782d50a1c"
+        BackendHead = "1e1482d72efd494887f89c1a934970be0ab08fbf"
         BackendTagTarget = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
         FrontendChanges = @()
         FrontendStatus = @()
@@ -312,7 +312,7 @@ try {
     Invoke-V3Test "v3_exact_constants_and_separate_namespace" {
         $constants = Get-LocalDemoConstants
         Assert-Equal $constants.AcceptedFrontendCommit "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d" "V3 frontend"
-        Assert-Equal $constants.AcceptedBackendCommit "cc30a34dae57c2046c81c2ac9ed7d82782d50a1c" "V3 backend"
+        Assert-Equal $constants.AcceptedBackendCommit "1e1482d72efd494887f89c1a934970be0ab08fbf" "V3 backend"
         Assert-Equal $constants.AcceptedFrontendTag "phase4a-v3-tier-aware-explorer-accepted" "V3 tag"
         Assert-Equal $constants.BrowserUrl "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent" "V3 browser"
         Assert-Equal $constants.RuntimeSchemaVersion 3 "V3 schema"
@@ -321,7 +321,7 @@ try {
         Assert-True ($layout.StatePath -notmatch '\\.runtime\\') "V3 must not use V2 state."
     }
     Invoke-V3Test "accepted_frontend_and_backend_checkpoint" {
-        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "ee398bc6f6fbd5d942f31f9469222bd10108ab6a" "Phase 4C content pin"
+        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "f2387591720aeab9e43a517d1f1a93dd5e7ca263" "Phase 4C1 content pin"
         $facts = New-CheckpointFacts
         Assert-V3DemoCheckpointFacts @facts
     }
