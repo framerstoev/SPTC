@@ -47,7 +47,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File local-demo/tests/run-loc
 After the existing V3 launcher is ready:
 
 ```powershell
-D:\programming\Minicoda\python.exe coldwave-demo-v3/tests/run_phase4c1_browser_qa.py --scenario live
+D:\programming\Minicoda\python.exe coldwave-demo-v3/tests/run_phase4c1_browser_qa.py --scenario live --output-dir E:/Projects/PhD/SPTC/.tmp-phase4c1-browser
 ```
 
 The isolated-browser harness reuses accepted process lifecycle and tests real
