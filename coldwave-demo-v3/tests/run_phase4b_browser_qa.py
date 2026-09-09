@@ -320,7 +320,7 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
                 case_id,
                 30,
             )
-            self.assert_one_request(mark, method, url, case_id)
+            request = self.assert_one_request(mark, method, url, case_id)
             self.report.check(
                 not self.query_requests(mark),
                 f"{case_id} remains outside the LLM path",
@@ -335,6 +335,9 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
                 and RAW_JSON.search(latest) is None,
                 f"{case_id} renders bounded public deterministic text",
             )
+            if selector == "#assistantGenerateReviewNote":
+                note = self.response_payload(request['requestId'])
+                self.report.check(all(item in latest for item in note['human_review_items']), "review note retains its complete human-review checklist in plain text")
 
 def main():
     args = parse_args()

@@ -933,7 +933,8 @@ module.exports = async function runAssistantActionsTests() {
         previous = index;
       });
       excludes(text, response.sections.find(section => section.key === "data_and_method_cautions").body);
-    includes(text,"Draft for human review");
+      includes(text,"Draft for human review");
+      response.human_review_items.forEach((item, index) => includes(text, `${index + 1}. ${item}`));
     includes(text,"<script>inertWarning()</script>");
     includes(text,"Reviewed limitation.");
     excludes(text,"METHOD_SCOPE");

@@ -364,6 +364,7 @@
         "Draft for human review.",
         response.title,
         ...response.sections.filter(section => section.key !== "data_and_method_cautions").map(section => section.body),
+        ...response.human_review_items.map((item, index) => `${index + 1}. ${item}`),
         ...response.warnings.map(warning => warning.message),
         ...response.limitations
       ].join("\n\n");
