@@ -321,7 +321,7 @@ try {
         Assert-True ($layout.StatePath -notmatch '\\.runtime\\') "V3 must not use V2 state."
     }
     Invoke-V3Test "accepted_frontend_and_backend_checkpoint" {
-        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "f2387591720aeab9e43a517d1f1a93dd5e7ca263" "Phase 4C1 content pin"
+        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "3abeb9d39d5b9851e0840392f186d08012aa52a7" "Phase 4C1 content pin"
         $facts = New-CheckpointFacts
         Assert-V3DemoCheckpointFacts @facts
     }

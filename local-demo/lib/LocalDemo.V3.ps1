@@ -3,7 +3,7 @@
 
 function Get-V3DemoApplicationCheckpoint {
     # Reviewed Phase 4C1 content; immutable Phase 4A tags remain independently checked.
-    "f2387591720aeab9e43a517d1f1a93dd5e7ca263"
+    "3abeb9d39d5b9851e0840392f186d08012aa52a7"
 }
 
 function Get-V3DemoAllowedChanges {
