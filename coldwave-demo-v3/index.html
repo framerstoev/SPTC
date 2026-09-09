@@ -30,13 +30,7 @@
 
     <main class="app-view-host" id="appViewHost" aria-label="Application views">
       <section id="explorerView" class="app-view explorer-view" data-app-view="explorer" data-view-role="section-explorer" aria-label="Roadway section Explorer">
-        <div class="app-shell">
-          <aside class="analysis-panel" id="analysisPanel" aria-labelledby="analysisPanelHeading">
-            <header class="analysis-panel-heading">
-              <div><p class="eyebrow">Selected-section workspace</p><h2 id="analysisPanelHeading">Section analysis</h2></div>
-            </header>
-
-            <section class="control-module" aria-label="Section and tier controls">
+        <div class="workspace-toolbar">
               <div class="search-control">
                 <label for="csSearch">Find control section</label>
                 <div class="search-row">
@@ -46,55 +40,72 @@
                 <div class="search-results" id="searchResults" aria-live="polite"></div>
               </div>
 
-              <fieldset class="tier-control" id="analysisTierControl">
-                <legend>Analytical tier</legend>
-                <div class="tier-segments" role="radiogroup" aria-label="Analytical tier">
-                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier1"><span>Tier 1</span><strong>Weather</strong></button>
-                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier2"><span>Tier 2</span><strong>Network</strong></button>
-                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="potential"><span>Tier 1+2</span><strong>Potential</strong></button>
-                  <button type="button" role="radio" aria-checked="true" tabindex="0" data-analysis-layer="tier3"><span>Tier 3</span><strong>Observed</strong></button>
-                </div>
-              </fieldset>
-
-              <label class="tier-select-label" for="tierSelect">Analytical tier</label>
-              <select id="tierSelect" class="tier-select" aria-label="Analytical tier">
-                <option value="tier1">Tier 1 — Weather</option>
-                <option value="tier2">Tier 2 — Network</option>
-                <option value="potential">Tier 1+2 — Potential</option>
-                <option value="tier3" selected>Tier 3 — Observed Resilience</option>
-              </select>
-              <p class="layer-note" id="layerNote"></p>
-            </section>
-
             <section class="selected-module" aria-live="polite">
               <div class="selected-heading">
-                <div><p class="eyebrow">Selected roadway section</p><h2 id="selectedTitle">No section selected</h2><p id="selectedSub">Click a control section on the map or use search.</p></div>
-                <span class="active-tier-chip" id="activeTierChip">Tier 3 — Observed Resilience</span>
+                <div><h2 id="selectedTitle">No section selected</h2><p id="selectedSub">Click either map or use search.</p></div>
               </div>
               <div class="badge-row" id="statusBadges"></div>
-              <div class="warning-card" id="warningCard" role="note" hidden></div>
             </section>
-
+            <div class="workspace-visibility" role="group" aria-label="Visible workspaces">
+              <button id="toggleObserved" type="button" aria-pressed="true" aria-controls="observedWorkspace">Observed</button>
+              <button id="togglePlanning" type="button" aria-pressed="true" aria-controls="planningWorkspace">Planning</button>
+            </div>
+        </div>
+        <div class="app-shell" id="comparativeWorkspace" data-mobile-side="observed">
+          <section class="comparison-side" id="observedWorkspace" aria-label="Observed workspace">
+            <header class="workspace-side-heading"><p class="eyebrow">Observed performance</p><h2>Tier 3 — Observed Resilience</h2></header>
+            <div class="side-content" id="observedSideContent">
+              <section class="map-shell" aria-label="Tier 3 observed resilience map">
+                <div id="map"></div>
+                <details class="map-legend-control" id="mapLegend"><summary id="mapLegendToggle" aria-controls="legend" aria-expanded="false">Tier 3 legend</summary><div class="legend" id="legend"></div></details>
+              </section>
+              <div id="observedSplitter" class="workspace-splitter horizontal-splitter" role="separator" tabindex="0" aria-label="Resize observed map and analysis" aria-orientation="horizontal" aria-controls="observedSideContent" aria-valuemin="25" aria-valuemax="65" aria-valuenow="43"></div>
+              <div id="observedAnalysis" class="workspace-analysis">
             <section class="tier-analysis-module" id="tierAnalysisPanel" aria-live="polite" aria-labelledby="tierPanelHeading">
-              <header class="module-heading"><div><p class="eyebrow" id="tierPanelEyebrow">Tier 3</p><h2 id="tierPanelHeading">Observed Resilience</h2></div></header>
+              <h2 id="tierPanelHeading" class="visually-hidden">Tier 3 observed metrics</h2>
               <div class="tier-empty-state" id="tierEmptyState">Select a control section to view its Tier 3 evidence.</div>
               <div class="metric-grid" id="tierMetrics" hidden></div>
-              <p class="tier-footnote" id="tierFootnote" hidden></p>
             </section>
 
             <section class="curve-module" id="curvePanel" aria-labelledby="curvePanelHeading">
-              <header class="module-heading"><div><p class="eyebrow">Tier 3 evidence</p><h2 id="curvePanelHeading">Q(t) performance</h2></div></header>
+              <header class="module-heading"><h2 id="curvePanelHeading">Q(t)</h2></header>
               <div class="curve-card" id="curveCard">
                 <div class="chart-wrap" id="curveChartWrap" hidden><canvas id="curveChart" role="img" aria-label="Observed Q(t) performance curve for the selected roadway section"></canvas></div>
                 <div class="phase-marker-legend" id="phaseMarkerLegend" hidden></div>
                 <div class="chart-note" id="curveNote">Select a control section to view Q(t).</div>
               </div>
             </section>
-          </aside>
-
-          <section class="map-shell" aria-label="Roadway resilience map">
-            <div id="map"></div>
-            <details class="map-legend-control" id="mapLegend"><summary id="mapLegendToggle" aria-controls="legend" aria-expanded="false">Legend</summary><div class="legend" id="legend"></div></details>
+              </div>
+            </div>
+          </section>
+          <div id="workspaceSplitter" class="workspace-splitter vertical-splitter" role="separator" tabindex="0" aria-label="Resize observed and planning workspaces" aria-orientation="vertical" aria-controls="observedWorkspace planningWorkspace" aria-valuemin="35" aria-valuemax="65" aria-valuenow="50"></div>
+          <section class="comparison-side" id="planningWorkspace" aria-label="Planning workspace">
+            <header class="workspace-side-heading planning-heading">
+              <div><p class="eyebrow">Planning / Potential context</p><h2>Tier 1 / 2</h2></div>
+              <fieldset class="tier-control" id="analysisTierControl">
+                <legend class="visually-hidden">Planning tier</legend>
+                <div class="tier-segments" role="radiogroup" aria-label="Planning tier">
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier1">Tier 1</button>
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier2">Tier 2</button>
+                  <button type="button" role="radio" aria-checked="true" tabindex="0" data-analysis-layer="potential">Potential</button>
+                </div>
+              </fieldset>
+              <select id="tierSelect" class="tier-select" aria-label="Planning tier">
+                <option value="tier1">Tier 1 — Weather</option><option value="tier2">Tier 2 — Network</option><option value="potential" selected>Potential</option>
+              </select>
+            </header>
+            <div class="side-content" id="planningSideContent">
+              <section class="map-shell" aria-label="Planning context map">
+                <div id="planningMap"></div>
+                <details class="map-legend-control" id="planningMapLegend"><summary id="planningMapLegendToggle" aria-controls="planningLegend" aria-expanded="false">Planning legend</summary><div class="legend" id="planningLegend"></div></details>
+              </section>
+              <div id="planningSplitter" class="workspace-splitter horizontal-splitter" role="separator" tabindex="0" aria-label="Resize planning map and analysis" aria-orientation="horizontal" aria-controls="planningSideContent" aria-valuemin="25" aria-valuemax="65" aria-valuenow="43"></div>
+              <section id="planningAnalysis" class="workspace-analysis" aria-live="polite" aria-labelledby="planningPanelHeading">
+                <header class="module-heading"><div><p class="eyebrow" id="planningPanelEyebrow">Tier 1+2</p><h2 id="planningPanelHeading">Potential Resilience</h2></div></header>
+                <div class="tier-empty-state" id="planningEmptyState">Select a control section to view planning context.</div>
+                <div class="metric-grid" id="planningMetrics" hidden></div>
+              </section>
+            </div>
           </section>
         </div>
       </section>
@@ -110,12 +121,12 @@
     </header>
 
     <div class="assistant-panel-content">
-      <p class="assistant-disclaimer" id="assistantDisclaimer">Ask about sections, tiers, statewide rankings, alignment, or county evidence.</p>
+      <p class="assistant-disclaimer visually-hidden" id="assistantDisclaimer">Ask about sections, tiers, statewide rankings, alignment, or county evidence.</p>
       <div class="assistant-agent" id="assistantAgent" hidden aria-hidden="true" aria-busy="false">
         <div class="assistant-suggestions" id="assistantSuggestedQuestions" aria-label="Suggested AI questions">
           <div class="assistant-suggestion-grid" role="group" aria-label="Demo questions">
             <button type="button" data-assistant-question="Rank control sections by Tier 3 observed resilience.">Rank Tier 3 sections</button>
-            <button type="button" data-assistant-question="How consistent are Potential Resilience and Tier 3 Observed Resilience? Show counts and examples of mismatches.">Compare potential &amp; observed</button>
+            <button type="button" data-assistant-question="How consistent are Potential Resilience and Tier 3 Observed Resilience?">Compare potential &amp; observed</button>
             <button type="button" data-assistant-question="How did roadway sections in Dallas County perform during this event?">Summarize Dallas County</button>
           </div>
         </div>
@@ -154,6 +165,7 @@
   <script src="./js/assistant-api.js"></script>
   <script src="./js/assistant-actions.js"></script>
   <script src="./js/assistant-chat.js"></script>
+  <script src="./js/workspace.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

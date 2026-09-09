@@ -1,4 +1,4 @@
-"""Run focused no-build QA for the Phase 4A V3 frontend."""
+"""Run focused no-build QA for the Phase 4B V3 frontend."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from pathlib import Path
 V3_ROOT = Path(__file__).resolve().parents[1]
 V2_ROOT = V3_ROOT.parent / "coldwave-demo-v2"
 REPOSITORY_ROOT = V3_ROOT.parent
-EXPECTED_LAYERS = ("tier1", "tier2", "potential", "tier3")
+EXPECTED_LAYERS = ("tier1", "tier2", "potential")
 REPRESENTATIVE_SECTIONS = ("CS_1081", "CS_257", "CS_3597", "CS_1", "CS_583693")
 
 
@@ -124,7 +124,7 @@ def assert_repository_scope() -> dict[str, object]:
         text=True,
         encoding="utf-8",
     ).stdout.strip()
-    assert branch == "feature/v3-tier-aware-explorer-network-ai", branch
+    assert branch == "feature/v3-comparative-workspace-ai-simplification", branch
     status = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=REPOSITORY_ROOT,
@@ -134,10 +134,11 @@ def assert_repository_scope() -> dict[str, object]:
         encoding="utf-8",
     ).stdout.splitlines()
     unexpected = [line for line in status if "coldwave-demo-v3/" not in line.replace("\\", "/")]
-    tracked_outside_v3 = [line for line in unexpected if not line.startswith("?? ")]
+    launcher_paths = {"local-demo/lib/LocalDemo.V3.ps1", "local-demo/tests/run-local-demo-v3-tests.ps1", "local-demo/README-V3.md"}
+    tracked_outside_v3 = [line for line in unexpected if line != "?? debug.log" and line[3:] not in launcher_paths]
     assert not tracked_outside_v3, f"Tracked changes outside V3: {tracked_outside_v3[:10]}"
     v2_diff = subprocess.run(
-        ["git", "diff", "--quiet", "--", "coldwave-demo-v2"],
+        ["git", "diff", "--quiet", "4e542843d25afc7fcf5329217181f33900034b99", "--", "coldwave-demo", "coldwave-demo-v2", "coldwave-demo-v3/data"],
         cwd=REPOSITORY_ROOT,
         check=False,
     )
@@ -157,6 +158,7 @@ def static_checks() -> dict[str, object]:
         "js/assistant-api.js",
         "js/assistant-actions.js",
         "js/assistant-chat.js",
+        "js/workspace.js",
         "js/app.js",
         "README.md",
         "docs/DEPLOYMENT_READINESS.md",
@@ -180,16 +182,16 @@ def static_checks() -> dict[str, object]:
     assert sum(item.get("aria-checked") == "true" for item in parser.tier_buttons) == 1
     assert next(
         item for item in parser.tier_buttons if item.get("aria-checked") == "true"
-    )["data-analysis-layer"] == "tier3"
-    assert tuple(item.get("tabindex") for item in parser.tier_buttons) == ("-1", "-1", "-1", "0")
+    )["data-analysis-layer"] == "potential"
+    assert tuple(item.get("tabindex") for item in parser.tier_buttons) == ("-1", "-1", "0")
     assert all("active" not in (item.get("class") or "").split() for item in parser.tier_buttons)
     assert tuple(item["value"] for item in parser.tier_options) == EXPECTED_LAYERS
     assert sum("selected" in item for item in parser.tier_options) == 1
-    assert next(item for item in parser.tier_options if "selected" in item)["value"] == "tier3"
+    assert next(item for item in parser.tier_options if "selected" in item)["value"] == "potential"
     assert len(parser.suggestions) == 3
     assert parser.suggestions == [
         "Rank control sections by Tier 3 observed resilience.",
-        "How consistent are Potential Resilience and Tier 3 Observed Resilience? Show counts and examples of mismatches.",
+        "How consistent are Potential Resilience and Tier 3 Observed Resilience?",
         "How did roadway sections in Dallas County perform during this event?",
     ]
     assert len(parser.quick_action_details) == 1
@@ -211,6 +213,7 @@ def static_checks() -> dict[str, object]:
         "./js/assistant-api.js",
         "./js/assistant-actions.js",
         "./js/assistant-chat.js",
+        "./js/workspace.js",
         "./js/app.js",
     )
     positions = [index.index(path) for path in script_order]
@@ -218,7 +221,7 @@ def static_checks() -> dict[str, object]:
     for local_resource in parser.local_resources:
         assert (V3_ROOT / local_resource).resolve().is_file(), local_resource
 
-    assert 'let activeAnalysisLayer = "tier3"' in app
+    assert 'let activeAnalysisLayer = "potential"' in app
     assert all(f"  {layer}: Object.freeze({{" in app for layer in EXPECTED_LAYERS)
     assert 'sourceField: "WEATHER_REI"' in app
     assert 'sourceField: "NETRISK_LITE"' in app
@@ -230,7 +233,7 @@ def static_checks() -> dict[str, object]:
     assert "Observed class:" not in app
     for label in ('metricCard("Score"', 'metricCard("Minimum"', 'metricCard("Loss Area"', 'metricCard("Recovery"'):
         assert app.count(label) == 1
-    assert 'if (activeAnalysisLayer === "tier3")' in app
+    assert 'if (activeAnalysisLayer === "tier3")' not in app
     assert "await renderCurve(selectedProps)" in app
 
     assert 'assistant_profile: "v3"' in api
@@ -246,10 +249,10 @@ def static_checks() -> dict[str, object]:
     assert "result.source_metric" not in chat
     assert "safeDisplayText" in actions and "safeDisplayText" in chat
     assert "innerHTML" not in actions and "innerHTML" not in chat
-    assert '"common_support_count"' in chat
-    assert '"status_counts.no_sustained_drop"' in chat
-    assert '"status_counts.recovery_endpoint_censored"' in chat
-    assert '"direction"' in chat and '"metric_rank"' in chat
+    assert "result.common_support_count" in chat
+    assert "result.status_counts.no_sustained_drop" in chat
+    assert "result.status_counts.recovery_endpoint_censored" in chat
+    assert "result.direction" in chat and "row.metric_rank" in chat
 
     assert 'backend_target: "local-loopback"' in deployment
     assert 'localLoopback: "local-loopback"' in config
@@ -259,65 +262,28 @@ def static_checks() -> dict[str, object]:
     assert "credentials: \"omit\"" in api
     assert "Authorization" not in api
     assert "localStorage" not in config and "sessionStorage" not in config
-    v2_style = (V2_ROOT / "css" / "style.css").read_text(encoding="utf-8")
-    dead_splitter_blocks = (
-        """.analysis-splitter {
-  position: relative;
-  min-width: 10px;
-  min-height: 0;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.analysis-splitter::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
-  width: 2px;
-  background: #cbd5e1;
-  transition: background-color 120ms ease, box-shadow 120ms ease;
-}
-
-.analysis-splitter:hover::before,
-.analysis-splitter:focus-visible::before,
-body.is-analysis-resizing .analysis-splitter::before {
-  background: var(--accent);
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.14);
-}
-
-.analysis-splitter:focus-visible {
-  outline: 2px solid rgba(15, 118, 110, 0.45);
-  outline-offset: -2px;
-}
-
-body.is-analysis-resizing,
-body.is-analysis-resizing * {
-  cursor: col-resize !important;
-  user-select: none !important;
-}
-
-""",
-        """  .analysis-splitter {
-    display: none;
-  }
-
-""",
-    )
-    for dead_block in dead_splitter_blocks:
-        assert dead_block in v2_style
-        v2_style = v2_style.replace(dead_block, "", 1)
-    v2_style = v2_style.rstrip()
-    assert style.startswith(f"{v2_style}\n\n/* Phase 4A V3 consolidated override. */")
-    assert style.count("/* Phase 4A V3 consolidated override. */") == 1
-    assert "Authoritative V3 cascade" not in style
-    assert ".assistant-structured-result" not in style
-    assert ".assistant-result-summary" not in style
-    assert ".assistant-result-table" not in style
-    assert "analysis-splitter" not in style
-    assert "is-analysis-resizing" not in style
+    for dom_id in ("planningMap", "workspaceSplitter", "observedSplitter", "planningSplitter", "toggleObserved", "togglePlanning", "observedSideContent", "planningSideContent"):
+        assert dom_id in parser.ids
+    for absent in ("warningCard", "tierFootnote", "layerNote", "activeTierChip"):
+        assert absent not in parser.ids
     assert "--maroon: #500000" in style
+    assert "max-width: 900px" in style
+    assert "minmax(0,1fr)" in style
+    assert "innerHTML" not in read("js/workspace.js")
+    assert "fetch(" not in read("js/workspace.js")
+    baseline_app = subprocess.run(
+        ["git","show","4e542843d25afc7fcf5329217181f33900034b99:coldwave-demo-v3/js/app.js"],
+        cwd=REPOSITORY_ROOT, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
+    # Exact source preservation of reviewed class/range, numeric helpers and overlay math.
+    for function in ("numberOrNull", "percentile", "computeScoreClassBreaks", "scoreClassIndex", "scoreClassInfo", "computeRanges", "rampColor", "nearestIndex"):
+        marker = "function " + function + "("
+        current_body = app[app.index(marker):].split("\nfunction ",1)[0]
+        old_body = baseline_app[baseline_app.index(marker):].split("\nfunction ",1)[0]
+        assert current_body == old_body, function + " changed unexpectedly"
+    start = "const phaseOverlayPlugin = {"
+    end = "Chart.register(phaseOverlayPlugin);"
+    assert app.split(start)[1].split(end)[0] == baseline_app.split(start)[1].split(end)[0]
 
     data_results = assert_data_copy()
     release_results = assert_release_fields()
@@ -394,6 +360,7 @@ def live_resource_check() -> list[str]:
         "/js/assistant-api.js",
         "/js/assistant-actions.js",
         "/js/assistant-chat.js",
+        "/js/workspace.js",
         "/js/app.js",
         "/data/summary.json",
         "/data/curves/CS_1081.json",

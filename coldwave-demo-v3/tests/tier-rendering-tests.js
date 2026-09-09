@@ -151,6 +151,11 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
     constructor() {
       this.elements = new Map();
       [
+        "planningLegend",
+        "planningPanelEyebrow",
+        "planningPanelHeading",
+        "planningEmptyState",
+        "planningMetrics",
         "layerNote",
         "legend",
         "tierEmptyState",
@@ -174,7 +179,7 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
       ].forEach(id => this.elements.set(id, new FakeElement("div", id)));
       this.elements.get("tierSelect").tagName = "SELECT";
       const control = this.elements.get("analysisTierControl");
-      this.buttons = ["tier1", "tier2", "potential", "tier3"].map(layer => {
+      this.buttons = ["tier1", "tier2", "potential"].map(layer => {
         const button = new FakeElement("button");
         button.dataset.analysisLayer = layer;
         control.appendChild(button);
@@ -306,6 +311,8 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
       ${appSource.slice(0, bootIndex)}
       globalThis.__tierQa = Object.freeze({
         setupTierControls,
+        renderAnalysisPanel,
+        renderCurve,
         setActiveAnalysisLayer,
         featureStyle,
         setFetch(nextFetch) { globalThis.fetch = nextFetch; },
@@ -313,6 +320,8 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
         setRuntimeState(nextMap, nextControlLayer) {
           map = nextMap;
           controlLayer = nextControlLayer;
+          planningMap = nextMap;
+          planningControlLayer = nextControlLayer;
           ranges = {
             WEATHER_REI: { min: 0, max: 1 },
             NETRISK_LITE: { min: 0, max: 1 },
@@ -363,96 +372,98 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
     });
   }
 
-  test("production tier controls initialize and switch through one aria-checked contract", async () => {
-    const { api, buttons, control, select } = createHarness();
-    buttons.forEach(button => button.setAttribute("aria-checked", "false"));
-    buttons.forEach(button => { button.tabIndex = 0; });
+  test("three planning controls initialize as Potential and support keyboard selection", async () => {
+    const {api,buttons,control,select}=createHarness();
     api.setupTierControls();
-    assertSingleActive(buttons, "tier3");
-    equal(select.value, "tier3");
-
+    assertSingleActive(buttons,"potential");
+    equal(select.value,"potential");
     buttons[0].click();
-    assertSingleActive(buttons, "tier1");
-    equal(select.value, "tier1");
-
-    control.dispatchEvent({ type: "keydown", key: "ArrowRight", target: buttons[0] });
-    assertSingleActive(buttons, "tier2");
-    assert(buttons[1].focused, "Keyboard tier switching must move focus");
-
-    select.value = "potential";
-    select.dispatchEvent({ type: "change", target: select });
-    assertSingleActive(buttons, "potential");
+    assertSingleActive(buttons,"tier1");
+    control.dispatchEvent({type:"keydown",key:"ArrowRight",target:buttons[0]});
+    assertSingleActive(buttons,"tier2");
+    assert(buttons[1].focused);
+    select.value="potential";
+    select.dispatchEvent({type:"change",target:select});
+    assertSingleActive(buttons,"potential");
   });
 
-  test("tier switching synchronizes map style, legend, panel, curve visibility, and Assistant context", async () => {
-    const {
-      api,
-      buttons,
-      document,
-      controlLayer,
-      actionContexts,
-      chatContexts
-    } = createHarness();
+  test("planning changes preserve fixed observed cards and curve while updating planning context only", async () => {
+    const {api,document,actionContexts,chatContexts}=createHarness();
     api.setupTierControls();
-    const expected = [
-      ["tier1", "Weather Resilience Context", "WEATHER_REI", "NETWORK_REI"],
-      ["tier2", "Network Resilience Context", "NETWORK_REI", "Potential Resilience"],
-      ["potential", "Potential Resilience", "Tier 1", "Loss Area"]
-    ];
-    for (const [index, [layer, heading, includedMetric, excludedMetric]] of expected.entries()) {
-      buttons[index].click();
-      assertSingleActive(buttons, layer);
-      equal(document.getElementById("tierPanelHeading").textContent, heading);
-      includes(document.getElementById("tierMetrics").innerHTML, includedMetric);
-      excludes(document.getElementById("tierMetrics").innerHTML, excludedMetric);
-      includes(document.getElementById("legend").innerHTML, heading.split(" ")[0]);
-      assert(document.getElementById("curvePanel").hidden);
-      equal(actionContexts.at(-1).activeLayer, layer);
-      equal(chatContexts.at(-1).activeLayer, layer);
-      assert(typeof controlLayer.styleCalls.at(-1) === "function");
-      const style = controlLayer.styleCalls.at(-1)({ properties: sectionFixture() });
-      assert(/^#[0-9a-f]{6}$/i.test(style.color));
+    const fetches=[];
+    api.setFetch(async url=>{fetches.push(url);return curveResponse();});
+    await api.renderCurve(sectionFixture());
+    for (const [tier,label] of [["tier1","WEATHER_REI"],["tier2","NETWORK_REI"],["potential","Potential Resilience"]]) {
+      await api.setActiveAnalysisLayer(tier);
+      includes(document.getElementById("planningMetrics").innerHTML,label);
+      excludes(document.getElementById("planningMetrics").innerHTML,"metric-help");
+      equal((document.getElementById("tierMetrics").innerHTML.match(/class="metric-card/g)||[]).length,4);
+      ["Score","Minimum","Loss Area","Recovery"].forEach(value=>includes(document.getElementById("tierMetrics").innerHTML,value));
+      assert(!document.getElementById("curvePanel").hidden);
+      equal(actionContexts.at(-1).activeLayer,tier);
+      equal(chatContexts.at(-1).activeLayer,tier);
+      assert(api.state().hasChart);
     }
-
-    const fetchCalls = [];
-    api.setFetch(async url => {
-      fetchCalls.push(url);
-      return curveResponse();
-    });
-    await api.setActiveAnalysisLayer("tier3");
-    assertSingleActive(buttons, "tier3");
-    equal(document.getElementById("tierPanelHeading").textContent, "Observed Resilience");
-    const metrics = document.getElementById("tierMetrics").innerHTML;
-    ["Score", "Minimum", "Loss Area", "Recovery"].forEach(label => includes(metrics, label));
-    equal((metrics.match(/class="metric-card/g) || []).length, 4);
-    assert(!document.getElementById("curvePanel").hidden);
-    equal(fetchCalls, ["./data/curves/CS_1081.json"]);
-    assert(api.state().hasChart);
-    includes(
-      document.getElementById("legend").innerHTML,
-      "Higher values indicate more favorable observed operational resilience"
-    );
-    includes(document.getElementById("curveNote").textContent, "Shaded area");
+    equal(fetches.length,1,"tier changes never refetch Q(t)");
+    equal(document.getElementById("curveNote").textContent,"");
   });
 
-  test("leaving Tier 3 invalidates a pending curve response before chart creation", async () => {
-    FakeChart.instances.length = 0;
-    const { api, buttons, document } = createHarness();
-    api.setupTierControls();
-    await api.setActiveAnalysisLayer("potential");
-    let resolveFetch;
-    api.setFetch(() => new Promise(resolve => {
-      resolveFetch = resolve;
-    }));
-    const pendingTier3 = api.setActiveAnalysisLayer("tier3");
-    await Promise.resolve();
-    assert(typeof resolveFetch === "function");
+  test("Tier 3 cannot replace the right-side planning layer", async () => {
+    const {api}=createHarness();
+    await api.setActiveAnalysisLayer("tier3");
+    equal(api.state().activeAnalysisLayer,"potential");
+    await api.setActiveAnalysisLayer("unreviewed");
+    equal(api.state().activeAnalysisLayer,"potential");
+  });
+
+  test("all four statuses remain visible independent of planning layer", async () => {
+    const {api,document}=createHarness();
+    for (const status of ["detected","no_sustained_drop","recovery_endpoint_censored","no_observed_support"]) {
+      const props={...sectionFixture(),detection_status:status};
+      if(status==="no_observed_support") Object.assign(props,{curve_file:null,q_min:null,observed_curve_resilience_score_v0:null,resilience_loss_area:null,recovery_duration_hours:null});
+      api.setSelectedProps(props);
+      for(const tier of ["tier1","tier2","potential"]) {
+        await api.setActiveAnalysisLayer(tier);
+        api.renderAnalysisPanel(props);
+        assert(document.getElementById("statusBadges").innerHTML.length>0);
+        if(status==="no_sustained_drop"||status==="no_observed_support") equal((document.getElementById("tierMetrics").innerHTML.match(/N\/A/g)||[]).length,4);
+      }
+    }
+  });
+
+  test("curve arrays, reference lines and stored phase markers retain their accepted values", async () => {
+    FakeChart.instances.length=0;
+    const {api,document}=createHarness();
+    await api.renderCurve(sectionFixture());
+    const chart=FakeChart.instances.at(-1).configuration;
+    equal(chart.data.datasets.map(dataset=>dataset.data),[[1,.7],[1,.75],[1,1],[.9,.9],[.8,.8]]);
+    includes(document.getElementById("phaseMarkerLegend").innerHTML,"Recovery endpoint");
+    await api.renderCurve({...sectionFixture(),detection_status:"recovery_endpoint_censored"});
+    includes(document.getElementById("phaseMarkerLegend").innerHTML,"Censored endpoint");
+  });
+
+  test("a planning change does not invalidate an in-flight observed curve", async () => {
+    const {api}=createHarness();
+    let resolve;
+    api.setFetch(()=>new Promise(done=>{resolve=done;}));
+    const pending=api.renderCurve(sectionFixture());
     await api.setActiveAnalysisLayer("tier1");
-    resolveFetch(curveResponse());
-    await pendingTier3;
-    assertSingleActive(buttons, "tier1");
-    assert(document.getElementById("curvePanel").hidden);
-    equal(FakeChart.instances.length, 0, "A stale Tier 3 response must not create a chart");
+    resolve(curveResponse());
+    await pending;
+    assert(api.state().hasChart);
+  });
+
+  test("a later observed curve selection still suppresses the stale response", async () => {
+    FakeChart.instances.length=0;
+    const {api}=createHarness();
+    let resolve;
+    api.setFetch(()=>new Promise(done=>{resolve=done;}));
+    const oldCurve=api.renderCurve(sectionFixture());
+    api.setFetch(async()=>curveResponse());
+    await api.renderCurve({...sectionFixture(),CTRL_SECT_KEY:"CS_257"});
+    resolve(curveResponse());
+    await oldCurve;
+    equal(FakeChart.instances.length,1);
   });
 
   let passed = 0;
@@ -465,5 +476,5 @@ module.exports = async function runTierRenderingTests({ appSource, vm }) {
       throw error;
     }
   }
-  return `${passed} Phase 4A V3 tier runtime tests passed.`;
+  return `${passed} Phase 4B V3 comparative tier runtime tests passed.`;
 };

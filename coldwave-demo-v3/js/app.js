@@ -5,6 +5,7 @@ const controlRenderer = L.canvas({
   padding: 0.5,
   tolerance: 8
 });
+const planningRenderer = L.canvas({ padding: 0.5, tolerance: 8 });
 
 const scoreRamp = ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"];
 const riskRamp = ["#f7fbff", "#c6dbef", "#6baed6", "#fdae61", "#b2182b"];
@@ -36,27 +37,27 @@ const analysisLayerConfig = Object.freeze({
     label: "Tier 1 — Weather Resilience Context",
     shortLabel: "Tier 1 — Weather",
     panelEyebrow: "Tier 1",
-    panelHeading: "Weather Resilience Context",
+    panelHeading: "Weather Context",
     sourceField: "WEATHER_REI",
     publicMetric: "weather_rei",
     type: "continuous",
     ramp: riskRamp,
     min: 0,
     max: 1,
-    description: "Higher values indicate stronger precipitation and pavement-exposure concern for this event."
+    description: "Higher = stronger weather/pavement exposure concern"
   }),
   tier2: Object.freeze({
     label: "Tier 2 — Network Resilience Context",
     shortLabel: "Tier 2 — Network",
     panelEyebrow: "Tier 2",
-    panelHeading: "Network Resilience Context",
+    panelHeading: "Network Context",
     sourceField: "NETRISK_LITE",
     publicMetric: "network_rei",
     type: "continuous",
     ramp: riskRamp,
     min: 0,
     max: 1,
-    description: "Higher values indicate stronger network consequence and constraint concern."
+    description: "Higher = stronger network-context concern"
   }),
   potential: Object.freeze({
     label: "Tier 1+2 — Potential Resilience",
@@ -69,7 +70,7 @@ const analysisLayerConfig = Object.freeze({
     ramp: scoreRamp,
     min: 0,
     max: 1,
-    description: "Higher values indicate more favorable combined planning context; this is not observed performance."
+    description: "Higher = more favorable planning context"
   }),
   tier3: Object.freeze({
     label: "Tier 3 — Observed Resilience",
@@ -80,14 +81,21 @@ const analysisLayerConfig = Object.freeze({
     publicMetric: "observed_resilience_score",
     type: "scoreClass",
     ramp: scoreClassColors,
-    description: "Higher values indicate more favorable observed operational resilience for supported sections in this event."
+    description: "Higher = more favorable observed resilience"
   })
 });
 
 let map;
+let planningMap;
 let mapData;
 let controlLayer;
-let activeAnalysisLayer = "tier3";
+let planningControlLayer;
+// Tier 3 is fixed on the observed side. This state belongs only to planning.
+let activeAnalysisLayer = "potential";
+let planningSelectedLayer = null;
+let planningHaloLayer = null;
+let planningCasingLayer = null;
+let workspaceController = null;
 let selectedLeafletLayer = null;
 let selectedHaloLayer = null;
 let selectedCasingLayer = null;
@@ -100,6 +108,7 @@ let ranges = {};
 let scoreClassBreaks = [];
 let searchIndex = [];
 let layerByCtrl = new Map();
+let planningLayerByCtrl = new Map();
 let featureByCtrl = new Map();
 let curveChart = null;
 let phaseOverlayState = null;
@@ -276,8 +285,8 @@ function rampColor(value, cfg, field) {
   return interpolateColor(ramp[i], ramp[i + 1], scaled - i);
 }
 
-function featureColor(props) {
-  const cfg = analysisLayerConfig[activeAnalysisLayer];
+function featureColor(props, tier = "tier3") {
+  const cfg = analysisLayerConfig[tier];
   if (cfg.type === "scoreClass") {
     if (isNoSustainedDrop(props)) return detectionColors.no_sustained_drop;
     const cls = scoreClassInfo(props);
@@ -286,13 +295,13 @@ function featureColor(props) {
   return rampColor(props[cfg.sourceField], cfg, cfg.sourceField);
 }
 
-function featureStyle(feature) {
+function featureStyle(feature, tier = "tier3", targetMap = map) {
   const props = feature.properties || {};
-  const cfg = analysisLayerConfig[activeAnalysisLayer];
+  const cfg = analysisLayerConfig[tier];
   const hasValue = cfg.type === "scoreClass"
     ? Boolean(scoreClassInfo(props)) || isNoSustainedDrop(props)
     : numberOrNull(props[cfg.sourceField]) !== null;
-  const zoom = map ? map.getZoom() : 6;
+  const zoom = targetMap ? targetMap.getZoom() : 6;
   let valueWeight = 1.1;
   let missingWeight = 0.7;
   if (zoom >= 11) {
@@ -303,7 +312,7 @@ function featureStyle(feature) {
     missingWeight = 1.0;
   }
   return {
-    color: featureColor(props),
+    color: featureColor(props, tier),
     weight: hasValue ? valueWeight : missingWeight,
     opacity: hasValue ? 0.78 : 0.22,
     lineCap: "round"
@@ -322,6 +331,12 @@ function clearSelectedMapHighlight() {
   }
   if (selectedHaloLayer && map) map.removeLayer(selectedHaloLayer);
   if (selectedCasingLayer && map) map.removeLayer(selectedCasingLayer);
+  if (planningSelectedLayer && planningControlLayer) planningControlLayer.resetStyle(planningSelectedLayer);
+  if (planningHaloLayer && planningMap) planningMap.removeLayer(planningHaloLayer);
+  if (planningCasingLayer && planningMap) planningMap.removeLayer(planningCasingLayer);
+  planningSelectedLayer = null;
+  planningHaloLayer = null;
+  planningCasingLayer = null;
   selectedHaloLayer = null;
   selectedCasingLayer = null;
   selectedLeafletLayer = null;
@@ -341,6 +356,14 @@ function createSelectedMapHighlight(feature) {
       lineCap: "round"
     }
   }).addTo(map);
+  planningHaloLayer = L.geoJSON(feature, {
+    renderer: planningRenderer, interactive: false,
+    style: { color: "#ffffff", weight: weights.halo, opacity: 0.94, lineCap: "round" }
+  }).addTo(planningMap);
+  planningCasingLayer = L.geoJSON(feature, {
+    renderer: planningRenderer, interactive: false,
+    style: { color: "#0f172a", weight: weights.casing, opacity: 0.94, lineCap: "round" }
+  }).addTo(planningMap);
   selectedCasingLayer = L.geoJSON(feature, {
     renderer: controlRenderer,
     interactive: false,
@@ -374,11 +397,19 @@ function applySelectedStyle() {
   if (selectedHaloLayer?.bringToFront) selectedHaloLayer.bringToFront();
   if (selectedCasingLayer?.bringToFront) selectedCasingLayer.bringToFront();
   if (selectedLeafletLayer.bringToFront) selectedLeafletLayer.bringToFront();
+  planningHaloLayer?.setStyle({ weight: weights.halo });
+  planningCasingLayer?.setStyle({ weight: weights.casing });
+  planningSelectedLayer?.setStyle({
+    color: featureColor(selectedProps || {}, activeAnalysisLayer), weight: weights.core, opacity: 1
+  });
+  planningHaloLayer?.bringToFront();
+  planningCasingLayer?.bringToFront();
+  planningSelectedLayer?.bringToFront();
 }
 
-function setupMapLegendControl() {
-  const legendDetails = document.getElementById("mapLegend");
-  const legendToggle = document.getElementById("mapLegendToggle");
+function setupMapLegendControl(targetMap = map, prefix = "") {
+  const legendDetails = document.getElementById(prefix ? "planningMapLegend" : "mapLegend");
+  const legendToggle = document.getElementById(prefix ? "planningMapLegendToggle" : "mapLegendToggle");
   legendDetails.open = false;
   legendToggle.setAttribute("aria-expanded", "false");
   legendDetails.addEventListener("toggle", () => {
@@ -397,13 +428,12 @@ function setupMapLegendControl() {
     L.DomEvent.disableScrollPropagation(legendDetails);
     return legendDetails;
   };
-  mapLegendControl.addTo(map);
+  mapLegendControl.addTo(targetMap);
 }
 
-function updateLegend() {
-  const cfg = analysisLayerConfig[activeAnalysisLayer];
-  document.getElementById("layerNote").textContent = cfg.description || "";
-  const legend = document.getElementById("legend");
+function updateLegend(tier = "tier3", target = "legend") {
+  const cfg = analysisLayerConfig[tier];
+  const legend = document.getElementById(target);
   if (cfg.type === "scoreClass") {
     const rows = scoreClassLabels.map((label, index) => `
       <div class="legend-row"><span class="swatch" style="background:${scoreClassColors[index]}"></span><span>${label}: ${fmtRange(scoreClassBreaks[index], scoreClassBreaks[index + 1])}</span></div>
@@ -414,7 +444,7 @@ function updateLegend() {
       <div class="legend-row"><span class="swatch" style="background:${detectionColors.no_sustained_drop}"></span><span>No sustained drop detected</span></div>
       <div class="legend-row"><span class="swatch" style="background:#9ca3af"></span><span>Missing / no observed score</span></div>
       <p class="layer-note">${cfg.description}</p>
-      <p class="layer-note">Classes are runtime quantiles for this release, not official resilience categories.</p>
+      <div class="legend-scope">Event-sample quantiles · experimental</div>
     `;
     return;
   }
@@ -555,61 +585,43 @@ function renderSelectedIdentity(props) {
   const title = document.getElementById("selectedTitle");
   const subtitle = document.getElementById("selectedSub");
   const badges = document.getElementById("statusBadges");
-  const warning = document.getElementById("warningCard");
   if (!props) {
     title.textContent = "No section selected";
     subtitle.textContent = "Click a control section on the map or use search.";
     badges.replaceChildren();
-    warning.hidden = true;
-    warning.textContent = "";
     return;
   }
 
   title.textContent = `${props.ROUTE_KEY || "Route unknown"} | CS ${props.CTRL_SECT_ || props.CTRL_SECT_NORM}`;
-  subtitle.textContent = `${props.county_name || props.county || "County unknown"} | ${props.event_id || "coldwave_2026_01"}`;
-  warning.hidden = true;
-  warning.textContent = "";
-  if (activeAnalysisLayer !== "tier3") {
-    badges.replaceChildren();
-    return;
-  }
+  subtitle.textContent = props.county_name || props.county || "County unknown";
 
   const status = statusKey(props);
   const badgeClass = status === "detected"
     ? "detected"
     : (status === "no_observed_support" ? "missing" : "warning");
   badges.innerHTML = [
-    `<span class="badge ${badgeClass}">${statusLabel(status)}</span>`,
-    `<span class="badge">Observed support: ${hasCurve(props) ? "yes" : "no"}</span>`
+    `<span class="badge ${badgeClass}">${({ detected: "Detected", no_sustained_drop: "No sustained drop", recovery_endpoint_censored: "Recovery censored", no_observed_support: "No observed support" })[status] || escapeHtml(statusLabel(status))}</span>`,
+    ...(hasCurve(props) ? ['<span class="badge">Observed support</span>'] : [])
   ].join("");
-
-  if (isNoSustainedDrop(props)) {
-    warning.textContent = "No sustained drop was detected under the current rule; this is not evidence of no impact.";
-  } else if (isCensored(props)) {
-    warning.textContent = "Recovery is censored at the available analysis boundary; the displayed recovery value requires caution.";
-  } else if (!hasCurve(props)) {
-    warning.textContent = "No direct observed Q(t) support is available; missing support is not low resilience.";
-  }
-  warning.hidden = warning.textContent.length === 0;
 }
 
-function tierMetricCards(props) {
-  if (activeAnalysisLayer === "tier1") {
+function tierMetricCards(props, tier = "tier3") {
+  if (tier === "tier1") {
     return [
-      metricCard("WEATHER_REI", fmt(props.WEATHER_REI), "", "Precipitation-related roadway exposure adjusted by pavement/surface susceptibility.", "weather_rei")
+      metricCard("WEATHER_REI", fmt(props.WEATHER_REI), "", "", "weather_rei")
     ];
   }
-  if (activeAnalysisLayer === "tier2") {
+  if (tier === "tier2") {
     return [
-      metricCard("NETWORK_REI", fmt(props.NETRISK_LITE), "", "Network consequence and local redundancy context.", "network_rei"),
-      metricCard("AADT", fmtInt(props.AADT_CS), "", "Vehicles per day; the current aggregation can be non-integer.", "aadt")
+      metricCard("NETWORK_REI", fmt(props.NETRISK_LITE), "", "", "network_rei"),
+      metricCard("AADT · vehicles/day", fmtInt(props.AADT_CS), "", "", "aadt")
     ];
   }
-  if (activeAnalysisLayer === "potential") {
+  if (tier === "potential") {
     return [
-      metricCard("Potential Resilience", fmt(props.Potential_Resilience_Score), "", "More favorable planning context is higher.", "potential_resilience_score"),
-      metricCard("Tier 1 — Weather", fmt(props.WEATHER_REI), "", "Higher means stronger weather/pavement exposure concern.", "weather_rei"),
-      metricCard("Tier 2 — Network", fmt(props.NETRISK_LITE), "", "Higher means stronger network-context concern.", "network_rei")
+      metricCard("Potential Resilience ↑ favorable", fmt(props.Potential_Resilience_Score), "", "", "potential_resilience_score"),
+      metricCard("Tier 1 — Weather ↑ concern", fmt(props.WEATHER_REI), "", "", "weather_rei"),
+      metricCard("Tier 2 — Network ↑ concern", fmt(props.NETRISK_LITE), "", "", "network_rei")
     ];
   }
 
@@ -619,7 +631,7 @@ function tierMetricCards(props) {
     metricCard("Score", noSustained ? "N/A" : fmt(props.observed_curve_resilience_score_v0), "", "", "observed_resilience_score"),
     metricCard("Minimum", noSustained ? "N/A" : fmt(props.q_min), "", "", "q_min"),
     metricCard("Loss Area", phaseValue(props, "resilience_loss_area"), "", "", "resilience_loss_area"),
-    metricCard("Recovery", phaseValue(props, "recovery_duration_hours", fmtHours), censored ? "caution" : "", censored ? "Censored at the available boundary." : "", "recovery_duration_hours")
+    metricCard("Recovery", phaseValue(props, "recovery_duration_hours", fmtHours), censored ? "caution" : "", "", "recovery_duration_hours")
   ];
 }
 
@@ -627,35 +639,17 @@ function renderAnalysisPanel(props) {
   const cfg = analysisLayerConfig[activeAnalysisLayer];
   const empty = document.getElementById("tierEmptyState");
   const metrics = document.getElementById("tierMetrics");
-  const footnote = document.getElementById("tierFootnote");
-  const curvePanel = document.getElementById("curvePanel");
-  document.getElementById("tierPanelEyebrow").textContent = cfg.panelEyebrow;
-  document.getElementById("tierPanelHeading").textContent = cfg.panelHeading;
-  document.getElementById("activeTierChip").textContent = cfg.shortLabel;
+  const planningEmpty = document.getElementById("planningEmptyState");
+  const planningMetrics = document.getElementById("planningMetrics");
+  document.getElementById("planningPanelEyebrow").textContent = cfg.panelEyebrow;
+  document.getElementById("planningPanelHeading").textContent = cfg.panelHeading;
   renderSelectedIdentity(props);
-  curvePanel.hidden = activeAnalysisLayer !== "tier3";
-
-  if (!props) {
-    empty.hidden = false;
-    empty.textContent = `Select a control section to view its ${cfg.shortLabel} evidence.`;
-    metrics.hidden = true;
-    metrics.replaceChildren();
-    footnote.hidden = true;
-    footnote.textContent = "";
-    return;
-  }
-
-  empty.hidden = true;
-  metrics.innerHTML = tierMetricCards(props).join("");
-  metrics.hidden = false;
-  const notes = {
-    tier1: "Tier 1 is event-specific planning context, not a complete cold-wave hazard model.",
-    tier2: "Tier 2 is network-planning context and does not measure observed event performance.",
-    potential: "Potential Resilience combines Tier 1 and Tier 2 planning context; it is not Tier 3 observed evidence.",
-    tier3: "Observed results apply to the current event, method, and common-support sample."
-  };
-  footnote.textContent = notes[activeAnalysisLayer];
-  footnote.hidden = false;
+  empty.hidden = Boolean(props);
+  planningEmpty.hidden = Boolean(props);
+  metrics.hidden = !props;
+  planningMetrics.hidden = !props;
+  metrics.innerHTML = props ? tierMetricCards(props).join("") : "";
+  planningMetrics.innerHTML = props ? tierMetricCards(props, activeAnalysisLayer).join("") : "";
 }
 
 function buildAssistantContext(props) {
@@ -855,7 +849,7 @@ function resetAssistantForSelection(props) {
 
 function setupAssistant() {
   if (window.SPTCAssistantActions?.createController) {
-    assistantActionController = window.SPTCAssistantActions.createController({ document });
+    assistantActionController = window.SPTCAssistantActions.createController({ document, showContextNotices: false });
   }
   if (window.SPTCAssistantChat?.createController) {
     assistantChatController = window.SPTCAssistantChat.createController({
@@ -1032,7 +1026,7 @@ async function renderCurve(props) {
     markerLegend.innerHTML = `
       <span style="color:#b91c1c"><i></i>Detected onset</span>
       <span style="color:#7f1d1d"><i></i>Minimum Q(t)</span>
-      <span style="color:#1d4ed8"><i></i>Recovery endpoint</span>
+      <span style="color:#1d4ed8"><i></i>${censored ? "Censored endpoint" : "Recovery endpoint"}</span>
     `;
   }
 
@@ -1132,34 +1126,29 @@ async function renderCurve(props) {
     }
   });
 
-  if (noSustained) {
-    note.textContent = "No sustained drop was detected under the current method. The curve is shown for review, but phase-dependent metrics are not treated as final.";
-  } else if (censored) {
-    note.textContent = "Shaded area represents detected-phase normalized performance loss. Recovery endpoint is censored, so recovery metrics are flagged and should be interpreted as experimental.";
-  } else {
-    note.textContent = "Shaded area represents detected-phase normalized performance loss. Vertical lines mark disruption onset, minimum performance, and recovery endpoint.";
-  }
+  note.textContent = "";
 }
 
 async function selectFeature(feature, layer) {
   clearSelectedMapHighlight();
   selectedFeature = feature;
-  selectedLeafletLayer = layer;
+  const key = String(feature.properties.CTRL_SECT_NORM ?? feature.properties.CTRL_SECT_ ?? "");
+  selectedLeafletLayer = layerByCtrl.get(key) || layer;
+  planningSelectedLayer = planningLayerByCtrl.get(key);
   selectedProps = feature.properties || {};
   createSelectedMapHighlight(selectedFeature);
   applySelectedStyle();
   renderAnalysisPanel(selectedProps);
   resetAssistantForSelection(selectedProps);
-  if (activeAnalysisLayer === "tier3") {
-    await renderCurve(selectedProps);
-  }
+  await renderCurve(selectedProps);
 }
 
-function onEachFeature(feature, layer) {
+function onEachFeature(feature, layer, planning = false) {
+  const targetMap = planning ? planningMap : map;
   const props = feature.properties || {};
   const key = String(props.CTRL_SECT_NORM ?? props.CTRL_SECT_ ?? props.CTRL_SECT_KEY ?? "").trim();
   if (key) {
-    layerByCtrl.set(key, layer);
+    (planning ? planningLayerByCtrl : layerByCtrl).set(key, layer);
     featureByCtrl.set(key, feature);
   }
   layer.bindTooltip(makeTooltip(props), {
@@ -1171,17 +1160,18 @@ function onEachFeature(feature, layer) {
   layer.on({
     click: () => selectFeature(feature, layer),
     mouseover: () => {
-      map.getContainer().style.cursor = "pointer";
-      if (layer !== selectedLeafletLayer) {
+      targetMap.getContainer().style.cursor = "pointer";
+      if (layer !== (planning ? planningSelectedLayer : selectedLeafletLayer)) {
         layer.setStyle({ weight: 4.5, opacity: 1 });
         if (layer.bringToFront) layer.bringToFront();
       }
       applySelectedStyle();
     },
     mouseout: () => {
-      map.getContainer().style.cursor = "";
-      if (layer !== selectedLeafletLayer && controlLayer) {
-        controlLayer.resetStyle(layer);
+      targetMap.getContainer().style.cursor = "";
+      const targetControl = planning ? planningControlLayer : controlLayer;
+      if (layer !== (planning ? planningSelectedLayer : selectedLeafletLayer) && targetControl) {
+        targetControl.resetStyle(layer);
       }
       applySelectedStyle();
     }
@@ -1193,7 +1183,10 @@ function refreshMapStyles() {
     controlLayer.setStyle(featureStyle);
     applySelectedStyle();
   }
+  planningControlLayer?.setStyle(feature => featureStyle(feature, activeAnalysisLayer, planningMap));
+  applySelectedStyle();
   updateLegend();
+  updateLegend(activeAnalysisLayer, "planningLegend");
 }
 
 function syncTierControlState() {
@@ -1207,24 +1200,20 @@ function syncTierControlState() {
 }
 
 async function setActiveAnalysisLayer(nextLayer) {
-  if (!Object.prototype.hasOwnProperty.call(analysisLayerConfig, nextLayer)) return;
+  if (!["tier1", "tier2", "potential"].includes(nextLayer)) return;
   const changed = nextLayer !== activeAnalysisLayer;
   activeAnalysisLayer = nextLayer;
   syncTierControlState();
 
   if (changed) {
-    ++curveRequestId;
-    refreshMapStyles();
+    // Recolor only planning: no curve fetch/rebuild or observed full-network work.
+    planningControlLayer?.setStyle(feature => featureStyle(feature, activeAnalysisLayer, planningMap));
+    applySelectedStyle();
+    updateLegend(activeAnalysisLayer, "planningLegend");
     renderAnalysisPanel(selectedProps);
     resetAssistantForSelection(selectedProps);
   }
-  if (activeAnalysisLayer === "tier3" && selectedProps) {
-    await renderCurve(selectedProps);
-  }
-  requestAnimationFrame(() => {
-    map?.invalidateSize({ pan: false, debounceMoveend: true });
-    curveChart?.resize();
-  });
+  workspaceController?.scheduleResize();
 }
 
 function setupTierControls() {
@@ -1263,14 +1252,23 @@ async function initMap() {
     preferCanvas: true,
     zoomControl: true
   }).setView([31.1, -99.3], 6);
+  planningMap = L.map("planningMap", { preferCanvas: true, zoomControl: true })
+    .setView([31.1, -99.3], 6);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     className: "resilience-basemap-tile",
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, className: "resilience-basemap-tile", attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(planningMap);
 
   setupMapLegendControl();
+  setupMapLegendControl(planningMap, "planning");
+  workspaceController = window.SPTCWorkspace.createController({
+    document, maps: [map, planningMap], resizeChart: () => curveChart?.resize()
+  });
 
   const [summary, geojson] = await Promise.all([
     fetch(SUMMARY_URL).then(r => r.json()),
@@ -1281,6 +1279,7 @@ async function initMap() {
   computeRanges();
   buildSearchIndex();
   updateLegend();
+  updateLegend(activeAnalysisLayer, "planningLegend");
 
   document.getElementById("totalSections").textContent = summary.total_control_sections.toLocaleString();
   document.getElementById("curveSections").textContent = summary.sections_with_curve_json.toLocaleString();
@@ -1292,12 +1291,22 @@ async function initMap() {
     style: featureStyle,
     onEachFeature
   }).addTo(map);
+  // Both Canvas layers share this single fetched GeoJSON object.
+  planningControlLayer = L.geoJSON(mapData, {
+    renderer: planningRenderer,
+    style: feature => featureStyle(feature, activeAnalysisLayer, planningMap),
+    onEachFeature: (feature, layer) => onEachFeature(feature, layer, true)
+  }).addTo(planningMap);
 
   map.on("zoomend", () => {
     if (controlLayer) {
       controlLayer.setStyle(featureStyle);
       applySelectedStyle();
     }
+  });
+  planningMap.on("zoomend", () => {
+    planningControlLayer.setStyle(feature => featureStyle(feature, activeAnalysisLayer, planningMap));
+    applySelectedStyle();
   });
 
   if (controlLayer.getBounds().isValid()) {
