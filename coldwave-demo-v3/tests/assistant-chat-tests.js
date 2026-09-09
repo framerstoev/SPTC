@@ -372,7 +372,10 @@ module.exports = async function runAssistantChatTests() {
       },
       metric_summaries: descriptors.map((metric, index) => ({
         metric,
-        distribution: structuredDistribution(58, index === 3 ? 56 : 58)
+        distribution: { ...structuredDistribution(58, index === 3 ? 56 : 58), q1: 0.3, q3: 0.7 },
+        statewide_distribution: { ...structuredDistribution(10029, index === 3 ? 3473 : 10029), q1: 0.3, q3: 0.7 },
+        median_relative_to_statewide: "equal",
+        median_percentile_in_statewide_sections: 50
       })),
       representative_high_observed: [structuredRow(1, 0.9)],
       representative_low_observed: [structuredRow(1, 0.1, "CS_2001")],
@@ -485,7 +488,8 @@ module.exports = async function runAssistantChatTests() {
     activeLayer = "tier3",
     selectContext = true,
     resetTimelineOnContextChange = undefined,
-    showContextResetNotice = undefined
+    showContextResetNotice = undefined,
+    openRanking = undefined
   } = {}) {
     const document = new FakeDocument();
     const calls = [];
@@ -504,7 +508,8 @@ module.exports = async function runAssistantChatTests() {
       activeLayerMetrics,
       client: safeClient,
       resetTimelineOnContextChange,
-      showContextResetNotice
+      showContextResetNotice,
+      openRanking
     });
     controller.setContext({ sectionId: null, activeLayer });
     if (selectContext) controller.setContext({ sectionId, activeLayer });
@@ -1050,12 +1055,15 @@ module.exports = async function runAssistantChatTests() {
   test("validated network results render bounded numerical prose without metadata cards", async () => {
     const cases = [
       [rankingResultFixture(), ["Highest values", "Lowest values", "7.", "10023."]],
-      [countyResultFixture(), ["Dallas County contains 58", "56 have Tier 3 observed support", "2 do not", "Detected: 50", "no sustained drop: 4", "recovery censored: 2"]],
+      [countyResultFixture(), ["Dallas County has 58", "56 have Tier 3 support", "no observed support 2", "detected 50", "no sustained drop 4", "recovery censored 2", "Q1", "Q3", "statewide median", "Notable sections"]],
       [alignmentResultFixture(), ["3,473", "3,842", "0.277", "0.282", "reviewed classification rule has not been defined"]]
     ];
     for (const [result, fragments] of cases) {
       const original = JSON.stringify(result);
-      const {controller,elements} = createHarness({client:{async queryAssistant(){return responseFixture({structured_result:result});}}});
+      const answer = result.result_type === "tier_alignment_summary"
+        ? "A reviewed classification rule has not been defined."
+        : "The eligible sample supports this comparison.";
+      const {controller,elements} = createHarness({client:{async queryAssistant(){return responseFixture({structured_result:result, answer});}}});
       await controller.submitQuestion("Show the reviewed result.");
       const text = elements.assistantMessages.textContent;
       fragments.forEach(fragment=>includes(text,fragment));
@@ -1083,6 +1091,24 @@ module.exports = async function runAssistantChatTests() {
       includes(elements.assistantMessages.textContent,answer);
       equal(allDescendants(elements.assistantMessages).filter(node=>node.className==="assistant-chat-answer").length,1);
     }
+  });
+
+  test("full ranking trigger opens deterministic scope without another Assistant request", async () => {
+    let calls = 0;
+    const opened = [];
+    const result = rankingResultFixture();
+    const {controller, elements} = createHarness({
+      client: {async queryAssistant() { calls++; return responseFixture({structured_result: result}); }},
+      openRanking: (scope, trigger) => opened.push({scope, trigger})
+    });
+    await controller.submitQuestion("Rank Tier 2 sections.");
+    const button = allDescendants(elements.assistantMessages).find(node => node.className === "assistant-full-ranking");
+    includes(button.textContent, "10,029");
+    includes(elements.assistantMessages.textContent, "highest 1 and lowest 1");
+    await button.click();
+    equal(calls, 1);
+    equal(opened.length, 1);
+    assert(opened[0].scope === result && opened[0].trigger === button);
   });
 
   test("successful completion restores input focus and keeps suggestions available", async () => {

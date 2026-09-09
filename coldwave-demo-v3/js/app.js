@@ -848,12 +848,15 @@ function resetAssistantForSelection(props) {
 }
 
 function setupAssistant() {
+  const rankingBrowser = window.SPTCRankingBrowser.createController({ document });
+  window.SPTCAssistantWindow.createController({ document });
   if (window.SPTCAssistantActions?.createController) {
     assistantActionController = window.SPTCAssistantActions.createController({ document, showContextNotices: false });
   }
   if (window.SPTCAssistantChat?.createController) {
     assistantChatController = window.SPTCAssistantChat.createController({
       document,
+      openRanking: (result, trigger) => rankingBrowser.open(result, trigger),
       resetTimelineOnContextChange: false,
       showContextResetNotice: false
     });

@@ -115,6 +115,7 @@
   <button class="assistant-launcher" id="assistantLauncher" type="button" aria-controls="assistantPanel" aria-expanded="false"><span class="assistant-launcher-icon" aria-hidden="true">AI</span><span>AI Assistant</span></button>
 
   <section class="assistant-panel assistant-floating-panel" id="assistantPanel" aria-labelledby="assistantHeading" aria-hidden="true" hidden>
+    <button type="button" id="assistantResizeHandle" class="assistant-resize-handle" aria-label="Resize AI Assistant" title="Drag to resize; arrow keys adjust size" hidden><span aria-hidden="true">⌜</span></button>
     <header class="assistant-heading">
       <div><p class="eyebrow">Evidence-grounded analysis</p><h2 id="assistantHeading" tabindex="-1">AI Assistant</h2></div>
       <button class="assistant-close secondary-button" id="assistantClose" type="button" aria-label="Close AI Assistant">Close</button>
@@ -126,7 +127,7 @@
         <div class="assistant-suggestions" id="assistantSuggestedQuestions" aria-label="Suggested AI questions">
           <div class="assistant-suggestion-grid" role="group" aria-label="Demo questions">
             <button type="button" data-assistant-question="Rank control sections by Tier 3 observed resilience.">Rank Tier 3 sections</button>
-            <button type="button" data-assistant-question="How consistent are Potential Resilience and Tier 3 Observed Resilience?">Compare potential &amp; observed</button>
+            <button type="button" data-assistant-question="Compare Potential and Observed Resilience for this selected section." data-requires-context="section" title="Select a control section to compare its potential and observed resilience">Compare selected section</button>
             <button type="button" data-assistant-question="How did roadway sections in Dallas County perform during this event?">Summarize Dallas County</button>
           </div>
         </div>
@@ -158,6 +159,15 @@
     </div>
   </section>
 
+  <dialog id="rankingDialog" class="ranking-dialog" aria-labelledby="rankingHeading" aria-describedby="rankingScope" aria-busy="false">
+    <header class="ranking-heading"><h2 id="rankingHeading">Full ranking</h2><button id="rankingClose" type="button">Close</button></header>
+    <p id="rankingScope" class="ranking-scope"></p>
+    <div class="ranking-table-scroll" tabindex="0" role="region" aria-label="Deterministic control-section ranking">
+      <table class="ranking-table"><thead><tr><th scope="col">Rank</th><th scope="col">Control Section</th><th scope="col">Route</th><th scope="col">County</th><th scope="col">Metric value</th><th scope="col">Tier 3 status</th></tr></thead><tbody id="rankingRows"></tbody></table>
+    </div>
+    <footer class="ranking-pagination"><p id="rankingRange" role="status" aria-live="polite"></p><nav aria-label="Ranking pages"><button id="rankingFirst" type="button">First</button><button id="rankingPrevious" type="button">Previous</button><button id="rankingNext" type="button">Next</button><button id="rankingLast" type="button">Last</button></nav></footer>
+  </dialog>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="./js/deployment-config.js"></script>
@@ -165,6 +175,8 @@
   <script src="./js/assistant-api.js"></script>
   <script src="./js/assistant-actions.js"></script>
   <script src="./js/assistant-chat.js"></script>
+  <script src="./js/assistant-window.js"></script>
+  <script src="./js/ranking-browser.js"></script>
   <script src="./js/workspace.js"></script>
   <script src="./js/app.js"></script>
 </body>

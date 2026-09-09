@@ -130,32 +130,45 @@
 
     // Only presentation of the client's closed, validated result projection.
     // Do not rank, aggregate, classify, or calculate analytical values here.
-    function structuredAnswer(result) {
+    function structuredAnswer(result, interpretation = "") {
       if (!result) return "";
       if (result.result_type === "section_ranking") {
         return [
-          `${result.metric.display_name} ranking: ${formatStructuredValue(result.distribution.available_count)} eligible sections out of ${formatStructuredValue(result.distribution.population_count)} in ${result.county || "the statewide sample"}. Direction: ${result.direction}. Higher values: ${result.metric.higher_value_interpretation}.`,
+          `${formatStructuredValue(result.distribution.available_count)} sections are eligible for this ${result.metric.display_name} ranking. Showing the highest ${result.highest_sections.length} and lowest ${result.lowest_sections.length} below.`,
+          `${result.county ? result.county + " County" : "Statewide"} · ${result.direction}. Higher values: ${result.metric.higher_value_interpretation}.`,
+          interpretation,
           sectionLines("Highest values", result.highest_sections),
-          sectionLines("Lowest values", result.lowest_sections),
-          result.interpretation_limit
-        ].join("\n\n");
+          sectionLines("Lowest values", result.lowest_sections)
+        ].filter(Boolean).join("\n\n");
       }
       if (result.result_type === "county_resilience_summary") {
         return [
-          `${result.county} County contains ${formatStructuredValue(result.total_sections)} control sections under the current county assignment. Of these, ${formatStructuredValue(result.observed_support_count)} have Tier 3 observed support and ${formatStructuredValue(result.status_counts.no_observed_support)} do not.`,
-          `Detected: ${result.status_counts.detected}; no sustained drop: ${result.status_counts.no_sustained_drop}; recovery censored: ${result.status_counts.recovery_endpoint_censored}.`,
+          `${result.county} County has ${formatStructuredValue(result.total_sections)} control sections; ${formatStructuredValue(result.observed_support_count)} have Tier 3 support.`,
+          interpretation,
+          "Compared with statewide (county median relative to the same metric's eligible statewide sections):",
           ...result.metric_summaries.map(item =>
-            `${item.metric.display_name}: median ${formatStructuredValue(item.distribution.median)}, with ${formatStructuredValue(item.distribution.available_count)} available sections.`),
-          result.coverage_caveat
-        ].join("\n\n");
+            `${item.metric.display_name}: county median ${formatStructuredValue(item.distribution.median)}; statewide median ${formatStructuredValue(item.statewide_distribution.median)} (${item.median_relative_to_statewide}). County median percentile: ${formatStructuredValue(item.median_percentile_in_statewide_sections)} among individual statewide sections, not counties.\nCounty N = ${formatStructuredValue(item.distribution.available_count)}; min ${formatStructuredValue(item.distribution.minimum)}; Q1 ${formatStructuredValue(item.distribution.q1)}; Q3 ${formatStructuredValue(item.distribution.q3)}; max ${formatStructuredValue(item.distribution.maximum)}.`),
+          sectionLines("Notable sections — highest Tier 3 values", result.representative_high_observed),
+          sectionLines("Notable sections — lowest Tier 3 values", result.representative_low_observed),
+          `Observed event status: detected ${result.status_counts.detected}; no sustained drop ${result.status_counts.no_sustained_drop}; recovery censored ${result.status_counts.recovery_endpoint_censored}; no observed support ${result.status_counts.no_observed_support}.`
+        ].filter(Boolean).join("\n\n");
       }
       if (result.result_type === "tier_alignment_summary") {
         return [
           `Potential and Tier 3 Observed Resilience are compared on ${formatStructuredValue(result.valid_pair_count)} sections with both values. Pearson r = ${formatStructuredValue(result.pearson_r)}; Spearman rho = ${formatStructuredValue(result.spearman_rho)}. The broader curve-supported sample contains ${formatStructuredValue(result.common_support_count)} sections.`,
-          "These are descriptive event-sample correlations, not causal or predictive findings.",
-          "Counts and examples of consistent or mismatched sections are unavailable because a reviewed classification rule has not been defined.",
-          result.method_note
-        ].join("\n\n");
+          interpretation
+        ].filter(Boolean).join("\n\n");
+      }
+      if (result.result_type === "section_resilience_comparison") {
+        const reference = result.paired_sample_reference;
+        return [
+          `${result.identity.display_cs_id} · ${result.identity.route} · ${result.identity.county} County`,
+          ...[result.potential, result.observed].map(item =>
+            `${item.metric.display_name}: ${formatStructuredValue(item.value)}. Percentile ${formatStructuredValue(item.percentile)} among ${formatStructuredValue(item.statewide_distribution.available_count)} eligible sections; descending dense rank ${formatStructuredValue(item.descending_dense_rank)}. Statewide eligible median: ${formatStructuredValue(item.statewide_distribution.median)}.`),
+          interpretation,
+          `Common valid-pair reference (${formatStructuredValue(reference.valid_pair_count)} sections): Potential median ${formatStructuredValue(reference.potential_median)}; Tier 3 median ${formatStructuredValue(reference.observed_median)}.`,
+          `Planning context: WEATHER_REI ${formatStructuredValue(result.weather_rei)}; NETWORK_REI ${formatStructuredValue(result.network_rei)}. Tier 3 status: ${result.support_status.detection_status.replaceAll("_", " ")}.`
+        ].filter(Boolean).join("\n\n");
       }
       return "";
     }
@@ -178,10 +191,18 @@
       message.setAttribute("data-assistant-status", response.status);
       const answer = response.status === "clarification_required" && response.clarification
         ? response.clarification.question : displayedAnswer(response);
-      const projection = response.status === "completed" ? structuredAnswer(response.structured_result) : "";
+      const projection = response.status === "completed" ? structuredAnswer(response.structured_result, answer) : "";
       message.appendChild(textElement(
-        "p", "assistant-chat-answer", [answer, projection].filter(Boolean).join("\n\n")
+        "p", "assistant-chat-answer", projection || answer
       ));
+      if (response.status === "completed" && response.structured_result?.result_type === "section_ranking"
+        && typeof options.openRanking === "function") {
+        const button = textElement("button", "assistant-full-ranking",
+          `View full ranking (${formatStructuredValue(response.structured_result.distribution.available_count)})`);
+        button.type = "button";
+        button.addEventListener("click", () => options.openRanking(response.structured_result, button));
+        message.appendChild(button);
+      }
       appendChatNode(message);
     }
 

@@ -1,4 +1,4 @@
-"""Run focused no-build QA for the Phase 4B V3 frontend."""
+"""Run Phase 4C no-build QA while preserving the accepted Phase 4B workspace."""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def assert_repository_scope() -> dict[str, object]:
         text=True,
         encoding="utf-8",
     ).stdout.strip()
-    assert branch == "feature/v3-comparative-workspace-ai-simplification", branch
+    assert branch == "feature/v3-assistant-analysis-depth", branch
     status = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=REPOSITORY_ROOT,
@@ -134,7 +134,7 @@ def assert_repository_scope() -> dict[str, object]:
         encoding="utf-8",
     ).stdout.splitlines()
     unexpected = [line for line in status if "coldwave-demo-v3/" not in line.replace("\\", "/")]
-    launcher_paths = {"local-demo/lib/LocalDemo.V3.ps1", "local-demo/tests/run-local-demo-v3-tests.ps1", "local-demo/README-V3.md"}
+    launcher_paths = {"local-demo/lib/LocalDemo.V3.ps1", "local-demo/lib/LocalDemo.Core.psm1", "local-demo/tests/run-local-demo-v3-tests.ps1", "local-demo/README-V3.md"}
     tracked_outside_v3 = [line for line in unexpected if line != "?? debug.log" and line[3:] not in launcher_paths]
     assert not tracked_outside_v3, f"Tracked changes outside V3: {tracked_outside_v3[:10]}"
     v2_diff = subprocess.run(
@@ -143,6 +143,17 @@ def assert_repository_scope() -> dict[str, object]:
         check=False,
     )
     assert v2_diff.returncode == 0, "Accepted V2 tracked files changed"
+    # Only the explicit V3 constants block may differ in the shared module.
+    import re
+    old_core = subprocess.run(
+        ["git", "show", "88d040740c424543d0144daec75d767e913ededf:local-demo/lib/LocalDemo.Core.psm1"],
+        cwd=REPOSITORY_ROOT, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
+    core = (REPOSITORY_ROOT / "local-demo/lib/LocalDemo.Core.psm1").read_text(encoding="utf-8")
+    pattern = r'if \(\$LauncherProfile -eq "v3"\) \{.*?\n\}'
+    assert re.sub(pattern, "V3_CONSTANTS", core, count=1, flags=re.S) == re.sub(
+        pattern, "V3_CONSTANTS", old_core, count=1, flags=re.S
+    ), "Shared launcher behavior outside V3 constants changed"
     return {
         "branch": branch,
         "untracked_outside_v3": [line[3:] for line in unexpected],
@@ -191,7 +202,7 @@ def static_checks() -> dict[str, object]:
     assert len(parser.suggestions) == 3
     assert parser.suggestions == [
         "Rank control sections by Tier 3 observed resilience.",
-        "How consistent are Potential Resilience and Tier 3 Observed Resilience?",
+        "Compare Potential and Observed Resilience for this selected section.",
         "How did roadway sections in Dallas County perform during this event?",
     ]
     assert len(parser.quick_action_details) == 1
@@ -213,6 +224,8 @@ def static_checks() -> dict[str, object]:
         "./js/assistant-api.js",
         "./js/assistant-actions.js",
         "./js/assistant-chat.js",
+        "./js/assistant-window.js",
+        "./js/ranking-browser.js",
         "./js/workspace.js",
         "./js/app.js",
     )
@@ -271,6 +284,14 @@ def static_checks() -> dict[str, object]:
     assert "minmax(0,1fr)" in style
     assert "innerHTML" not in read("js/workspace.js")
     assert "fetch(" not in read("js/workspace.js")
+    frozen_workspace = subprocess.run(
+        ["git", "show", "88d040740c424543d0144daec75d767e913ededf:coldwave-demo-v3/js/workspace.js"],
+        cwd=REPOSITORY_ROOT, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
+    assert read("js/workspace.js") == frozen_workspace, "Phase 4B workspace changed"
+    for path in ("js/assistant-window.js", "js/ranking-browser.js"):
+        assert "queryAssistant" not in read(path)
+        assert "innerHTML" not in read(path)
     baseline_app = subprocess.run(
         ["git","show","4e542843d25afc7fcf5329217181f33900034b99:coldwave-demo-v3/js/app.js"],
         cwd=REPOSITORY_ROOT, capture_output=True, text=True, encoding="utf-8", check=True
@@ -322,6 +343,7 @@ def run_javascript_tests() -> list[str]:
         "run_assistant_chat_qa.js",
         "run_search_rendering_qa.js",
         "run_tier_rendering_qa.js",
+        "run_analytical_ui_qa.js",
     ):
         completed = subprocess.run(
             [str(executable), str(V3_ROOT / "tests" / driver_name)],
