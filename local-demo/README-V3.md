@@ -177,8 +177,9 @@ handling, GPU/model failures, unrelated listeners, stale/reused identities,
 state validation/cleanup, ownership-aware shutdown, browser fallback and status
 privacy. Test-created temporary directories are bounded and cleaned safely.
 
-Real acceptance uses the accepted production-page browser harness
-`coldwave-demo-v3/tests/run_phase4a_browser_qa.py --scenario live` with an isolated
+Current real acceptance uses the production-page browser harness
+`coldwave-demo-v3/tests/run_phase4c_browser_qa.py --scenario live`, which reuses
+the accepted Phase 4A/4B lifecycle and preservation checks, with an isolated
 temporary Chrome profile and an artifact directory outside the repository. It
 checks tier synchronization, concept/ranking/Dallas/alignment/refusal workflows,
 deterministic evidence/warnings, cancellation, V2 coexistence, viewports, map/
@@ -188,3 +189,108 @@ Ollama. Alignment's unresolved classification remains
 
 No push, merge, deployment, remote-server work or research recalculation belongs
 to this launcher workflow.
+
+## Phase 4C acceptance record — 2026-09-09
+
+Starting frontend/backend: `88d040740c424543d0144daec75d767e913ededf` /
+`e289aeb9ecf92d8d3d2f937dbc2d693342a35bee`. Both Phase 4C branches are
+`feature/v3-assistant-analysis-depth`. Backend runtime is
+`cc30a34dae57c2046c81c2ac9ed7d82782d50a1c`. Browser acceptance ran on frontend
+`b5f4ae90eca7a70d47a3c960f58af008b3ecf7ac`; the final documentation-only descendant
+uses the same application content and exact backend pin. Resolve final local tags:
+`phase4c-v3-analytical-assistant-accepted` (frontend) and
+`phase4c-assistant-analysis-depth-accepted` (backend). Prior tags are unchanged.
+
+Capabilities and boundaries:
+
+- The earlier ranking display was a bounded subset. It now explicitly labels
+  3,473 eligible Tier 3 scores and the highest/lowest ten. Full access uses
+  deterministic pages of 25 (API maximum 100), stable dense ties, county scope,
+  first/previous/next/last controls and visible row range. No pagination LLM calls.
+- `compare_section_resilience` uses host-owned current selection. Evidence:
+  exact CS/route/county, Potential, Observed, WEATHER_REI, NETWORK_REI, support/
+  status, eligible statewide distributions/medians, percentile/dense-rank positions,
+  paired-sample medians and warnings. Explicit statewide scope retains alignment.
+- Percentiles use mean strict/weak empirical CDF, `100*(below+0.5*equal)/N`;
+  descending dense rank counts distinct greater values. Each metric has its own
+  non-null denominator; paired references share 3,473 valid pairs. No consistency
+  thresholds/classes were invented. See the backend Phase 4C method document.
+- Dallas remains 58 total / 56 supported / 2 unsupported. Four metric summaries
+  add Q1/Q3/min/max/N, statewide medians and above/below/equal relations, plus
+  county-median percentiles among individual sections. Existing three highest/
+  three lowest observed examples and all four detection status counts remain.
+  No county composite, county Q(t), timing aggregation or CSV export was added.
+- Direct facts precede interpretation. Ordinary ranking/county prose omits
+  repeated generic investment/prediction/causality disclaimers. County coverage is
+  stated once; alignment has one method-definition caveat. Contextual “why” keeps
+  a causality limitation; missing/censored/no-drop statuses retain their cautions.
+  Structured warnings, limitations and provenance remain in the API.
+- Assistant desktop default: 700px × 78vh; min 480×420; max 92vw×90vh. Top-left
+  pointer resize and keyboard arrows preserve the lower-right anchor. Answers:
+  18px, line height 1.5. Manual resize is disabled at <=900px, with bounded mobile
+  layout. Keyboard/pointer tests do not constitute a full screen-reader audit.
+
+Verification:
+
+| Gate | Result |
+| --- | --- |
+| Backend unit/API/schema/release tests | 1,377 passed; one existing TestClient deprecation warning |
+| Ruff format/lint; pip check | Passed |
+| Source-backed real release; restricted/OpenAPI exposure | Passed; no snapshot rebuild |
+| Frontend focused tests/checks | 120 passed; 12 local resources passed |
+| Existing V3 real evaluator | 15/15, all original gates passed |
+| New analytical-depth real matrix | 13/13 routing, response, evidence/warning and style checks |
+| Phase 4A1-B real response regressions | 14/14; zero automatic retries |
+| V2 real evaluator | 26/28, only accepted missing_metric/history_id_injection deviations |
+| V3/V2 launcher suites | 134/134 and 92/92, including parse and stale/PID ownership cases |
+| Final live browser | 431 checks; seven successful workflows; six viewports |
+| Automatic Assistant / direct browser 11434 requests | 0 / 0 |
+| Console errors / uncaught exceptions | 0 / 0 |
+| Cancellation, stale results, deterministic actions, V2 coexistence | Passed |
+
+Final browser end-to-end timings (seconds):
+
+| Workflow | Seconds |
+| --- | ---: |
+| Tier 3 ranking | 4.737 |
+| Selected-section comparison | 2.862 |
+| Statewide alignment | 3.776 |
+| Dallas statewide comparison | 3.982 |
+| Dallas interpretation | 3.986 |
+| Potential concept | 3.674 |
+| Unsupported investment decline | 1.355 |
+
+Successful workflow median/p95: **3.776 / 4.737 seconds** (nearest-rank p95).
+Deterministic ranking initial page: **0.222s**; subsequent page operations:
+**0.209–0.211s**, excluded from model latency. Pointer-resize CDP round trips:
+**8.0–45.9ms** across desktop viewports; these are interaction checks, not frame-rate
+benchmarks. Viewports: 1920×1080, 1440×900, 1366×768, 1024×768, 768×900, 390×844.
+The nine browser Assistant requests comprised seven explicit workflows plus two
+intentionally intercepted cancellation/staleness probes, not unsolicited queries.
+
+GPU: RTX 4060 Laptop, Windows Code 0, NVIDIA 616.56, healthy `nvidia-smi`.
+Qwen `qwen3:8b`: 100% GPU; launcher VRAM reading 5,846 MiB (live status 5,896 MiB).
+Warm-up: 6.678s. Backend startup: 6.577s; frontend: 1.632s; total: 26.781s.
+Browser auto-open was requested after readiness; the isolated production-page
+browser run confirmed both V3 and V2 load. Ollama was externally owned, loopback
+only at `127.0.0.1:11434`, and preserved throughout.
+
+Stop succeeded: owned frontend/backend and supervisors stopped, Qwen unloaded,
+8001/8080 released, external Ollama retained and the model still installed.
+PID/path/start-time and Job Object protections, reboot/stale-state handling and
+the original V2 launcher entry points/URL/checkpoint are unchanged.
+
+An initial final-network assertion omitted the newly reviewed ranking-page route.
+The Phase 4C harness now adds only that exact route; Phase 4A/4B defaults remain
+unchanged. The full browser run was repeated and passed. No production safety
+check or model validator was weakened to obtain acceptance.
+
+Scope audit: 18 frontend/demo paths and 13 backend paths changed (including tests
+and docs). New UI modules: `assistant-window.js`, `ranking-browser.js`; new backend
+module: `analytical_depth.py`. Contracts, API/client projection, Assistant routing/
+synthesis, focused/live tests and these documents comprise the remaining changes.
+The only shared launcher change is the constant inside its explicit V3 branch.
+V1/V2 frontend, Phase 4B workspace controller and analytical functions, all data,
+Q(t), Candidate B, metrics and tier-alignment math remain unchanged. Worktrees are
+clean except the accepted pre-existing frontend `debug.log`. Nothing was pushed,
+merged or deployed. Phase 4C is ready for local Jason/TTI review, not deployment.
