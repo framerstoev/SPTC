@@ -124,7 +124,7 @@ def assert_repository_scope() -> dict[str, object]:
         text=True,
         encoding="utf-8",
     ).stdout.strip()
-    assert branch == "feature/v3-assistant-analysis-depth", branch
+    assert branch == "feature/v3-plain-language-ai", branch
     status = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=REPOSITORY_ROOT,
@@ -201,9 +201,9 @@ def static_checks() -> dict[str, object]:
     assert next(item for item in parser.tier_options if "selected" in item)["value"] == "potential"
     assert len(parser.suggestions) == 3
     assert parser.suggestions == [
-        "Rank control sections by Tier 3 observed resilience.",
-        "Compare Potential and Observed Resilience for this selected section.",
-        "How did roadway sections in Dallas County perform during this event?",
+        "What do Tier 1, Tier 2, and Tier 3 mean?",
+        "Compare planning and observed performance for this road.",
+        "How does Dallas County compare with other Texas counties?",
     ]
     assert len(parser.quick_action_details) == 1
     assert "open" not in parser.quick_action_details[0]
@@ -262,10 +262,9 @@ def static_checks() -> dict[str, object]:
     assert "result.source_metric" not in chat
     assert "safeDisplayText" in actions and "safeDisplayText" in chat
     assert "innerHTML" not in actions and "innerHTML" not in chat
-    assert "result.common_support_count" in chat
-    assert "result.status_counts.no_sustained_drop" in chat
-    assert "result.status_counts.recovery_endpoint_censored" in chat
-    assert "result.direction" in chat and "row.metric_rank" in chat
+    assert "evidence: response.structured_result" in chat  # full status/statistics retained, collapsed
+    assert "Evidence and technical details" in chat and "row.metric_rank" in chat
+    assert "higher_than_percent" in chat and "county_ranking" in chat
 
     assert 'backend_target: "local-loopback"' in deployment
     assert 'localLoopback: "local-loopback"' in config

@@ -464,7 +464,8 @@
         distribution: { ...v3Distribution(58, index === 3 ? 56 : 58), q1: 0.3, q3: 0.7 },
         statewide_distribution: { ...v3Distribution(10029, index === 3 ? 3473 : 10029), q1: 0.3, q3: 0.7 },
         median_relative_to_statewide: "equal",
-        median_percentile_in_statewide_sections: 50
+        median_percentile_in_statewide_sections: 50,
+        county_rank: 20, counties_available: 200, median_relative_to_counties: "below"
       })),
       representative_high_observed: [v3SectionValue(1, 0.9)],
       representative_low_observed: [v3SectionValue(1, 0.1, { metricRank: 56, sectionId: "CS_2001" })],
@@ -941,8 +942,9 @@
     const descriptors = v3CountyFixture().metric_summaries;
     const relative = (index, percentile) => ({
       metric: descriptors[index].metric, value: 0.5,
-      statewide_distribution: descriptors[index].statewide_distribution,
-      percentile, descending_dense_rank: 20, percentile_method: "mean_strict_weak"
+      statewide_distribution: { ...descriptors[index].statewide_distribution,
+        population_count: 3473, available_count: 3473, missing_count: 0 },
+      percentile, higher_than_percent: percentile - 1, descending_dense_rank: 20, percentile_method: "mean_strict_weak"
     });
     return {
       result_type: "section_resilience_comparison",
@@ -951,6 +953,7 @@
       weather_rei: 0.4, network_rei: 0.6, potential: relative(2, 40), observed: relative(3, 60),
       paired_sample_reference: { valid_pair_count: 3473, potential_median: 0.5, observed_median: 0.5 },
       relative_position: "observed_higher_percentile", classification_status: "method_definition_required",
+      higher_than_relation: "observed_higher",
       classification: null, event_id: "coldwave_2026_01", data_release: "coldwave_2026_01_r1",
       method_version: "data_driven_resilience_v0"
     };
@@ -1027,6 +1030,7 @@
   test("V3 ranking, county, alignment and section comparison validate as frozen copies", async () => {
     const fixtures = [
       ["rank_sections", "rank_sections", v3RankingFixture()],
+      ["rank_counties", "rank_counties", countyRankingFixture()],
       ["summarize_county_resilience", "summarize_county_resilience", v3CountyFixture()],
       ["summarize_tier_alignment", "summarize_tier_alignment", v3AlignmentFixture()],
       ["compare_section_resilience", "compare_section_resilience", sectionComparisonFixture()]
@@ -1055,6 +1059,40 @@
       assert(Object.isFrozen(result.structured_result));
       equal(result.structured_result.result_type, structuredResult.result_type);
       assert(result.structured_result !== structuredResult);
+    }
+  });
+
+  function countyRankingFixture() {
+    return { result_type: "county_ranking", metric: v3RankingFixture().metric,
+      direction: "descending", higher_is: "better", plain_language_direction: "Higher means stronger observed resilience.",
+      county: "Dallas", available_counties: 1, total_counties: 2,
+      rows: [{county: "Dallas", total_sections: 2, available_count: 1,
+        observed_support_count: 2, coverage_percent: 50, median: 0.5, q1: 0.5, q3: 0.5, county_rank: 1},
+        {county: "Unknown data", total_sections: 1, available_count: 0,
+          observed_support_count: 0, coverage_percent: 0, median: null, q1: null, q3: null, county_rank: null}],
+      reference_median: 0.5, selected_relative_to_counties: "equal",
+      interpretation_limit: "County medians; no minimum count threshold.", event_id: "coldwave_2026_01",
+      data_release: "coldwave_2026_01_r1", method_version: "data_driven_resilience_v0" };
+  }
+
+  test("county benchmark rejects invalid coverage, invented rank, direction and leaked fields", async () => {
+    for (const change of [
+      r => {r.rows[0].coverage_percent = 100;},
+      r => {r.rows[0].county_rank = 2;},
+      r => {r.higher_is = "worse";},
+      r => {r.county = "Not returned";},
+      r => {r.rows[1].median = 0;},
+      r => {r.total_counties = 255;}
+    ]) {
+      const result = countyRankingFixture(); change(result);
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => jsonResponse(200, assistantFixture({intent:"rank_counties",
+          tools_used:[{tool_name:"rank_counties",call_index:1}], structured_result:result}))
+      });
+      let rejected = false;
+      try { await target.SPTCAssistant.client.queryAssistant({message:"Rank counties."}); }
+      catch (error) { rejected = true; }
+      assert(rejected);
     }
   });
 

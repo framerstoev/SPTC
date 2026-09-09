@@ -52,6 +52,7 @@
     "generate_review_note",
     "explain_planning_vs_observed",
     "rank_sections",
+    "rank_counties",
     "summarize_county_resilience",
     "summarize_tier_alignment",
     "compare_section_resilience",
@@ -65,6 +66,7 @@
     "compare_sections",
     "generate_review_note",
     "rank_sections",
+    "rank_counties",
     "summarize_county_resilience",
     "summarize_tier_alignment",
     "compare_section_resilience",
@@ -1243,7 +1245,11 @@
       return {
         metric: validateV3MetricDescriptor(required(item, "metric")), distribution,
         statewide_distribution: statewide, median_relative_to_statewide: relation,
-        median_percentile_in_statewide_sections: percentile
+        median_percentile_in_statewide_sections: percentile,
+        county_rank: optionalBoundedInteger(required(item, "county_rank"), 1, 254),
+        counties_available: boundedInteger(required(item, "counties_available"), 0, 254),
+        median_relative_to_counties: oneOf(required(item, "median_relative_to_counties"),
+          ["above", "below", "equal", "unavailable"])
       };
     });
     const statusTotal = detectionStatuses.reduce((sum, status) => sum + statusCounts[status], 0);
@@ -1340,10 +1346,59 @@
     if (!isRecord(value)) invalidResponse();
     const resultType = required(value, "result_type");
     if (resultType === "section_ranking") return validateV3RankingResult(value);
+    if (resultType === "county_ranking") return validateCountyRanking(value);
     if (resultType === "county_resilience_summary") return validateCountyResult(value);
     if (resultType === "tier_alignment_summary") return validateTierAlignmentResult(value);
     if (resultType === "section_resilience_comparison") return validateSectionComparison(value);
     invalidResponse();
+  }
+
+  function validateCountyRanking(value) {
+    const metric = validateV3MetricDescriptor(required(value, "metric"));
+    const direction = oneOf(required(value, "direction"), ["ascending", "descending"]);
+    const higherIs = oneOf(required(value, "higher_is"), ["better", "worse"]);
+    if (higherIs !== (["potential_resilience", "tier3_observed_resilience"].includes(metric.metric)
+      ? "better" : "worse")) invalidResponse();
+    const county = required(value, "county") === null ? null
+      : boundedAssistantResponseText(required(value, "county"), 100);
+    const total = boundedInteger(required(value, "total_counties"), 1, 254);
+    const available = boundedInteger(required(value, "available_counties"), 0, total);
+    const rows = copyArray(required(value, "rows"), 1, 254, item => {
+      const n = boundedInteger(required(item, "total_sections"), 1, 10029);
+      const count = boundedInteger(required(item, "available_count"), 0, n);
+      const support = boundedInteger(required(item, "observed_support_count"), 0, n);
+      const coverage = finiteNumberInRange(required(item, "coverage_percent"), 0, 100);
+      const median = optionalFiniteNumber(required(item, "median"));
+      const q1 = optionalFiniteNumber(required(item, "q1"));
+      const q3 = optionalFiniteNumber(required(item, "q3"));
+      const rank = optionalBoundedInteger(required(item, "county_rank"), 1, available);
+      if (Math.abs(coverage - 100 * count / n) > 1e-8
+        || (count === 0) !== (median === null) || (median === null) !== (rank === null)
+        || (count === 0 ? q1 !== null || q3 !== null : q1 === null || q3 === null || q1 > median || q3 < median)) invalidResponse();
+      return { county: boundedAssistantResponseText(required(item, "county"), 100),
+        total_sections: n, available_count: count, observed_support_count: support,
+        coverage_percent: coverage, median, q1, q3, county_rank: rank };
+    });
+    if (rows.length !== total || rows.filter(r => r.median !== null).length !== available
+      || new Set(rows.map(r => r.county)).size !== total
+      || (county !== null && !rows.some(r => r.county === county))) invalidResponse();
+    let last = null;
+    let rank = 0;
+    rows.forEach((row, index) => {
+      if (index >= available) { if (row.median !== null) invalidResponse(); return; }
+      if (last !== null && (direction === "descending" ? row.median > last : row.median < last)) invalidResponse();
+      if (last === null || row.median !== last) rank += 1;
+      if (row.county_rank !== rank) invalidResponse();
+      last = row.median;
+    });
+    return { result_type: "county_ranking", metric, direction, higher_is: higherIs, county,
+      total_counties: total, available_counties: available, rows,
+      reference_median: optionalFiniteNumber(required(value, "reference_median")),
+      selected_relative_to_counties: oneOf(required(value, "selected_relative_to_counties"),
+        ["above", "below", "equal", "unavailable"]),
+      plain_language_direction: boundedAssistantResponseText(required(value, "plain_language_direction"), 1000),
+      interpretation_limit: boundedAssistantResponseText(required(value, "interpretation_limit"), 2000),
+      ...validateV3Metadata(value) };
   }
 
   function validateRelativeMetric(value, expectedMetric) {
@@ -1351,12 +1406,15 @@
     const score = optionalFiniteNumber(required(value, "value"));
     const distribution = validateAnalyticalDistribution(required(value, "statewide_distribution"));
     const percentile = optionalFiniteNumberInRange(required(value, "percentile"), 0, 100);
+    const higherThan = optionalFiniteNumberInRange(required(value, "higher_than_percent"), 0, 100);
     const rank = optionalBoundedInteger(required(value, "descending_dense_rank"), 1, 10029);
     const unavailable = score === null || distribution.available_count === 0;
     if (metric.metric !== expectedMetric || required(value, "percentile_method") !== "mean_strict_weak"
       || unavailable !== (percentile === null) || unavailable !== (rank === null)
+      || unavailable !== (higherThan === null) || (higherThan !== null && higherThan > percentile)
       || (rank !== null && rank > distribution.available_count)) invalidResponse();
     return { metric, value: score, statewide_distribution: distribution, percentile,
+      higher_than_percent: higherThan,
       descending_dense_rank: rank, percentile_method: "mean_strict_weak" };
   }
 
@@ -1370,6 +1428,8 @@
     const observed = validateRelativeMetric(required(value, "observed"), "tier3_observed_resilience");
     const reference = required(value, "paired_sample_reference");
     const count = boundedInteger(required(reference, "valid_pair_count"), 0, 10029);
+    if (potential.statewide_distribution.available_count !== count
+      || observed.statewide_distribution.available_count !== count) invalidResponse();
     const potentialMedian = optionalFiniteNumber(required(reference, "potential_median"));
     const observedMedian = optionalFiniteNumber(required(reference, "observed_median"));
     const relative = oneOf(required(value, "relative_position"),
@@ -1377,7 +1437,12 @@
     const expected = potential.percentile === null || observed.percentile === null ? "unavailable"
       : observed.percentile > potential.percentile ? "observed_higher_percentile"
         : potential.percentile > observed.percentile ? "potential_higher_percentile" : "equal";
-    if (relative !== expected || observedSupport !== (status !== "no_observed_support")
+    const plainRelation = oneOf(required(value, "higher_than_relation"),
+      ["planning_higher", "observed_higher", "equal", "unavailable"]);
+    const expectedPlain = potential.higher_than_percent === null || observed.higher_than_percent === null
+      ? "unavailable" : potential.higher_than_percent > observed.higher_than_percent ? "planning_higher"
+        : observed.higher_than_percent > potential.higher_than_percent ? "observed_higher" : "equal";
+    if (plainRelation !== expectedPlain || relative !== expected || observedSupport !== (status !== "no_observed_support")
       || (["no_observed_support", "no_sustained_drop"].includes(status) && observed.value !== null)
       || required(value, "classification_status") !== "method_definition_required"
       || required(value, "classification") !== null
@@ -1394,6 +1459,7 @@
       network_rei: optionalFiniteNumber(required(value, "network_rei")), potential, observed,
       paired_sample_reference: { valid_pair_count: count, potential_median: potentialMedian,
         observed_median: observedMedian }, relative_position: relative,
+      higher_than_relation: plainRelation,
       classification_status: "method_definition_required", classification: null,
       ...validateV3Metadata(value)
     };
@@ -1484,6 +1550,7 @@
       : null;
     const intentByResultType = {
       section_ranking: "rank_sections",
+      county_ranking: "rank_counties",
       county_resilience_summary: "summarize_county_resilience",
       tier_alignment_summary: "summarize_tier_alignment",
       section_resilience_comparison: "compare_section_resilience"

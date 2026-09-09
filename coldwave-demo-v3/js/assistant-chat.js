@@ -92,10 +92,10 @@
     let pending = null;
     let history = [];
 
-    function textElement(tagName, className, text) {
+    function textElement(tagName, className, text, preserveTechnicalNames = false) {
       const element = documentRef.createElement(tagName);
       if (className) element.className = className;
-      element.textContent = safeDisplayText(text);
+      element.textContent = preserveTechnicalNames ? String(text ?? "") : safeDisplayText(text);
       return element;
     }
 
@@ -130,44 +130,53 @@
 
     // Only presentation of the client's closed, validated result projection.
     // Do not rank, aggregate, classify, or calculate analytical values here.
+    function countyLine(row) {
+      return `${row.county_rank === null ? "Unranked" : row.county_rank}. ${row.county} County: median ${formatStructuredValue(row.median)}; ${row.available_count} of ${row.total_sections} roads have this score (${formatStructuredValue(row.coverage_percent)}%).`;
+    }
+
     function structuredAnswer(result, interpretation = "") {
       if (!result) return "";
       if (result.result_type === "section_ranking") {
         return [
-          `${formatStructuredValue(result.distribution.available_count)} sections are eligible for this ${result.metric.display_name} ranking. Showing the highest ${result.highest_sections.length} and lowest ${result.lowest_sections.length} below.`,
-          `${result.county ? result.county + " County" : "Statewide"} · ${result.direction}. Higher values: ${result.metric.higher_value_interpretation}.`,
           interpretation,
+          `${formatStructuredValue(result.distribution.available_count)} roads have the data needed for this ${result.metric.display_name} ranking. Showing the highest ${result.highest_sections.length} and lowest ${result.lowest_sections.length} below.`,
+          result.metric.higher_value_interpretation,
           sectionLines("Highest values", result.highest_sections),
           sectionLines("Lowest values", result.lowest_sections)
         ].filter(Boolean).join("\n\n");
       }
+      if (result.result_type === "county_ranking") {
+        const target = result.rows.find(row => row.county === result.county);
+        return [
+          interpretation,
+          `Texas counties ranked by ${result.metric.display_name}; ${result.available_counties} counties have this score. ${result.plain_language_direction}`,
+          target ? countyLine(target) : result.rows.filter(row => row.median !== null).slice(0, 10).map(countyLine).join("\n"),
+          "Each county is represented by the middle score of its roads with data. Check the number of roads and coverage before interpreting a county's position; even counties with very few observations are included."
+        ].filter(Boolean).join("\n\n");
+      }
       if (result.result_type === "county_resilience_summary") {
         return [
-          `${result.county} County has ${formatStructuredValue(result.total_sections)} control sections; ${formatStructuredValue(result.observed_support_count)} have Tier 3 support.`,
           interpretation,
-          "Compared with statewide (county median relative to the same metric's eligible statewide sections):",
-          ...result.metric_summaries.map(item =>
-            `${item.metric.display_name}: county median ${formatStructuredValue(item.distribution.median)}; statewide median ${formatStructuredValue(item.statewide_distribution.median)} (${item.median_relative_to_statewide}). County median percentile: ${formatStructuredValue(item.median_percentile_in_statewide_sections)} among individual statewide sections, not counties.\nCounty N = ${formatStructuredValue(item.distribution.available_count)}; min ${formatStructuredValue(item.distribution.minimum)}; Q1 ${formatStructuredValue(item.distribution.q1)}; Q3 ${formatStructuredValue(item.distribution.q3)}; max ${formatStructuredValue(item.distribution.maximum)}.`),
-          sectionLines("Notable sections — highest Tier 3 values", result.representative_high_observed),
-          sectionLines("Notable sections — lowest Tier 3 values", result.representative_low_observed),
-          `Observed event status: detected ${result.status_counts.detected}; no sustained drop ${result.status_counts.no_sustained_drop}; recovery censored ${result.status_counts.recovery_endpoint_censored}; no observed support ${result.status_counts.no_observed_support}.`
+          `${result.county} County has ${formatStructuredValue(result.total_sections)} roads (control sections); ${formatStructuredValue(result.observed_support_count)} have traffic observations.`,
+          ...result.metric_summaries.filter(item => ["potential_resilience", "tier3_observed_resilience"].includes(item.metric.metric)).map(item =>
+            `${item.metric.display_name}: the middle score is ${formatStructuredValue(item.distribution.median)}, ${item.median_relative_to_statewide} the middle score among Texas roads with this metric. County position: ${formatStructuredValue(item.county_rank)} among ${formatStructuredValue(item.counties_available)} counties, ordered from higher to lower scores. ${item.distribution.available_count} roads have this score.`),
+          "Next, review the weather and network information and compare individual traffic curves. Detailed distributions and examples are available below."
         ].filter(Boolean).join("\n\n");
       }
       if (result.result_type === "tier_alignment_summary") {
         return [
-          `Potential and Tier 3 Observed Resilience are compared on ${formatStructuredValue(result.valid_pair_count)} sections with both values. Pearson r = ${formatStructuredValue(result.pearson_r)}; Spearman rho = ${formatStructuredValue(result.spearman_rho)}. The broader curve-supported sample contains ${formatStructuredValue(result.common_support_count)} sections.`,
-          interpretation
+          interpretation,
+          `This comparison uses ${formatStructuredValue(result.valid_pair_count)} roads where we have both the planning score and the real traffic score. The numerical association results and sample details are available below.`
         ].filter(Boolean).join("\n\n");
       }
       if (result.result_type === "section_resilience_comparison") {
-        const reference = result.paired_sample_reference;
         return [
+          interpretation,
           `${result.identity.display_cs_id} · ${result.identity.route} · ${result.identity.county} County`,
           ...[result.potential, result.observed].map(item =>
-            `${item.metric.display_name}: ${formatStructuredValue(item.value)}. Percentile ${formatStructuredValue(item.percentile)} among ${formatStructuredValue(item.statewide_distribution.available_count)} eligible sections; descending dense rank ${formatStructuredValue(item.descending_dense_rank)}. Statewide eligible median: ${formatStructuredValue(item.statewide_distribution.median)}.`),
-          interpretation,
-          `Common valid-pair reference (${formatStructuredValue(reference.valid_pair_count)} sections): Potential median ${formatStructuredValue(reference.potential_median)}; Tier 3 median ${formatStructuredValue(reference.observed_median)}.`,
-          `Planning context: WEATHER_REI ${formatStructuredValue(result.weather_rei)}; NETWORK_REI ${formatStructuredValue(result.network_rei)}. Tier 3 status: ${result.support_status.detection_status.replaceAll("_", " ")}.`
+            item.value === null ? `${item.metric.display_name}: unavailable.`
+              : `${item.metric.display_name}: ${formatStructuredValue(item.value)}. Higher than about ${formatStructuredValue(item.higher_than_percent)}% of the same ${formatStructuredValue(result.paired_sample_reference.valid_pair_count)} roads where both planning and traffic scores exist.`),
+          "The two scores describe different things; their raw values are not subtracted. Review Tier 1 weather conditions, Tier 2 network alternatives, and Q(t), the traffic-speed curve, to investigate the contrast."
         ].filter(Boolean).join("\n\n");
       }
       return "";
@@ -193,7 +202,8 @@
         ? response.clarification.question : displayedAnswer(response);
       const projection = response.status === "completed" ? structuredAnswer(response.structured_result, answer) : "";
       message.appendChild(textElement(
-        "p", "assistant-chat-answer", projection || answer
+        "p", "assistant-chat-answer", projection || answer,
+        response.status === "completed" && response.tools_used?.some(item => item.tool_name === "explain_project_concept")
       ));
       if (response.status === "completed" && response.structured_result?.result_type === "section_ranking"
         && typeof options.openRanking === "function") {
@@ -202,6 +212,20 @@
         button.type = "button";
         button.addEventListener("click", () => options.openRanking(response.structured_result, button));
         message.appendChild(button);
+      }
+      if (response.status === "completed" && response.structured_result) {
+        const details = documentRef.createElement("details");
+        details.appendChild(textElement("summary", "", response.structured_result.result_type === "county_ranking"
+          ? "View all counties and technical details" : "Evidence and technical details"));
+        if (response.structured_result.result_type === "county_ranking") {
+          details.appendChild(textElement("p", "assistant-chat-answer",
+            response.structured_result.rows.map(countyLine).join("\n")));
+        }
+        details.appendChild(textElement("p", "assistant-chat-answer", JSON.stringify({
+          evidence: response.structured_result, warnings: response.warnings,
+          limitations: response.limitations, tools_used: response.tools_used
+        }, null, 2), true));
+        message.appendChild(details);
       }
       appendChatNode(message);
     }

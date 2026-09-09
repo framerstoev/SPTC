@@ -375,7 +375,8 @@ module.exports = async function runAssistantChatTests() {
         distribution: { ...structuredDistribution(58, index === 3 ? 56 : 58), q1: 0.3, q3: 0.7 },
         statewide_distribution: { ...structuredDistribution(10029, index === 3 ? 3473 : 10029), q1: 0.3, q3: 0.7 },
         median_relative_to_statewide: "equal",
-        median_percentile_in_statewide_sections: 50
+        median_percentile_in_statewide_sections: 50,
+        county_rank: 20, counties_available: 200, median_relative_to_counties: "below"
       })),
       representative_high_observed: [structuredRow(1, 0.9)],
       representative_low_observed: [structuredRow(1, 0.1, "CS_2001")],
@@ -1052,11 +1053,11 @@ module.exports = async function runAssistantChatTests() {
     includes(entries[4].textContent, "AI explanation grounded in reviewed evidence.");
   });
 
-  test("validated network results render bounded numerical prose without metadata cards", async () => {
+  test("validated network results render answer first with collapsed technical evidence", async () => {
     const cases = [
       [rankingResultFixture(), ["Highest values", "Lowest values", "7.", "10023."]],
-      [countyResultFixture(), ["Dallas County has 58", "56 have Tier 3 support", "no observed support 2", "detected 50", "no sustained drop 4", "recovery censored 2", "Q1", "Q3", "statewide median", "Notable sections"]],
-      [alignmentResultFixture(), ["3,473", "3,842", "0.277", "0.282", "reviewed classification rule has not been defined"]]
+      [countyResultFixture(), ["Dallas County has 58", "56 have traffic observations", "County position: 20", "middle score", "Evidence and technical details"]],
+      [alignmentResultFixture(), ["3,473", "0.27717", "0.281802", "reviewed classification rule has not been defined"]]
     ];
     for (const [result, fragments] of cases) {
       const original = JSON.stringify(result);
@@ -1067,13 +1068,16 @@ module.exports = async function runAssistantChatTests() {
       await controller.submitQuestion("Show the reviewed result.");
       const text = elements.assistantMessages.textContent;
       fragments.forEach(fragment=>includes(text,fragment));
-      excludes(text, "METHOD_DEFINITION_REQUIRED");
-      excludes(text, "classification_status");
-      excludes(text, "tools_used");
+      const nodes = allDescendants(elements.assistantMessages);
+      const mainAnswer = nodes.find(node => node.className === "assistant-chat-answer").textContent;
+      excludes(mainAnswer, "METHOD_DEFINITION_REQUIRED");
+      excludes(mainAnswer, "classification_status");
+      excludes(mainAnswer, "tools_used");
       excludes(text, "Warnings");
       excludes(text, "Release and method");
-      const nodes = allDescendants(elements.assistantMessages);
-      assert(!nodes.some(node=>["TABLE","DETAILS","H3","H4"].includes(node.tagName)));
+      const details = nodes.filter(node => node.tagName === "DETAILS");
+      equal(details.length, 1);
+      assert(details.every(node => !node.open));
       equal(JSON.stringify(result), original, "presentation must not mutate structured evidence");
     }
   });
@@ -1109,6 +1113,14 @@ module.exports = async function runAssistantChatTests() {
     equal(calls, 1);
     equal(opened.length, 1);
     assert(opened[0].scope === result && opened[0].trigger === button);
+  });
+
+  test("reviewed concept preserves official formula names as inert text", async () => {
+    const answer = "EVENT_REI = 0.65 * WEATHER_REI + 0.35 * NETRISK_LITE. <script>not executable</script>";
+    const {controller, elements} = createHarness({client:{async queryAssistant(){return responseFixture({answer, tools_used:[{tool_name:"explain_project_concept",call_index:1}]});}}});
+    await controller.submitQuestion("How is Potential calculated?");
+    includes(elements.assistantMessages.textContent, answer);
+    assert(!allDescendants(elements.assistantMessages).some(node => node.tagName === "SCRIPT"));
   });
 
   test("successful completion restores input focus and keeps suggestions available", async () => {
