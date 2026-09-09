@@ -51,7 +51,7 @@ repository branch names, or a browser preference.
 
 ## Accepted application checkpoints
 
-- Reviewed Phase 4B frontend content: `1861bfc9e4a6ddd4691d4d7256980de5a43a895a`
+- Reviewed Phase 4B frontend content: `c55bcee6a24e5a54f190db57b3d4650794d0ac13`
 - Immutable Phase 4A frontend baseline: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
 - Immutable frontend tag: `phase4a-v3-tier-aware-explorer-accepted`
 - Backend runtime with reviewed response-contract fix:
