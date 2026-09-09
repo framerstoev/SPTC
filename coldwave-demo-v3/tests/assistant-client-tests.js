@@ -461,7 +461,10 @@
       },
       metric_summaries: descriptors.map((metric, index) => ({
         metric,
-        distribution: v3Distribution(58, index === 3 ? 56 : 58)
+        distribution: { ...v3Distribution(58, index === 3 ? 56 : 58), q1: 0.3, q3: 0.7 },
+        statewide_distribution: { ...v3Distribution(10029, index === 3 ? 3473 : 10029), q1: 0.3, q3: 0.7 },
+        median_relative_to_statewide: "equal",
+        median_percentile_in_statewide_sections: 50
       })),
       representative_high_observed: [v3SectionValue(1, 0.9)],
       representative_low_observed: [v3SectionValue(1, 0.1, { metricRank: 56, sectionId: "CS_2001" })],
@@ -751,6 +754,7 @@
     equal(Object.getOwnPropertyNames(target.SPTCAssistant.client).sort(), [
       "explainMetric",
       "generateSectionReviewNote",
+      "getRankedSectionsPage",
       "getSectionSummary",
       "queryAssistant"
     ]);
@@ -921,11 +925,111 @@
     equal(calls.length, 1);
   });
 
-  test("V3 ranking, county, and alignment structured results validate as frozen copies", async () => {
+  function rankingPageFixture(offset = 0) {
+    return {
+      result_type: "ranked_sections_page", metric: v3RankingFixture().metric,
+      direction: "descending", county: null, total_count: 3473, population_count: 10029,
+      offset, page_size: 25, rank_method: "dense_rank_numeric_id_ties",
+      rows: Array.from({length: Math.min(25, 3473 - offset)}, (_, i) =>
+        v3SectionValue(offset + i + 1, 1 - (offset + i) / 3473)),
+      event_id: "coldwave_2026_01", data_release: "coldwave_2026_01_r1",
+      method_version: "data_driven_resilience_v0"
+    };
+  }
+
+  function sectionComparisonFixture() {
+    const descriptors = v3CountyFixture().metric_summaries;
+    const relative = (index, percentile) => ({
+      metric: descriptors[index].metric, value: 0.5,
+      statewide_distribution: descriptors[index].statewide_distribution,
+      percentile, descending_dense_rank: 20, percentile_method: "mean_strict_weak"
+    });
+    return {
+      result_type: "section_resilience_comparison",
+      identity: { normalized_cs_id: "1081", display_cs_id: "CS_1081", route: "IH_35_", county: "Dallas", county_fips: "48113" },
+      support_status: { observed_support: true, detection_status: "detected", matched_tmc_count: 2, data_density_summary: "A" },
+      weather_rei: 0.4, network_rei: 0.6, potential: relative(2, 40), observed: relative(3, 60),
+      paired_sample_reference: { valid_pair_count: 3473, potential_median: 0.5, observed_median: 0.5 },
+      relative_position: "observed_higher_percentile", classification_status: "method_definition_required",
+      classification: null, event_id: "coldwave_2026_01", data_release: "coldwave_2026_01_r1",
+      method_version: "data_driven_resilience_v0"
+    };
+  }
+
+  test("full ranking first/middle/last pages use only the deterministic route", async () => {
+    const calls = [];
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: async (url, options) => {
+        calls.push({url, options});
+        return jsonResponse(200, rankingPageFixture(JSON.parse(options.body).offset));
+      }
+    });
+    for (const offset of [0, 1725, 3450]) {
+      const result = await target.SPTCAssistant.client.getRankedSectionsPage({
+        metric: "tier3_observed_resilience", direction: "descending", offset
+      });
+      equal(result.total_count, 3473);
+      equal(result.rows.length, offset === 3450 ? 23 : 25);
+      equal(result.rows[0].position, offset + 1);
+      assert(Object.isFrozen(result.rows));
+    }
+    equal(calls.length, 3);
+    assert(calls.every(call => call.url === "http://127.0.0.1:8080/api/v1/sections/rank/page"
+      && call.options.method === "POST" && call.options.credentials === "omit"));
+  });
+
+  test("ranking requests reject unreviewed fields and invalid bounds before fetch", async () => {
+    let calls = 0;
+    const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+      fetch: async () => { calls++; return jsonResponse(200, rankingPageFixture()); }
+    });
+    for (const mutation of [{metric: "sql"}, {direction: "priority"}, {page_size: 101},
+      {page_size: 0}, {page_size: "25"}, {offset: -1}, {offset: 10030}, {offset: 1.5}, {sql: "SELECT 1"}]) {
+      await expectCode(() => target.SPTCAssistant.client.getRankedSectionsPage({
+        metric: "tier3_observed_resilience", direction: "descending", ...mutation
+      }), "invalid_request");
+    }
+    equal(calls, 0);
+  });
+
+  test("ranking response rejects drift, duplicate IDs, stale offsets and unsafe values", async () => {
+    for (const mutate of [p => p.offset++, p => p.total_count = 0,
+      p => p.rows[1].section_id = p.rows[0].section_id, p => p.rows[1].value = 2,
+      p => p.rows[0].value = null, p => p.rows[0].position++, p => p.county = "Dallas",
+      p => p.method_version = "unknown"]) {
+      const payload = rankingPageFixture();
+      mutate(payload);
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-tools", {
+        fetch: async () => jsonResponse(200, payload)
+      });
+      await expectCode(() => target.SPTCAssistant.client.getRankedSectionsPage({
+        metric: "tier3_observed_resilience", direction: "descending"
+      }), "invalid_response");
+    }
+  });
+
+  test("section comparison rejects invented classifications and inconsistent support", async () => {
+    for (const mutate of [p => p.classification = "mismatched", p => p.relative_position = "equal",
+      p => p.observed.percentile = 101, p => p.identity.display_cs_id = "CS_3597",
+      p => p.support_status.observed_support = false, p => p.paired_sample_reference.potential_median = null]) {
+      const payload = sectionComparisonFixture();
+      mutate(payload);
+      const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {
+        fetch: async () => jsonResponse(200, assistantFixture({
+          intent: "compare_section_resilience", tools_used: [{tool_name: "compare_section_resilience", call_index: 1}],
+          structured_result: payload
+        }))
+      });
+      await expectCode(() => target.SPTCAssistant.client.queryAssistant({message: "Compare this section."}), "invalid_response");
+    }
+  });
+
+  test("V3 ranking, county, alignment and section comparison validate as frozen copies", async () => {
     const fixtures = [
       ["rank_sections", "rank_sections", v3RankingFixture()],
       ["summarize_county_resilience", "summarize_county_resilience", v3CountyFixture()],
-      ["summarize_tier_alignment", "summarize_tier_alignment", v3AlignmentFixture()]
+      ["summarize_tier_alignment", "summarize_tier_alignment", v3AlignmentFixture()],
+      ["compare_section_resilience", "compare_section_resilience", sectionComparisonFixture()]
     ];
     for (const [intent, toolName, structuredResult] of fixtures) {
       const target = evaluateClient("http://localhost/page?assistantMode=backend-agent", {

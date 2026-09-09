@@ -54,6 +54,7 @@
     "rank_sections",
     "summarize_county_resilience",
     "summarize_tier_alignment",
+    "compare_section_resilience",
     "explain_project_concept",
     "request_clarification",
     "decline_unsupported_request"
@@ -66,6 +67,7 @@
     "rank_sections",
     "summarize_county_resilience",
     "summarize_tier_alignment",
+    "compare_section_resilience",
     "explain_project_concept",
     "request_clarification",
     "answer_scope_explanation",
@@ -1122,11 +1124,23 @@
     };
   }
 
-  function validateNetworkSectionValue(value) {
+  function validateAnalyticalDistribution(value) {
+    const distribution = validateMetricDistribution(value);
+    const q1 = optionalFiniteNumber(required(value, "q1"));
+    const q3 = optionalFiniteNumber(required(value, "q3"));
+    if (distribution.available_count === 0 ? q1 !== null || q3 !== null
+      : q1 === null || q3 === null || !(distribution.minimum <= q1
+        && q1 <= distribution.median && distribution.median <= q3 && q3 <= distribution.maximum)) {
+      invalidResponse();
+    }
+    return { ...distribution, q1, q3 };
+  }
+
+  function validateNetworkSectionValue(value, maximumPosition = 10) {
     const sectionId = validateAssistantSectionId(required(value, "section_id"));
     if (sectionId === null) invalidResponse();
     return {
-      position: boundedInteger(required(value, "position"), 1, 10),
+      position: boundedInteger(required(value, "position"), 1, maximumPosition),
       metric_rank: boundedInteger(required(value, "metric_rank"), 1, 1000000),
       section_id: sectionId,
       route: boundedAssistantResponseText(required(value, "route"), 200),
@@ -1138,7 +1152,7 @@
   }
 
   function validateNetworkSectionList(value, maximum) {
-    const rows = copyArray(value, 0, maximum, validateNetworkSectionValue);
+    const rows = copyArray(value, 0, maximum, row => validateNetworkSectionValue(row));
     if (rows.some((row, index) => row.position !== index + 1)) invalidResponse();
     return rows;
   }
@@ -1214,10 +1228,24 @@
       100
     );
     const statusCounts = validateStatusCounts(required(value, "status_counts"));
-    const metricSummaries = copyArray(required(value, "metric_summaries"), 4, 4, item => ({
-      metric: validateV3MetricDescriptor(required(item, "metric")),
-      distribution: validateMetricDistribution(required(item, "distribution"))
-    }));
+    const metricSummaries = copyArray(required(value, "metric_summaries"), 4, 4, item => {
+      const distribution = validateAnalyticalDistribution(required(item, "distribution"));
+      const statewide = validateAnalyticalDistribution(required(item, "statewide_distribution"));
+      const relation = oneOf(required(item, "median_relative_to_statewide"),
+        ["above", "below", "equal", "unavailable"]);
+      const percentile = optionalFiniteNumberInRange(
+        required(item, "median_percentile_in_statewide_sections"), 0, 100);
+      const expected = distribution.median === null || statewide.median === null ? "unavailable"
+        : distribution.median > statewide.median ? "above"
+          : distribution.median < statewide.median ? "below" : "equal";
+      if (relation !== expected || (relation === "unavailable") !== (percentile === null)
+        || distribution.population_count !== totalSections) invalidResponse();
+      return {
+        metric: validateV3MetricDescriptor(required(item, "metric")), distribution,
+        statewide_distribution: statewide, median_relative_to_statewide: relation,
+        median_percentile_in_statewide_sections: percentile
+      };
+    });
     const statusTotal = detectionStatuses.reduce((sum, status) => sum + statusCounts[status], 0);
     const expectedObserved = statusCounts.detected
       + statusCounts.no_sustained_drop
@@ -1314,7 +1342,90 @@
     if (resultType === "section_ranking") return validateV3RankingResult(value);
     if (resultType === "county_resilience_summary") return validateCountyResult(value);
     if (resultType === "tier_alignment_summary") return validateTierAlignmentResult(value);
+    if (resultType === "section_resilience_comparison") return validateSectionComparison(value);
     invalidResponse();
+  }
+
+  function validateRelativeMetric(value, expectedMetric) {
+    const metric = validateV3MetricDescriptor(required(value, "metric"));
+    const score = optionalFiniteNumber(required(value, "value"));
+    const distribution = validateAnalyticalDistribution(required(value, "statewide_distribution"));
+    const percentile = optionalFiniteNumberInRange(required(value, "percentile"), 0, 100);
+    const rank = optionalBoundedInteger(required(value, "descending_dense_rank"), 1, 10029);
+    const unavailable = score === null || distribution.available_count === 0;
+    if (metric.metric !== expectedMetric || required(value, "percentile_method") !== "mean_strict_weak"
+      || unavailable !== (percentile === null) || unavailable !== (rank === null)
+      || (rank !== null && rank > distribution.available_count)) invalidResponse();
+    return { metric, value: score, statewide_distribution: distribution, percentile,
+      descending_dense_rank: rank, percentile_method: "mean_strict_weak" };
+  }
+
+  function validateSectionComparison(value) {
+    const identityValue = required(value, "identity");
+    const identity = validateIdentity(identityValue, required(identityValue, "normalized_cs_id"), true);
+    const support = required(value, "support_status");
+    const status = oneOf(required(support, "detection_status"), detectionStatuses);
+    const observedSupport = strictBoolean(required(support, "observed_support"));
+    const potential = validateRelativeMetric(required(value, "potential"), "potential_resilience");
+    const observed = validateRelativeMetric(required(value, "observed"), "tier3_observed_resilience");
+    const reference = required(value, "paired_sample_reference");
+    const count = boundedInteger(required(reference, "valid_pair_count"), 0, 10029);
+    const potentialMedian = optionalFiniteNumber(required(reference, "potential_median"));
+    const observedMedian = optionalFiniteNumber(required(reference, "observed_median"));
+    const relative = oneOf(required(value, "relative_position"),
+      ["observed_higher_percentile", "potential_higher_percentile", "equal", "unavailable"]);
+    const expected = potential.percentile === null || observed.percentile === null ? "unavailable"
+      : observed.percentile > potential.percentile ? "observed_higher_percentile"
+        : potential.percentile > observed.percentile ? "potential_higher_percentile" : "equal";
+    if (relative !== expected || observedSupport !== (status !== "no_observed_support")
+      || (["no_observed_support", "no_sustained_drop"].includes(status) && observed.value !== null)
+      || required(value, "classification_status") !== "method_definition_required"
+      || required(value, "classification") !== null
+      || (count === 0) !== (potentialMedian === null) || (count === 0) !== (observedMedian === null)) {
+      invalidResponse();
+    }
+    return {
+      result_type: "section_resilience_comparison", identity,
+      support_status: { observed_support: observedSupport, detection_status: status,
+        matched_tmc_count: optionalBoundedInteger(required(support, "matched_tmc_count"), 0, 1000000),
+        data_density_summary: required(support, "data_density_summary") === null ? null
+          : oneOf(required(support, "data_density_summary"), ["A", "B", "C"]) },
+      weather_rei: optionalFiniteNumber(required(value, "weather_rei")),
+      network_rei: optionalFiniteNumber(required(value, "network_rei")), potential, observed,
+      paired_sample_reference: { valid_pair_count: count, potential_median: potentialMedian,
+        observed_median: observedMedian }, relative_position: relative,
+      classification_status: "method_definition_required", classification: null,
+      ...validateV3Metadata(value)
+    };
+  }
+
+  function validateRankingPage(value, request) {
+    const metric = validateV3MetricDescriptor(required(value, "metric"));
+    const direction = oneOf(required(value, "direction"), ["ascending", "descending"]);
+    const county = required(value, "county") === null ? null
+      : boundedAssistantResponseText(required(value, "county"), 100);
+    const total = boundedInteger(required(value, "total_count"), 0, 10029);
+    const population = boundedInteger(required(value, "population_count"), 0, 10029);
+    const offset = boundedInteger(required(value, "offset"), 0, 10029);
+    const size = boundedInteger(required(value, "page_size"), 1, 100);
+    const rows = copyArray(required(value, "rows"), 0, 100, row => validateNetworkSectionValue(row, 10029));
+    if (required(value, "result_type") !== "ranked_sections_page"
+      || required(value, "rank_method") !== "dense_rank_numeric_id_ties"
+      || metric.metric !== request.metric || direction !== request.direction || county !== request.county
+      || size !== request.page_size || offset !== request.offset || total > population
+      || (offset >= total && offset !== 0) || rows.length !== Math.min(size, total - offset)
+      || new Set(rows.map(row => row.section_id)).size !== rows.length
+      || rows.some((row, i) => row.position !== offset + i + 1 || row.metric_rank > total
+        || (county !== null && row.county !== county)
+        || (i > 0 && (direction === "descending" ? rows[i - 1].value < row.value
+          : rows[i - 1].value > row.value))
+        || (i > 0 && rows[i - 1].value === row.value
+          && Number(rows[i - 1].section_id.slice(3)) >= Number(row.section_id.slice(3))))) {
+      invalidResponse();
+    }
+    return deepFreeze({ result_type: "ranked_sections_page", metric, direction, county,
+      total_count: total, population_count: population, offset, page_size: size, rows,
+      rank_method: "dense_rank_numeric_id_ties", ...validateV3Metadata(value) });
   }
 
   function validateAssistantResponse(payload, httpStatus) {
@@ -1374,12 +1485,13 @@
     const intentByResultType = {
       section_ranking: "rank_sections",
       county_resilience_summary: "summarize_county_resilience",
-      tier_alignment_summary: "summarize_tier_alignment"
+      tier_alignment_summary: "summarize_tier_alignment",
+      section_resilience_comparison: "compare_section_resilience"
     };
     if (
       (structuredResult !== null && intentByResultType[structuredResult.result_type] !== intent)
       || (structuredResult !== null && status !== "completed")
-      || (["rank_sections", "summarize_county_resilience", "summarize_tier_alignment"].includes(intent)
+      || (Object.values(intentByResultType).includes(intent)
         && status === "completed"
         && structuredResult === null)
     ) {
@@ -1431,7 +1543,7 @@
         ? ["invalid_metric_name"]
         : endpointKind === "review_note"
           ? ["invalid_cs_id", "invalid_review_note_request"]
-          : ["invalid_cs_id"];
+          : endpointKind === "ranking_page" ? ["invalid_ranking_request"] : ["invalid_cs_id"];
       if (!allowedCodes.includes(code)) invalidResponse();
       boundedText(required(detail, "message"), 2000);
       throw clientError("backend_validation_error");
@@ -1600,6 +1712,24 @@
     });
   }
 
+  async function getRankedSectionsPage(request, options) {
+    if (!isRecord(request) || Object.keys(request).some(key =>
+      !["metric", "direction", "county", "offset", "page_size"].includes(key))
+      || !v3RankingMetrics.includes(request.metric)
+      || !["ascending", "descending"].includes(request.direction)) throw clientError("invalid_request");
+    const body = { metric: request.metric, direction: request.direction, county: request.county ?? null,
+      offset: request.offset ?? 0, page_size: request.page_size ?? 25 };
+    if ((body.county !== null && (typeof body.county !== "string" || !body.county.trim()
+      || body.county.length > 100)) || !Number.isInteger(body.offset) || body.offset < 0
+      || body.offset > 10029 || !Number.isInteger(body.page_size) || body.page_size < 1
+      || body.page_size > 100) throw clientError("invalid_request");
+    return requestReviewedJson({
+      url: `${namespace.runtime.backend_base_url}/api/v1/sections/rank/page`,
+      method: "POST", body, endpointKind: "ranking_page", expectedValue: body,
+      responseLimit: 128 * 1024, validator: validateRankingPage, signal: callerSignal(options)
+    });
+  }
+
   Object.defineProperties(namespace, {
     activeLayerMetrics: {
       value: activeLayerMetrics,
@@ -1610,6 +1740,7 @@
         getSectionSummary,
         explainMetric,
         generateSectionReviewNote,
+        getRankedSectionsPage,
         queryAssistant
       }),
       enumerable: true
