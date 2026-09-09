@@ -2148,6 +2148,13 @@ class Phase4ABrowserQA:
             "map pan and zoom send no automatic Assistant request",
         )
 
+    def timeline_text_for_public_label_check(self) -> str:
+        """Default public-label scope; later reviewed technical UI may specialize it."""
+        return self.evaluate(
+            "Array.from(document.querySelectorAll('#assistantMessages > *'), "
+            "node => node.textContent).join('\\n')"
+        )
+
     def final_console_network_acceptance(self) -> dict[str, int]:
         exceptions = self.page.events_since(self.console_mark, "Runtime.exceptionThrown")
         console_errors = [
@@ -2232,10 +2239,7 @@ class Phase4ABrowserQA:
             ),
             "browser sends no API keys, authorization headers, or cookies",
         )
-        output = self.evaluate(
-            "Array.from(document.querySelectorAll('#assistantMessages > *'), "
-            "node => node.textContent).join('\\n')"
-        )
+        output = self.timeline_text_for_public_label_check()
         self.report.check(
             FORBIDDEN_VISIBLE.search(output) is None
             and RAW_JSON.search(output) is None

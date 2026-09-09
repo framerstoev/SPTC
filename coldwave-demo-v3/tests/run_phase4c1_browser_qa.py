@@ -1,6 +1,7 @@
 """Phase 4C1 production-page QA using the unchanged isolated browser lifecycle."""
 
 import json
+import re
 import time
 from dataclasses import asdict
 
@@ -34,7 +35,31 @@ JARGON = (
 
 
 class Phase4C1BrowserQA(Phase4CBrowserQA):
+    def timeline_text_for_public_label_check(self):
+        # Technical names and JSON are intentional only in these reviewed areas.
+        # Private-runtime/path leaks and executable DOM remain forbidden everywhere.
+        full_text = super().timeline_text_for_public_label_check()
+        private_runtime = re.compile(
+            r"\b(?:Qwen3?|Ollama|FastAPI)\b|qwen3:8b|[A-Za-z]:\\|file://|"
+            r"Traceback|services[/\\]resilience-agent|data[/\\]tier3",
+            re.I,
+        )
+        self.report.check(
+            private_runtime.search(full_text) is None,
+            "entire timeline including technical disclosure has no private runtime/path leaks",
+        )
+        approved = json.dumps(getattr(self, "technical_answer_indexes", []))
+        return self.evaluate(
+            "(()=>{const ai=Array.from(document.querySelectorAll('#assistantMessages [data-result-kind=ai-assisted]'));"
+            f"const approved=new Set({approved});"
+            "return Array.from(document.querySelectorAll('#assistantMessages > *'),node=>{"
+            "const copy=node.cloneNode(true);copy.querySelectorAll('details').forEach(n=>n.remove());"
+            "if(approved.has(ai.indexOf(node)))copy.querySelector('.assistant-chat-answer').textContent='';"
+            "return copy.textContent;}).join('\\n');})()"
+        )
+
     def live_acceptance(self):
+        self.technical_answer_indexes = []
         self.ensure_assistant_open()
         self.set_tier("potential")
         self.select_section("1081")
@@ -126,6 +151,7 @@ class Phase4C1BrowserQA(Phase4CBrowserQA):
             )
             result = payload.get("structured_result")
             if case == "technical":
+                self.technical_answer_indexes.append(before)
                 self.report.check(
                     "robust_minmax" in visible and "0.65" in visible,
                     "technical follow-up exact Potential formula",
