@@ -20,6 +20,8 @@ from run_phase4b_browser_qa import (
 
 
 class Phase4CBrowserQA(Phase4BBrowserQA):
+    additional_reviewed_api_routes = ("sections/rank/page",)
+
     def resize_acceptance(self):
         timings = []
         for width, height in VIEWPORTS:

@@ -492,6 +492,9 @@ class IsolatedChrome:
 
 
 class Phase4ABrowserQA:
+    # Later acceptance subclasses may add exact, reviewed deterministic routes.
+    # The accepted Phase 4A/4B default remains unchanged.
+    additional_reviewed_api_routes: tuple[str, ...] = ()
     """Drive the production V3 DOM and retain only sanitized measurements."""
 
     def __init__(
@@ -2205,7 +2208,9 @@ class Phase4ABrowserQA:
         )
         allowed_api = re.compile(
             rf"^{re.escape(BACKEND_ORIGIN)}/api/v1/(?:assistant/query|"
-            r"sections/[1-9][0-9]*|metrics/[a-z0-9_]+|reports/review-note)$"
+            r"sections/[1-9][0-9]*|metrics/[a-z0-9_]+|reports/review-note"
+            + "".join("|" + re.escape(route) for route in self.additional_reviewed_api_routes)
+            + r")$"
         )
         api = [
             item
