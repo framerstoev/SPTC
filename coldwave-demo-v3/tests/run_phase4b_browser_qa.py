@@ -175,11 +175,23 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
                 self.report.check(all(token in visible for token in ('3,473','0.277','0.282','reviewed classification rule has not been defined')), "alignment pair count/correlation/limitation in plain prose")
             if case == "section":
                 expected = read_json(BACKEND_ORIGIN + '/api/v1/sections/1081')
-                self.report.check(len(payload['evidence']) == 16, "section evidence contract cardinality")
+                # Accepted V3 Potential projection is two statuses plus three
+                # planning metrics, not the legacy V2 full-summary projection.
+                evidence = {item['evidence_id']: item for item in payload['evidence']}
+                expected_values = {
+                    'e_detection_status': expected['support_status']['detection_status'],
+                    'e_observed_support': expected['support_status']['observed_support'],
+                    **{'e_metric_' + name: expected['planning_context'][name] for name in (
+                        'potential_resilience_score', 'weather_rei', 'netrisk_lite')},
+                }
+                self.report.check(len(payload['evidence']) == len(expected_values) and set(evidence) == set(expected_values), "section exact active-Potential evidence schema")
+                for name, value in expected_values.items():
+                    self.report.check(evidence[name]['section_id'] == 'CS_1081' and evidence[name]['value'] == value, "section identity and deterministic evidence values match summary")
                 self.report.check(expected['identity']['route'] in visible or expected['identity']['route'].rstrip('_') not in visible, "section route preserved exactly when referenced")
             if case == "safety":
                 self.report.check(payload['evidence'] == [] and result is None, "investment remains unsupported without numerical evidence")
             self.prompt_results.append(PromptResult(case,status,payload['intent'],tool,result['result_type'] if result else None,elapsed))
+            print('CASE ' + json.dumps(asdict(self.prompt_results[-1])), flush=True)
 
     def cancellation_and_stale_acceptance(self) -> None:
         self.ensure_assistant_open()
@@ -341,8 +353,6 @@ def main():
             run_stage('deterministic quick actions', qa.fixed_actions_acceptance)
         screenshots = run_stage('six visual viewports', qa.viewport_acceptance)
         network = run_stage('console and network', qa.final_console_network_acceptance)
-    for result in qa.prompt_results:
-        print('CASE ' + json.dumps(asdict(result)))
     print('SUMMARY ' + json.dumps({'checks':len(report.checks),'viewports':len(VIEWPORTS),'screenshots':screenshots,'artifact_directory':str(artifacts),'latency':latency_summary(qa.prompt_results),**network,'overall_pass':True}))
     return 0
 
