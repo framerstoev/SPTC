@@ -390,11 +390,11 @@ module.exports = async function runAssistantChatTests() {
       observed_metric: structuredMetric("tier3_observed_resilience", "Tier 3 Observed Resilience", "observed_curve_resilience_score_v0"),
       statewide_section_count: 10029,
       common_support_count: 3842,
-      valid_pair_count: 3842,
-      missing_pair_count_within_common_support: 0,
+      valid_pair_count: 3473,
+      missing_pair_count_within_common_support: 369,
       excluded_no_support_count: 6187,
-      pearson_r: 0.2,
-      spearman_rho: 0.18,
+      pearson_r: 0.277170,
+      spearman_rho: 0.281802,
       classification_status: "method_definition_required",
       alignment_definition: null,
       consistent_count: null,
@@ -778,7 +778,7 @@ module.exports = async function runAssistantChatTests() {
     await controller.submitQuestion("Predict next winter.");
     equal(
       elements.assistantChatStatus.textContent,
-      "Request outside the reviewed assistant scope."
+      ""
     );
     const priorTimelineText = elements.assistantMessages.textContent;
     controller.setContext({ sectionId: "257", activeLayer: "tier3" });
@@ -843,14 +843,6 @@ module.exports = async function runAssistantChatTests() {
       "tool_error",
       "invalid_model_response"
     ];
-    const visibleStatusLabels = {
-      clarification_required: "Status: Clarification required",
-      unsupported_request: "Status: Unsupported request",
-      assistant_disabled: "Status: Assistant disabled",
-      model_unavailable: "Status: AI unavailable",
-      tool_error: "Status: Tool error",
-      invalid_model_response: "Status: Response rejected"
-    };
     for (const status of statuses) {
       const { controller, elements } = createHarness({
         client: {
@@ -863,14 +855,8 @@ module.exports = async function runAssistantChatTests() {
         }
       });
       assert(await controller.submitQuestion(`Test ${status}.`) === true, status);
-      const expectedSource = ["completed", "clarification_required", "unsupported_request"]
-        .includes(status)
-        ? "AI-assisted response"
-        : "AI Assistant status";
-      includes(elements.assistantMessages.textContent, expectedSource, status);
-      if (visibleStatusLabels[status]) {
-        includes(elements.assistantMessages.textContent, visibleStatusLabels[status], status);
-      }
+      assert(allDescendants(elements.assistantMessages).some(node => node.className === "assistant-chat-answer"));
+      excludes(elements.assistantMessages.textContent, "Status:");
       if (status === "clarification_required") {
         includes(elements.assistantMessages.textContent, "Which control section");
         includes(elements.assistantMessages.textContent, `Test ${status}.`);
@@ -881,7 +867,7 @@ module.exports = async function runAssistantChatTests() {
       }
       if (status === "model_unavailable") {
         includes(elements.assistantMessages.textContent, "AI Assistant is unavailable");
-        includes(elements.assistantMessages.textContent, "AI Assistant status");
+        excludes(elements.assistantMessages.textContent, "AI Assistant status");
         includes(elements.assistantMessages.textContent, "Verified quick actions remain available");
         excludes(elements.assistantMessages.textContent, "Qwen");
       }
@@ -907,7 +893,7 @@ module.exports = async function runAssistantChatTests() {
     }
   });
 
-  test("structured response renders inert text, warnings, tools, evidence, limitations, and metadata", async () => {
+  test("normal response renders inert answer only and retains metadata outside visible DOM", async () => {
     const scriptLike = '<img src=x onerror="PRIVATE_SCRIPT"> **not Markdown HTML**';
     const { controller, elements } = createHarness({
       client: {
@@ -934,14 +920,14 @@ module.exports = async function runAssistantChatTests() {
     await controller.submitQuestion("Render safely.");
     const text = elements.assistantMessages.textContent;
     includes(text, scriptLike);
-    includes(text, "AI-assisted response");
-    includes(text, "METHOD_SCOPE (info)");
-    includes(text, "get section summary");
-    includes(text, "Detection status");
-    includes(text, "detected");
-    includes(text, "Limitations (1)");
-    includes(text, "Release and method");
-    includes(text, "coldwave_2026_01_r1");
+    excludes(text, "AI-assisted response");
+    excludes(text, "METHOD_SCOPE (info)");
+    excludes(text, "get section summary");
+    excludes(text, "Detection status");
+    excludes(text, "detected");
+    excludes(text, "Limitations (1)");
+    excludes(text, "Release and method");
+    excludes(text, "coldwave_2026_01_r1");
     excludes(text, "RAW_PRIVATE_VALUE");
     excludes(text, "PRIVATE_REASONING");
     excludes(text, "11434");
@@ -950,7 +936,7 @@ module.exports = async function runAssistantChatTests() {
     const descendants = allDescendants(elements.assistantMessages);
     assert(!descendants.some(element => element.tagName === "IMG"));
     const details = descendants.filter(element => element.tagName === "DETAILS");
-    assert(details.length >= 4);
+    equal(details.length, 0);
     assert(details.every(element => element.open === false));
   });
 
@@ -1056,114 +1042,46 @@ module.exports = async function runAssistantChatTests() {
       .filter(element => ["assistant-result-source", "assistant-chat-source"]
         .includes(element.className))
       .map(element => element.textContent);
-    equal(sourceLabels, ["Verified result", "AI-assisted response"]);
+    equal(sourceLabels, []);
     includes(entries[2].textContent, "CS_1081");
     includes(entries[4].textContent, "AI explanation grounded in reviewed evidence.");
   });
 
-  test("V3 structured ranking, county, and alignment results render as safe cards and tables", async () => {
+  test("validated network results render bounded numerical prose without metadata cards", async () => {
     const cases = [
-      ["rank_sections", "rank_sections", rankingResultFixture(), "Highest values"],
-      ["summarize_county_resilience", "summarize_county_resilience", countyResultFixture(), "Dallas County evidence"],
-      ["summarize_tier_alignment", "summarize_tier_alignment", alignmentResultFixture(), "Potential and observed alignment"]
+      [rankingResultFixture(), ["Highest values", "Lowest values", "7.", "10023."]],
+      [countyResultFixture(), ["Dallas County contains 58", "56 have Tier 3 observed support", "2 do not", "Detected: 50", "no sustained drop: 4", "recovery censored: 2"]],
+      [alignmentResultFixture(), ["3,473", "3,842", "0.277", "0.282", "reviewed classification rule has not been defined"]]
     ];
-    for (const [intent, toolName, structuredResult, expectedText] of cases) {
-      const response = responseFixture({
-        answer: "NETRISK Lite and score v0 are internal labels; EVENT_REI is not a V3 display metric.",
-        intent,
-        tools_used: [{ tool_name: toolName, call_index: 1 }],
-        evidence: [
-          {
-            evidence_id: "e_hidden_event",
-            kind: "metric_value",
-            section_id: "CS_1081",
-            metric_name: "event_rei",
-            label: "Event REI",
-            value: 0.4,
-            display_value: "0.400",
-            unit: "dimensionless",
-            definition: "Legacy combined context."
-          },
-          {
-            evidence_id: "e_network",
-            kind: "metric_value",
-            section_id: "CS_1081",
-            metric_name: "netrisk_lite",
-            label: "NETRISK Lite",
-            value: 0.5,
-            display_value: "0.500",
-            unit: "dimensionless",
-            definition: "Network context."
-          }
-        ],
-        structured_result: structuredResult
-      });
-      const { controller, elements } = createHarness({
-        client: { async queryAssistant() { return response; } }
-      });
+    for (const [result, fragments] of cases) {
+      const original = JSON.stringify(result);
+      const {controller,elements} = createHarness({client:{async queryAssistant(){return responseFixture({structured_result:result});}}});
       await controller.submitQuestion("Show the reviewed result.");
-      const rendered = elements.assistantMessages.textContent;
-      const structuredCards = allDescendants(elements.assistantMessages).filter(element => (
-        element.getAttribute("data-structured-result") === structuredResult.result_type
-      ));
-      equal(structuredCards.length, 1);
-      includes(rendered, expectedText);
-      includes(rendered, "NETWORK_REI");
-      excludes(rendered.toLowerCase(), "netrisk_lite");
-      excludes(rendered.toLowerCase(), "netrisk lite");
-      excludes(rendered.toLowerCase(), "event_rei");
-      excludes(rendered.toLowerCase(), "event rei");
-      excludes(rendered.toLowerCase(), "score v0");
-      if (structuredResult.result_type !== "tier_alignment_summary") {
-        assert(allDescendants(structuredCards[0]).some(element => element.tagName === "TABLE"));
-      } else {
-        includes(rendered, "method definition is unresolved");
-      }
-      const descendants = allDescendants(structuredCards[0]);
-      if (structuredResult.result_type === "section_ranking") {
-        const direction = descendants.find(element => element.getAttribute("data-field") === "direction");
-        assert(direction, "Ranking direction must have an explicit rendered field");
-        includes(direction.textContent, "Descending");
-        const rankHeading = descendants.find(element => (
-          element.tagName === "TH" && element.getAttribute("data-field") === "metric_rank"
-        ));
-        equal(rankHeading.textContent, "Rank");
-        const metricRanks = descendants
-          .filter(element => element.tagName === "TD" && element.getAttribute("data-field") === "metric_rank")
-          .map(element => element.textContent);
-        equal(metricRanks, ["7", "10023"]);
-        includes(rendered, "Tier 3 observed support");
-      }
-      if (structuredResult.result_type === "county_resilience_summary") {
-        const expectedCounts = {
-          "status_counts.detected": "50",
-          "status_counts.no_sustained_drop": "4",
-          "status_counts.recovery_endpoint_censored": "2",
-          "status_counts.no_observed_support": "2"
-        };
-        Object.entries(expectedCounts).forEach(([field, expected]) => {
-          const stat = descendants.find(element => element.getAttribute("data-field") === field);
-          assert(stat, `County result must render ${field}`);
-          includes(stat.textContent, expected);
-        });
-      }
-      if (structuredResult.result_type === "tier_alignment_summary") {
-        const commonSupport = descendants.find(element => (
-          element.getAttribute("data-field") === "common_support_count"
-        ));
-        assert(commonSupport, "Alignment result must render common support");
-        includes(commonSupport.textContent, "Common support");
-        includes(commonSupport.textContent, "3842");
-        const classification = descendants.find(element => (
-          element.getAttribute("data-field") === "classification_status"
-        ));
-        includes(classification.textContent, "method definition required");
-        ["consistent_count", "mismatch_count", "representative_examples"].forEach(field => {
-          const unresolved = descendants.find(element => element.getAttribute("data-field") === field);
-          assert(unresolved, `Alignment result must render unresolved ${field}`);
-          includes(unresolved.textContent, "Not defined");
-        });
-      }
+      const text = elements.assistantMessages.textContent;
+      fragments.forEach(fragment=>includes(text,fragment));
+      excludes(text, "METHOD_DEFINITION_REQUIRED");
+      excludes(text, "classification_status");
+      excludes(text, "tools_used");
+      excludes(text, "Warnings");
+      excludes(text, "Release and method");
+      const nodes = allDescendants(elements.assistantMessages);
+      assert(!nodes.some(node=>["TABLE","DETAILS","H3","H4"].includes(node.tagName)));
+      equal(JSON.stringify(result), original, "presentation must not mutate structured evidence");
+    }
+  });
+
+  test("essential backend answer cautions remain visible plain text for all detection states", async () => {
+    const cautions = [
+      "Detected under the current event-specific method.",
+      "No sustained drop does not prove that no impact occurred.",
+      "The recovery endpoint is censored and does not confirm completed recovery.",
+      "Missing Tier 3 support is not zero resilience and does not establish whether disruption occurred."
+    ];
+    for (const answer of cautions) {
+      const {controller,elements} = createHarness({client:{async queryAssistant(){return responseFixture({answer});}}});
+      await controller.submitQuestion("Explain the selected section.");
+      includes(elements.assistantMessages.textContent,answer);
+      equal(allDescendants(elements.assistantMessages).filter(node=>node.className==="assistant-chat-answer").length,1);
     }
   });
 

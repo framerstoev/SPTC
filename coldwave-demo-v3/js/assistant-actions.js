@@ -44,6 +44,12 @@
       .replace(/\bnetrisk[ _-]?lite\b/gi, "NETWORK_REI")
       .replace(/\btier[ _-]?2[ _-]?lite\b/gi, "Tier 2")
       .replace(/\bevent[ _-]?rei\b/gi, "combined potential context")
+      .replace(/\bmethod_definition_required\b/gi, "a reviewed classification rule is required")
+      .replace(/\brecovery_censored\b/gi, "recovery completion was not observed")
+      .replace(/\bno_observed_support\b/gi, "no observed support")
+      .replace(/\bno_sustained_drop\b/gi, "no sustained drop")
+      .replace(/\bmethod_scope\b/gi, "event-specific experimental method")
+      .replace(/\bpartial_observed_coverage\b/gi, "partial observed coverage")
       .replace(/\bq_min\b/gi, "Minimum");
   }
 
@@ -149,7 +155,6 @@
       const result = documentRef.createElement("div");
       result.className = "assistant-message assistant assistant-result";
       result.setAttribute("data-result-kind", "verified");
-      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
       result.appendChild(textElement("p", "assistant-result-note", text));
       return result;
     }
@@ -163,6 +168,7 @@
     }
 
     function formatNumber(value, digits = 3) {
+      if (value === null || value === undefined) return "unavailable";
       return Number(value).toFixed(digits);
     }
 
@@ -203,6 +209,10 @@
     }
 
     function renderPreview() {
+      if (options.showContextNotices === false) {
+        updateState(baseRequestState(), "");
+        return;
+      }
       if (!context.sectionId) {
         replaceMessage("Select a control section to use section-based actions.");
       } else {
@@ -326,271 +336,38 @@
       );
     }
 
-    function compactMetricList(title, metrics, attributeName) {
-      const block = documentRef.createElement("div");
-      block.className = "assistant-result-group";
-      block.appendChild(textElement("h4", null, title));
-      const list = documentRef.createElement("ul");
-      metrics.forEach(metric => {
-        list.appendChild(textElement("li", null, `${metric.label}: ${metric.value}`));
-      });
-      block.appendChild(list);
-      block.setAttribute(attributeName, String(metrics.length));
-      return block;
-    }
-
     function renderSectionResult(response, request) {
-      const result = documentRef.createElement("div");
-      result.className = "assistant-message assistant assistant-result";
-      result.setAttribute("data-result-kind", "verified");
-      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
-      result.appendChild(textElement("h3", null, response.identity.display_cs_id));
-      appendDefinition(
-        result,
-        "Location",
-        `${response.identity.route}, ${response.identity.county}`
-      );
-      appendDefinition(
-        result,
-        "Observed support",
-        response.support_status.observed_support ? "available" : "unavailable"
-      );
-      appendDefinition(
-        result,
-        "Tier 3 status",
-        readableStatus(response.support_status.detection_status)
-      );
-
-      const observedMetrics = [];
-      if (response.observed_metrics.q_min !== null) {
-        observedMetrics.push({
-          label: "Minimum",
-          value: formatNumber(response.observed_metrics.q_min)
-        });
-      }
-      if (response.observed_metrics.resilience_loss_area !== null) {
-        observedMetrics.push({
-          label: "Loss Area",
-          value: `${formatNumber(response.observed_metrics.resilience_loss_area)} Q-hours`
-        });
-      }
-      if (response.observed_metrics.recovery_duration_hours !== null) {
-        observedMetrics.push({
-          label: "Recovery",
-          value: `${formatNumber(response.observed_metrics.recovery_duration_hours, 1)} hours`
-        });
-      }
-      if (observedMetrics.length > 0) {
-        result.appendChild(compactMetricList(
-          "Selected observed evidence",
-          observedMetrics.slice(0, 3),
-          "data-observed-metric-count"
-        ));
-      } else if (!response.support_status.observed_support) {
-        result.appendChild(textElement(
-          "p",
-          "assistant-result-note",
-          "Tier 3 observed evidence is unavailable for this section in the current release. This does not indicate that no disruption occurred."
-        ));
-      } else {
-        result.appendChild(textElement(
-          "p",
-          "assistant-result-note",
-          "Phase-dependent observed metrics are unavailable under this Tier 3 status."
-        ));
-      }
-
-      const planningMetrics = [
-        { label: "WEATHER_REI", value: formatNumber(response.planning_context.weather_rei) },
-        { label: "NETWORK_REI", value: formatNumber(response.planning_context.netrisk_lite) },
-        { label: "Potential Resilience", value: formatNumber(response.planning_context.potential_resilience_score) }
-      ];
-      result.appendChild(compactMetricList(
-        "Planning context",
-        planningMetrics,
-        "data-planning-metric-count"
-      ));
-      if (response.warnings.length > 0) {
-        result.appendChild(compactMetricList(
-          "Warnings",
-          response.warnings.map(warning => ({
-            label: `${warning.code} (${warning.severity})`,
-            value: warning.message
-          })),
-          "data-warning-count"
-        ));
-      } else {
-        appendDefinition(result, "Warnings", "None returned");
-      }
-      result.appendChild(textElement(
-        "p",
-        "assistant-result-note",
-        "Planning context and observed Tier 3 evidence describe different parts of this event-specific review."
-      ));
-      replaceTimelineEntry(request.entry, result);
+      const observed = response.observed_metrics;
+      const planning = response.planning_context;
+      const text = [
+        `${response.identity.display_cs_id}, ${response.identity.route}, ${response.identity.county}. ${readableStatus(response.support_status.detection_status)}.`,
+        `Tier 3: Minimum ${formatNumber(observed.q_min)}; Loss Area ${formatNumber(observed.resilience_loss_area)} Q-hours; Recovery ${formatNumber(observed.recovery_duration_hours, 1)} hours.`,
+        `Planning context: WEATHER_REI ${formatNumber(planning.weather_rei)}; NETWORK_REI ${formatNumber(planning.netrisk_lite)}; Potential Resilience ${formatNumber(planning.potential_resilience_score)}.`,
+        ...response.warnings.map(warning => warning.message)
+      ].join("\n\n");
+      replaceTimelineEntry(request.entry, verifiedTextMessage(text));
     }
 
     function renderMetricResult(response, request) {
-      const result = documentRef.createElement("div");
-      result.className = "assistant-message assistant assistant-result";
-      result.setAttribute("data-result-kind", "verified");
-      result.appendChild(textElement("p", "assistant-result-source", "Verified result"));
-      result.appendChild(textElement("h3", null, response.metric.display_name));
-      result.appendChild(textElement(
-        "p",
-        "assistant-result-note",
-        response.interpretation.plain_language
-      ));
-      appendDefinition(result, "Definition", response.metric.definition);
-      appendDefinition(result, "Unit", response.metric.unit);
-      appendDefinition(
-        result,
-        "Applicability",
-        response.metric.applicability.map(readableStatus).join(", ")
-      );
-      if (response.metric.nullable) {
-        appendDefinition(result, "When unavailable", response.metric.null_meaning);
-      }
-      const limitations = response.interpretation.limitations.slice(0, 3);
-      const limitationBlock = compactMetricList(
-        "Reviewed limitations",
-        limitations.map((limitation, index) => ({
-          label: `Limitation ${index + 1}`,
-          value: limitation
-        })),
-        "data-limitation-count"
-      );
-      result.appendChild(limitationBlock);
-      result.appendChild(textElement(
-        "p",
-        "assistant-result-note",
-        "This is a metric definition, not an interpretation of the selected section's relative standing."
-      ));
-      replaceTimelineEntry(request.entry, result);
-    }
-
-    function reviewListBlock(title, items, listName) {
-      const block = documentRef.createElement("section");
-      block.className = "assistant-review-list-block";
-      block.setAttribute("data-review-list", listName);
-      block.appendChild(textElement("h3", null, title));
-      const list = documentRef.createElement("ul");
-      items.forEach(item => {
-        list.appendChild(textElement("li", null, item));
-      });
-      block.appendChild(list);
-      return block;
-    }
-
-    function reviewDetectionStatus(response) {
-      const statusEvidence = response.evidence.find(evidence => (
-        evidence.field_name === "detection_status"
-      ));
-      return statusEvidence ? readableStatus(statusEvidence.raw_value) : "unavailable";
+      const text = [
+        response.metric.display_name + ". " + response.interpretation.plain_language,
+        response.metric.definition,
+        "Unit: " + response.metric.unit + ".",
+        ...(response.metric.nullable ? [response.metric.null_meaning] : []),
+        ...response.interpretation.limitations
+      ].join("\n\n");
+      replaceTimelineEntry(request.entry, verifiedTextMessage(text));
     }
 
     function renderReviewResult(response, request) {
-      const compact = documentRef.createElement("div");
-      compact.className = "assistant-message assistant assistant-result";
-      compact.setAttribute("data-result-kind", "verified");
-      compact.setAttribute("data-review-compact", "true");
-      compact.appendChild(textElement("p", "assistant-result-source", "Verified result"));
-      compact.appendChild(textElement("h3", null, response.title));
-      compact.appendChild(textElement(
-        "p",
-        "assistant-review-draft-label",
-        "Draft for human review"
-      ));
-      appendDefinition(
-        compact,
-        "Section",
-        `${response.identity.display_cs_id}; ${response.identity.route}, ${response.identity.county}`
-      );
-      appendDefinition(compact, "Status", reviewDetectionStatus(response));
-      appendDefinition(
-        compact,
-        "Warning codes",
-        response.warnings.map(warning => warning.code).join(", ")
-      );
-      appendDefinition(compact, "Evidence records", String(response.evidence.length));
-      appendDefinition(compact, "Limitations", String(response.limitations.length));
-      compact.appendChild(textElement(
-        "p",
-        "assistant-result-note",
-        "Expand the full draft below for structured review and the human-review checklist."
-      ));
-      const details = documentRef.createElement("details");
-      details.className = "assistant-review-details";
-      details.open = false;
-      details.setAttribute("data-report-section-count", String(response.sections.length));
-      details.appendChild(textElement("summary", null, "Open full review note"));
-      const body = documentRef.createElement("div");
-      body.className = "assistant-review-body";
-      response.sections.forEach(section => {
-        const sectionElement = documentRef.createElement("section");
-        sectionElement.className = "assistant-review-section";
-        sectionElement.setAttribute("data-report-section", section.key);
-        sectionElement.appendChild(textElement("h3", null, section.heading));
-        sectionElement.appendChild(textElement("p", null, section.body));
-        body.appendChild(sectionElement);
-      });
-      body.appendChild(reviewListBlock(
-        "Warnings",
-        response.warnings.map(warning => (
-          `${warning.code} (${warning.severity}): ${warning.message}`
-        )),
-        "warnings"
-      ));
-      body.appendChild(reviewListBlock(
-        "Limitations",
-        response.limitations,
-        "limitations"
-      ));
-      body.appendChild(reviewListBlock(
-        "Human-review checklist",
-        response.human_review_items.map(item => `Review: ${item}`),
-        "human-review-checklist"
-      ));
-      details.appendChild(body);
-      compact.appendChild(details);
-
-      const reviewToken = Object.freeze({
-        sectionId: request.sectionId,
-        markdown: safeDisplayText(response.rendered_markdown)
-      });
-      const reviewEntryIsCurrent = () => (
-        compact.parentNode === elements.messages
-        && context.sectionId === reviewToken.sectionId
-      );
-      const copyRow = documentRef.createElement("div");
-      copyRow.className = "assistant-copy-row";
-      const copyButton = textElement("button", null, "Copy Markdown");
-      copyButton.className = "assistant-copy-markdown";
-      copyButton.setAttribute("type", "button");
-      const copyStatus = documentRef.createElement("span");
-      copyStatus.className = "assistant-copy-status";
-      copyStatus.setAttribute("role", "status");
-      copyStatus.setAttribute("aria-live", "polite");
-      copyStatus.setAttribute("aria-atomic", "true");
-      copyButton.addEventListener("click", async () => {
-        if (!reviewEntryIsCurrent()) return;
-        if (!clipboard || typeof clipboard.writeText !== "function") {
-          copyStatus.textContent = "Clipboard unavailable.";
-          return;
-        }
-        try {
-          await clipboard.writeText(reviewToken.markdown);
-          if (!reviewEntryIsCurrent()) return;
-          copyStatus.textContent = "Copied Markdown.";
-        } catch {
-          if (!reviewEntryIsCurrent()) return;
-          copyStatus.textContent = "Copy failed.";
-        }
-      });
-      copyRow.appendChild(copyButton);
-      copyRow.appendChild(copyStatus);
-      compact.appendChild(copyRow);
-      replaceTimelineEntry(request.entry, compact);
+      const text = [
+        "Draft for human review.",
+        response.title,
+        ...response.sections.filter(section => section.key !== "data_and_method_cautions").map(section => section.body),
+        ...response.warnings.map(warning => warning.message),
+        ...response.limitations
+      ].join("\n\n");
+      replaceTimelineEntry(request.entry, verifiedTextMessage(text));
     }
 
     function backendMethod(action) {

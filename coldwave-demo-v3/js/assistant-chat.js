@@ -19,8 +19,8 @@
   });
   const completionStatusText = Object.freeze({
     completed: "",
-    clarification_required: "Clarification required.",
-    unsupported_request: "Request outside the reviewed assistant scope.",
+    clarification_required: "",
+    unsupported_request: "",
     assistant_disabled: "AI Assistant unavailable.",
     model_unavailable: "AI Assistant unavailable.",
     tool_error: "The deterministic tool could not complete.",
@@ -114,354 +114,50 @@
       appendChatNode(message);
     }
 
-    function responseSourceLabel(status) {
-      if (["completed", "clarification_required", "unsupported_request"].includes(status)) {
-        return "AI-assisted response";
-      }
-      return "AI Assistant status";
-    }
-
-    function readableIdentifier(value) {
-      return String(value || "").replaceAll("_", " ");
-    }
-
-    function appendDefinition(parent, label, value, field = null) {
-      const row = documentRef.createElement("p");
-      row.className = "assistant-chat-definition";
-      if (field) row.setAttribute("data-field", field);
-      row.appendChild(textElement("strong", null, `${label}: `));
-      row.appendChild(textElement("span", null, value));
-      parent.appendChild(row);
-    }
-
-    function expandableBlock(summaryText, className) {
-      const details = documentRef.createElement("details");
-      details.className = className;
-      details.open = false;
-      details.appendChild(textElement("summary", null, summaryText));
-      return details;
-    }
-
-    function appendTools(message, toolsUsed) {
-      if (toolsUsed.length === 0) return;
-      const details = expandableBlock(
-        `Tools used (${toolsUsed.length})`,
-        "assistant-chat-details assistant-chat-tools"
-      );
-      const list = documentRef.createElement("ul");
-      toolsUsed.forEach(tool => {
-        list.appendChild(textElement("li", null, readableIdentifier(tool.tool_name)));
-      });
-      details.appendChild(list);
-      message.appendChild(details);
-    }
-
-    function appendEvidence(message, evidence) {
-      const visibleEvidence = evidence.filter(record => record.metric_name !== "event_rei");
-      if (visibleEvidence.length === 0) return;
-      const details = expandableBlock(
-        `Structured deterministic evidence (${visibleEvidence.length})`,
-        "assistant-chat-details assistant-chat-evidence"
-      );
-      const list = documentRef.createElement("ul");
-      visibleEvidence.forEach(record => {
-        const item = documentRef.createElement("li");
-        item.className = "assistant-chat-evidence-item";
-        const displayValue = record.unit
-          ? `${record.display_value} (${record.unit})`
-          : record.display_value;
-        appendDefinition(item, record.label, displayValue);
-        if (record.section_id) appendDefinition(item, "Section", record.section_id);
-        if (record.definition) {
-          item.appendChild(textElement(
-            "p",
-            "assistant-chat-evidence-definition",
-            record.definition
-          ));
-        }
-        list.appendChild(item);
-      });
-      details.appendChild(list);
-      message.appendChild(details);
-    }
-
-    function appendWarnings(message, warnings) {
-      if (warnings.length === 0) return;
-      const section = documentRef.createElement("section");
-      section.className = "assistant-chat-warnings";
-      section.setAttribute("aria-label", "Assistant warnings");
-      section.appendChild(textElement("h4", null, "Warnings"));
-      const list = documentRef.createElement("ul");
-      warnings.forEach(warning => {
-        const item = documentRef.createElement("li");
-        item.className = `severity-${warning.severity}`;
-        const scope = warning.section_id ? ` for ${warning.section_id}` : "";
-        item.appendChild(textElement(
-          "strong",
-          null,
-          `${warning.code} (${warning.severity})${scope}: `
-        ));
-        item.appendChild(textElement("span", null, warning.message));
-        list.appendChild(item);
-      });
-      section.appendChild(list);
-      message.appendChild(section);
-    }
-
-    function appendLimitations(message, limitations) {
-      if (limitations.length === 0) return;
-      const details = expandableBlock(
-        `Limitations (${limitations.length})`,
-        "assistant-chat-details assistant-chat-limitations"
-      );
-      const list = documentRef.createElement("ul");
-      limitations.forEach(limitation => {
-        list.appendChild(textElement("li", null, limitation));
-      });
-      details.appendChild(list);
-      message.appendChild(details);
-    }
-
-    function appendReleaseMetadata(message, response) {
-      const details = expandableBlock(
-        "Release and method",
-        "assistant-chat-details assistant-chat-metadata"
-      );
-      appendDefinition(details, "Data release", response.data_release);
-      appendDefinition(details, "Method version", response.method_version);
-      message.appendChild(details);
-    }
-
-    function formatStructuredValue(value, unit = null) {
-      if (value === null || value === undefined) return "N/A";
-      const rendered = typeof value === "number"
-        ? value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+    function formatStructuredValue(value) {
+      if (value === null || value === undefined) return "unavailable";
+      return typeof value === "number"
+        ? value.toLocaleString("en-US", { maximumFractionDigits: 3 })
         : String(value);
-      return unit ? `${rendered} ${unit}` : rendered;
     }
 
-    function appendDistribution(parent, distribution) {
-      const grid = documentRef.createElement("div");
-      grid.className = "assistant-structured-stats";
-      [
-        ["Sections", distribution.population_count],
-        ["Available", distribution.available_count],
-        ["Missing", distribution.missing_count],
-        ["Median", formatStructuredValue(distribution.median)]
-      ].forEach(([label, value]) => {
-        const item = documentRef.createElement("div");
-        item.className = "assistant-structured-stat";
-        item.appendChild(textElement("span", null, label));
-        item.appendChild(textElement("strong", null, String(value)));
-        grid.appendChild(item);
-      });
-      parent.appendChild(grid);
+    function sectionLines(title, rows) {
+      if (!rows.length) return title + ": no eligible sections returned.";
+      return title + ":\n" + rows.map(row =>
+        `${row.metric_rank}. ${row.section_id} · ${row.route} · ${row.county}: ${formatStructuredValue(row.value)} (${row.detection_status.replaceAll("_", " ")}).`
+      ).join("\n");
     }
 
-    function appendSectionTable(parent, title, rows, metric) {
-      const section = documentRef.createElement("section");
-      section.className = "assistant-structured-section";
-      section.appendChild(textElement("h4", null, title));
-      if (rows.length === 0) {
-        section.appendChild(textElement("p", "assistant-result-note", "No eligible sections were returned."));
-        parent.appendChild(section);
-        return;
+    // Only presentation of the client's closed, validated result projection.
+    // Do not rank, aggregate, classify, or calculate analytical values here.
+    function structuredAnswer(result) {
+      if (!result) return "";
+      if (result.result_type === "section_ranking") {
+        return [
+          `${result.metric.display_name} ranking: ${formatStructuredValue(result.distribution.available_count)} eligible sections out of ${formatStructuredValue(result.distribution.population_count)} in ${result.county || "the statewide sample"}. Direction: ${result.direction}. Higher values: ${result.metric.higher_value_interpretation}.`,
+          sectionLines("Highest values", result.highest_sections),
+          sectionLines("Lowest values", result.lowest_sections),
+          result.interpretation_limit
+        ].join("\n\n");
       }
-      const wrap = documentRef.createElement("div");
-      wrap.className = "assistant-table-wrap";
-      const table = documentRef.createElement("table");
-      table.className = "assistant-structured-table";
-      const head = documentRef.createElement("thead");
-      const headRow = documentRef.createElement("tr");
-      [
-        ["Rank", "metric_rank"],
-        ["Section", "section_id"],
-        ["Route", "route"],
-        ["County", "county"],
-        [metric.display_name, "value"],
-        ["Tier 3 observed support", "detection_status"]
-      ].forEach(([label, field]) => {
-        const heading = textElement("th", null, label);
-        heading.setAttribute("data-field", field);
-        headRow.appendChild(heading);
-      });
-      head.appendChild(headRow);
-      table.appendChild(head);
-      const body = documentRef.createElement("tbody");
-      rows.forEach(row => {
-        const tr = documentRef.createElement("tr");
-        [
-          [row.metric_rank, "metric_rank"],
-          [row.section_id, "section_id"],
-          [row.route, "route"],
-          [row.county, "county"],
-          [formatStructuredValue(row.value, metric.unit), "value"]
-        ].forEach(([value, field]) => {
-          const cell = textElement("td", null, String(value));
-          cell.setAttribute("data-field", field);
-          tr.appendChild(cell);
-        });
-        const statusCell = documentRef.createElement("td");
-        statusCell.setAttribute("data-field", "detection_status");
-        const statusBadge = textElement(
-          "span",
-          `assistant-section-status status-${row.detection_status}`,
-          row.observed_support
-            ? `${readableIdentifier(row.detection_status)}; observed support`
-            : `${readableIdentifier(row.detection_status)}; support unavailable`
-        );
-        statusBadge.setAttribute("data-observed-support", String(row.observed_support));
-        statusCell.appendChild(statusBadge);
-        tr.appendChild(statusCell);
-        body.appendChild(tr);
-      });
-      table.appendChild(body);
-      wrap.appendChild(table);
-      section.appendChild(wrap);
-      parent.appendChild(section);
-    }
-
-    function appendRankingResult(message, result) {
-      const card = documentRef.createElement("section");
-      card.className = "assistant-structured-card ranking-result";
-      card.setAttribute("data-structured-result", result.result_type);
-      card.appendChild(textElement("h3", null, `${result.metric.display_name} section ranking`));
-      appendDefinition(card, "Scope", result.county || "Statewide");
-      appendDefinition(
-        card,
-        "Direction",
-        result.direction === "descending" ? "Descending" : "Ascending",
-        "direction"
-      );
-      appendDefinition(card, "Higher values", result.metric.higher_value_interpretation);
-      appendDistribution(card, result.distribution);
-      appendSectionTable(card, "Highest values", result.highest_sections, result.metric);
-      appendSectionTable(card, "Lowest values", result.lowest_sections, result.metric);
-      card.appendChild(textElement("p", "assistant-result-note", result.interpretation_limit));
-      message.appendChild(card);
-    }
-
-    function appendCountyResult(message, result) {
-      const card = documentRef.createElement("section");
-      card.className = "assistant-structured-card county-result";
-      card.setAttribute("data-structured-result", result.result_type);
-      card.appendChild(textElement("h3", null, `${result.county} County evidence`));
-      const summary = documentRef.createElement("div");
-      summary.className = "assistant-structured-stats";
-      [
-        ["Sections", result.total_sections, "total_sections"],
-        ["Observed support", `${result.observed_support_count} (${formatStructuredValue(result.observed_support_percent, "%")})`, "observed_support_count"],
-        ["Detected", result.status_counts.detected, "status_counts.detected"],
-        ["No sustained drop", result.status_counts.no_sustained_drop, "status_counts.no_sustained_drop"],
-        ["Recovery censored", result.status_counts.recovery_endpoint_censored, "status_counts.recovery_endpoint_censored"],
-        ["No observed support", result.status_counts.no_observed_support, "status_counts.no_observed_support"]
-      ].forEach(([label, value, field]) => {
-        const item = documentRef.createElement("div");
-        item.className = "assistant-structured-stat";
-        item.setAttribute("data-field", field);
-        item.appendChild(textElement("span", null, label));
-        item.appendChild(textElement("strong", null, String(value)));
-        summary.appendChild(item);
-      });
-      card.appendChild(summary);
-      const metricTable = documentRef.createElement("div");
-      metricTable.className = "assistant-table-wrap";
-      const table = documentRef.createElement("table");
-      table.className = "assistant-structured-table metric-summary-table";
-      const head = documentRef.createElement("thead");
-      const headRow = documentRef.createElement("tr");
-      ["Metric", "Available", "Median", "Range"].forEach(label => {
-        headRow.appendChild(textElement("th", null, label));
-      });
-      head.appendChild(headRow);
-      table.appendChild(head);
-      const body = documentRef.createElement("tbody");
-      result.metric_summaries.forEach(summaryItem => {
-        const tr = documentRef.createElement("tr");
-        const distribution = summaryItem.distribution;
-        [
-          summaryItem.metric.display_name,
-          distribution.available_count,
-          formatStructuredValue(distribution.median, summaryItem.metric.unit),
-          distribution.minimum === null
-            ? "N/A"
-            : `${formatStructuredValue(distribution.minimum)}–${formatStructuredValue(distribution.maximum)}`
-        ].forEach(value => tr.appendChild(textElement("td", null, String(value))));
-        body.appendChild(tr);
-      });
-      table.appendChild(body);
-      metricTable.appendChild(table);
-      card.appendChild(metricTable);
-      const observedMetric = result.metric_summaries[3].metric;
-      appendSectionTable(card, "Representative high observed values", result.representative_high_observed, observedMetric);
-      appendSectionTable(card, "Representative low observed values", result.representative_low_observed, observedMetric);
-      card.appendChild(textElement("p", "assistant-result-note", result.coverage_caveat));
-      message.appendChild(card);
-    }
-
-    function appendAlignmentResult(message, result) {
-      const card = documentRef.createElement("section");
-      card.className = "assistant-structured-card alignment-result";
-      card.setAttribute("data-structured-result", result.result_type);
-      card.appendChild(textElement("h3", null, "Potential and observed alignment"));
-      appendDefinition(
-        card,
-        "Metrics",
-        `${result.potential_metric.display_name} and ${result.observed_metric.display_name}`
-      );
-      appendDefinition(
-        card,
-        "Classification status",
-        readableIdentifier(result.classification_status),
-        "classification_status"
-      );
-      appendDefinition(card, "Consistent count", "Not defined", "consistent_count");
-      appendDefinition(card, "Mismatch count", "Not defined", "mismatch_count");
-      appendDefinition(
-        card,
-        "Representative examples",
-        "Not defined",
-        "representative_examples"
-      );
-      const distribution = {
-        population_count: result.statewide_section_count,
-        available_count: result.valid_pair_count,
-        missing_count: result.missing_pair_count_within_common_support,
-        median: result.pearson_r
-      };
-      const grid = documentRef.createElement("div");
-      grid.className = "assistant-structured-stats";
-      [
-        ["Statewide sections", distribution.population_count, "statewide_section_count"],
-        ["Common support", result.common_support_count, "common_support_count"],
-        ["Valid pairs", distribution.available_count, "valid_pair_count"],
-        ["Missing pairs", distribution.missing_count, "missing_pair_count_within_common_support"],
-        ["Excluded: no support", result.excluded_no_support_count, "excluded_no_support_count"],
-        ["Pearson r", formatStructuredValue(result.pearson_r), "pearson_r"],
-        ["Spearman rho", formatStructuredValue(result.spearman_rho), "spearman_rho"]
-      ].forEach(([label, value, field]) => {
-        const item = documentRef.createElement("div");
-        item.className = "assistant-structured-stat";
-        item.setAttribute("data-field", field);
-        item.appendChild(textElement("span", null, label));
-        item.appendChild(textElement("strong", null, String(value)));
-        grid.appendChild(item);
-      });
-      card.appendChild(grid);
-      card.appendChild(textElement(
-        "p",
-        "assistant-result-note caution",
-        "Consistent and mismatch categories are not shown because their method definition is unresolved."
-      ));
-      card.appendChild(textElement("p", "assistant-result-note", result.method_note));
-      message.appendChild(card);
-    }
-
-    function appendStructuredResult(message, result) {
-      if (!result) return;
-      if (result.result_type === "section_ranking") appendRankingResult(message, result);
-      if (result.result_type === "county_resilience_summary") appendCountyResult(message, result);
-      if (result.result_type === "tier_alignment_summary") appendAlignmentResult(message, result);
+      if (result.result_type === "county_resilience_summary") {
+        return [
+          `${result.county} County contains ${formatStructuredValue(result.total_sections)} control sections under the current county assignment. Of these, ${formatStructuredValue(result.observed_support_count)} have Tier 3 observed support and ${formatStructuredValue(result.status_counts.no_observed_support)} do not.`,
+          `Detected: ${result.status_counts.detected}; no sustained drop: ${result.status_counts.no_sustained_drop}; recovery censored: ${result.status_counts.recovery_endpoint_censored}.`,
+          ...result.metric_summaries.map(item =>
+            `${item.metric.display_name}: median ${formatStructuredValue(item.distribution.median)}, with ${formatStructuredValue(item.distribution.available_count)} available sections.`),
+          result.coverage_caveat
+        ].join("\n\n");
+      }
+      if (result.result_type === "tier_alignment_summary") {
+        return [
+          `Potential and Tier 3 Observed Resilience are compared on ${formatStructuredValue(result.valid_pair_count)} sections with both values. Pearson r = ${formatStructuredValue(result.pearson_r)}; Spearman rho = ${formatStructuredValue(result.spearman_rho)}. The broader curve-supported sample contains ${formatStructuredValue(result.common_support_count)} sections.`,
+          "These are descriptive event-sample correlations, not causal or predictive findings.",
+          "Counts and examples of consistent or mismatched sections are unavailable because a reviewed classification rule has not been defined.",
+          result.method_note
+        ].join("\n\n");
+      }
+      return "";
     }
 
     function displayedAnswer(response) {
@@ -480,40 +176,12 @@
       message.setAttribute("data-chat-role", "assistant");
       message.setAttribute("data-result-kind", "ai-assisted");
       message.setAttribute("data-assistant-status", response.status);
+      const answer = response.status === "clarification_required" && response.clarification
+        ? response.clarification.question : displayedAnswer(response);
+      const projection = response.status === "completed" ? structuredAnswer(response.structured_result) : "";
       message.appendChild(textElement(
-        "p",
-        "assistant-chat-source",
-        responseSourceLabel(response.status)
+        "p", "assistant-chat-answer", [answer, projection].filter(Boolean).join("\n\n")
       ));
-      if (response.status !== "completed") {
-        message.appendChild(textElement(
-          "p",
-          "assistant-chat-response-status",
-          `Status: ${responseStatusLabels[response.status] || "Unavailable"}`
-        ));
-      }
-      if (response.intent) {
-        appendDefinition(message, "Intent", readableIdentifier(response.intent));
-      }
-      if (response.status === "clarification_required" && response.clarification) {
-        message.appendChild(textElement(
-          "p",
-          "assistant-chat-clarification",
-          response.clarification.question
-        ));
-      } else {
-        message.appendChild(textElement(
-          "p",
-          "assistant-chat-answer",
-          displayedAnswer(response)
-        ));
-      }
-      appendStructuredResult(message, response.structured_result);
-      appendWarnings(message, response.warnings);
-      appendTools(message, response.tools_used);
-      appendEvidence(message, response.evidence);
-      appendLimitations(message, response.limitations);
-      appendReleaseMetadata(message, response);
       appendChatNode(message);
     }
 

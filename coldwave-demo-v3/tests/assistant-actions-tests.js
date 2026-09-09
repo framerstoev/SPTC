@@ -485,7 +485,7 @@ module.exports = async function runAssistantActionsTests() {
           .filter(element => element.className === "assistant-result-source")
           .map(element => element.textContent)
           .join(","),
-        "Verified result,Verified result,Verified result"
+        ""
       );
       excludes(elements.assistantMessages.textContent, "Section\n", mode);
     }
@@ -511,10 +511,10 @@ module.exports = async function runAssistantActionsTests() {
     controller.setContext(selectedContext());
     await elements.assistantExplainSection.click();
     equal(elements.assistantStatus.textContent, "");
-    includes(elements.assistantMessages.textContent, "Verified result");
+    excludes(elements.assistantMessages.textContent, "Verified result");
     await elements.assistantExplainMetric.click();
     equal(elements.assistantStatus.textContent, "");
-    includes(elements.assistantMessages.textContent, "Verified result");
+    excludes(elements.assistantMessages.textContent, "Verified result");
     await elements.assistantGenerateReviewNote.click();
     equal(calls.join(","), "section,metric,review");
     equal(controller.getState().mode, "backend-agent");
@@ -526,7 +526,7 @@ module.exports = async function runAssistantActionsTests() {
         .filter(element => element.className === "assistant-result-source")
         .map(element => element.textContent)
         .join(","),
-      "Verified result,Verified result,Verified result"
+      ""
     );
     includes(elements.assistantMessages.textContent, "CS_29");
     includes(elements.assistantMessages.textContent, "Minimum normalized Q");
@@ -606,17 +606,16 @@ module.exports = async function runAssistantActionsTests() {
     equal(elements.assistantMessages.getAttribute("aria-busy"), "false");
     includes(elements.assistantMessages.textContent, "CS_29");
     includes(elements.assistantMessages.textContent, "US_90_");
-    includes(elements.assistantMessages.textContent, "METHOD_SCOPE");
-    includes(elements.assistantMessages.textContent, "Verified result");
-    const observedCounts = byAttribute(elements.assistantMessages, "data-observed-metric-count");
-    const planningCounts = byAttribute(elements.assistantMessages, "data-planning-metric-count");
-    equal(observedCounts.length, 1);
-    equal(planningCounts.length, 1);
-    assert(Number(observedCounts[0].getAttribute("data-observed-metric-count")) <= 3);
-    assert(Number(planningCounts[0].getAttribute("data-planning-metric-count")) <= 3);
+    excludes(elements.assistantMessages.textContent, "METHOD_SCOPE");
+    excludes(elements.assistantMessages.textContent, "Verified result");
+    equal(byAttribute(elements.assistantMessages, "data-observed-metric-count").length, 0);
+    includes(elements.assistantMessages.textContent, "Minimum");
+    includes(elements.assistantMessages.textContent, "Planning context");
+    includes(elements.assistantMessages.textContent, "Experimental method scope.");
+
   });
 
-  test("metric action exposes reviewed definition fields and at most three limitations", async () => {
+  test("metric action preserves reviewed definitions and limitations in plain prose", async () => {
     const pending = deferred();
     const calls = [];
     const client = {
@@ -640,15 +639,14 @@ module.exports = async function runAssistantActionsTests() {
     equal(controller.getState().requestState, "backend_success");
     equal(elements.assistantStatus.textContent, "");
     equal(elements.assistantMessages.getAttribute("aria-busy"), "false");
-    includes(elements.assistantMessages.textContent, "Verified result");
+    excludes(elements.assistantMessages.textContent, "Verified result");
     includes(elements.assistantMessages.textContent, "Minimum normalized Q");
     includes(elements.assistantMessages.textContent, "dimensionless");
-    includes(elements.assistantMessages.textContent, "When unavailable");
-    includes(elements.assistantMessages.textContent, "not an interpretation of the selected section");
-    excludes(elements.assistantMessages.textContent, "Fourth must not render");
+    includes(elements.assistantMessages.textContent, metricFixture().metric.null_meaning);
+    includes(elements.assistantMessages.textContent, "One.");
+    includes(elements.assistantMessages.textContent, "Fourth must not render");
     const counts = byAttribute(elements.assistantMessages, "data-limitation-count");
-    equal(counts.length, 1);
-    equal(counts[0].getAttribute("data-limitation-count"), "3");
+    equal(counts.length, 0);
   });
 
   test("all four reviewed detection statuses render conservatively", async () => {
@@ -668,11 +666,12 @@ module.exports = async function runAssistantActionsTests() {
       await controller.startAction("section");
       includes(elements.assistantMessages.textContent, status.replaceAll("_", " "), status);
       for (const warning of warningForStatus(status)) {
-        includes(elements.assistantMessages.textContent, warning.code, status);
+        excludes(elements.assistantMessages.textContent, warning.code, status);
+        includes(elements.assistantMessages.textContent, warning.message, status);
       }
       if (status === "no_observed_support") {
-        includes(elements.assistantMessages.textContent, "Tier 3 observed evidence is unavailable");
-        includes(elements.assistantMessages.textContent, "does not indicate that no disruption occurred");
+        includes(elements.assistantMessages.textContent, "Minimum unavailable");
+        excludes(elements.assistantMessages.textContent, "Minimum 0.000");
         includes(elements.assistantMessages.textContent, "Planning context");
       }
     }
@@ -878,7 +877,7 @@ module.exports = async function runAssistantActionsTests() {
     await controller.startAction("section");
     includes(elements.assistantMessages.textContent, routeFixture);
     includes(elements.assistantMessages.textContent, countyFixture);
-    includes(elements.assistantMessages.textContent, "METHOD_SCOPE");
+    excludes(elements.assistantMessages.textContent, "METHOD_SCOPE");
     includes(elements.assistantMessages.textContent, warningFixture);
     await controller.startAction("metric");
     includes(elements.assistantMessages.textContent, "<script>definitionProbe()</script>");
@@ -913,245 +912,34 @@ module.exports = async function runAssistantActionsTests() {
     equal(controller.getState().requestState, "backend_success");
     equal(controller.getState().currentAction, "review");
     equal(elements.assistantStatus.textContent, "");
-    includes(elements.assistantMessages.textContent, "Verified result");
+    excludes(elements.assistantMessages.textContent, "Verified result");
     includes(elements.assistantMessages.textContent, "Control Section CS_29 Review Note");
     includes(elements.assistantMessages.textContent, "Draft for human review");
   });
 
-  test("review compact result keeps full bodies inside collapsed details and excludes copy-only Markdown", async () => {
-    const response = reviewNoteFixture();
-    const client = {
-      async generateSectionReviewNote() {
-        return response;
-      }
-    };
-    const { controller, elements } = createHarness({ client });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const compact = byAttribute(elements.assistantMessages, "data-review-compact")[0];
-    const compactText = compact.children
-      .filter(element => element.tagName !== "DETAILS")
-      .map(element => element.textContent)
-      .join("");
-    const details = byTag(compact, "details")[0];
-    includes(compactText, response.title);
-    includes(compactText, `Evidence records: ${response.evidence.length}`);
-    includes(compactText, `Limitations: ${response.limitations.length}`);
-    response.sections.forEach(section => {
-      excludes(compactText, section.body);
-      includes(details.textContent, section.body);
-    });
-    equal(details.open, false);
-    excludes(compact.textContent, response.rendered_markdown);
-    equal(compact.getAttribute("data-review-compact"), "true");
-  });
-
-  test("review-note details remain collapsed initially", async () => {
-    const client = {
-      async generateSectionReviewNote() {
-        return reviewNoteFixture();
-      }
-    };
-    const { controller, elements } = createHarness({ client });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const details = byTag(elements.assistantMessages, "details");
-    equal(details.length, 1);
-    equal(details[0].open, false);
-    equal(details[0].getAttribute("data-report-section-count"), "6");
-    const summaries = byTag(details[0], "summary");
-    equal(summaries.length, 1);
-    equal(summaries[0].textContent, "Open full review note");
-  });
-
-  test("review-note sections retain the accepted six-section order", async () => {
-    const response = reviewNoteFixture();
-    const client = {
-      async generateSectionReviewNote() {
-        return response;
-      }
-    };
-    const { controller, elements } = createHarness({ client });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const renderedSections = byAttribute(
-      elements.assistantMessages,
-      "data-report-section"
-    );
-    equal(renderedSections.length, 6);
-    equal(
-      renderedSections.map(section => section.getAttribute("data-report-section")).join(","),
-      response.sections.map(section => section.key).join(",")
-    );
-    equal(
-      renderedSections.map(section => byTag(section, "h3")[0].textContent).join("|"),
-      response.sections.map(section => section.heading).join("|")
-    );
-  });
-
-  test("review warnings, limitations, and checklist are separate safe-text blocks", async () => {
-    const scriptLikeWarning = "<script>warningProbe()</script>";
+  test("review is plain prose with all section bodies and critical cautions, no metadata or copy surface", async () => {
     const response = reviewNoteFixture({
-      warnings: [{ code: "METHOD_SCOPE", severity: "info", message: scriptLikeWarning }],
-      limitations: ["LIMITATION FIXTURE"],
-      humanReviewItems: ["CHECKLIST FIXTURE"]
+      warnings: [{code:"METHOD_SCOPE",severity:"info",message:"<script>inertWarning()</script>"}],
+      limitations:["Reviewed limitation."]
     });
-    const client = {
-      async generateSectionReviewNote() {
-        return response;
-      }
-    };
-    const { controller, document, elements } = createHarness({ client });
+    const {controller,elements,document} = createHarness({client:{async generateSectionReviewNote(){return response;}}});
     controller.setContext(selectedContext());
     await controller.startAction("review");
-    const listBlocks = byAttribute(elements.assistantMessages, "data-review-list");
-    equal(
-      listBlocks.map(block => block.getAttribute("data-review-list")).join(","),
-      "warnings,limitations,human-review-checklist"
-    );
-    includes(listBlocks[0].textContent, "METHOD_SCOPE (info)");
-    includes(listBlocks[0].textContent, scriptLikeWarning);
-    includes(listBlocks[1].textContent, "LIMITATION FIXTURE");
-    includes(listBlocks[2].textContent, "Review: CHECKLIST FIXTURE");
+    const text = elements.assistantMessages.textContent;
+    let previous = -1;
+      response.sections.filter(section => section.key !== "data_and_method_cautions").forEach(section => {
+      const index = text.indexOf(section.body);
+      assert(index > previous, "review prose retains source section order");
+        previous = index;
+      });
+      excludes(text, response.sections.find(section => section.key === "data_and_method_cautions").body);
+    includes(text,"Draft for human review");
+    includes(text,"<script>inertWarning()</script>");
+    includes(text,"Reviewed limitation.");
+    excludes(text,"METHOD_SCOPE");
+    excludes(text,response.rendered_markdown);
+    for (const tag of ["details","table","script","button"]) equal(byTag(elements.assistantMessages,tag).length,0);
     assert(!document.createdTags.includes("SCRIPT"));
-  });
-
-  test("review copy control exists only after a successful validated response", async () => {
-    const failureClient = {
-      async generateSectionReviewNote() {
-        throw clientError("invalid_response");
-      }
-    };
-    const failed = createHarness({ client: failureClient });
-    equal(byClass(failed.elements.assistantMessages, "assistant-copy-markdown"), null);
-    failed.controller.setContext(selectedContext());
-    await failed.controller.startAction("review");
-    equal(byClass(failed.elements.assistantMessages, "assistant-copy-markdown"), null);
-
-    const successClient = {
-      async generateSectionReviewNote() {
-        return reviewNoteFixture();
-      }
-    };
-    const succeeded = createHarness({ client: successClient });
-    succeeded.controller.setContext(selectedContext());
-    await succeeded.controller.startAction("review");
-    const copyButton = byClass(
-      succeeded.elements.assistantMessages,
-      "assistant-copy-markdown"
-    );
-    assert(copyButton);
-    equal(copyButton.tagName, "BUTTON");
-    equal(copyButton.getAttribute("type"), "button");
-  });
-
-  test("Copy Markdown writes the exact sanitized rendered_markdown string", async () => {
-    const response = reviewNoteFixture({
-      renderedMarkdown: "# Exact Markdown\n\n- reviewed\n- copy-only"
-    });
-    const copiedValues = [];
-    const clipboard = {
-      async writeText(value) {
-        copiedValues.push(value);
-      }
-    };
-    const client = {
-      async generateSectionReviewNote() {
-        return response;
-      }
-    };
-    const { controller, elements } = createHarness({ client, clipboard });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
-    await copyButton.click();
-    equal(copiedValues.length, 1);
-    equal(copiedValues[0], response.rendered_markdown);
-    excludes(elements.assistantMessages.textContent, response.rendered_markdown);
-  });
-
-  test("retained review copy remains active after a later quick action", async () => {
-    const response = reviewNoteFixture({
-      renderedMarkdown: "# Retained review\n\n- same section"
-    });
-    const copiedValues = [];
-    const clipboard = {
-      async writeText(value) {
-        copiedValues.push(value);
-      }
-    };
-    const client = {
-      async generateSectionReviewNote() {
-        return response;
-      },
-      async getSectionSummary() {
-        return summaryFixture();
-      }
-    };
-    const { controller, elements } = createHarness({ client, clipboard });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
-    await controller.startAction("section");
-    equal(byAttribute(elements.assistantMessages, "data-result-kind").length, 2);
-    await copyButton.click();
-    equal(copiedValues.length, 1);
-    equal(copiedValues[0], response.rendered_markdown);
-  });
-
-  test("successful Markdown copy is announced accessibly", async () => {
-    const clipboard = { async writeText() {} };
-    const client = {
-      async generateSectionReviewNote() {
-        return reviewNoteFixture();
-      }
-    };
-    const { controller, elements } = createHarness({ client, clipboard });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
-    const copyStatus = byClass(elements.assistantMessages, "assistant-copy-status");
-    await copyButton.click();
-    equal(copyStatus.textContent, "Copied Markdown.");
-    equal(copyStatus.getAttribute("role"), "status");
-    equal(copyStatus.getAttribute("aria-live"), "polite");
-    equal(copyStatus.getAttribute("aria-atomic"), "true");
-  });
-
-  test("clipboard unavailable and rejection states are concise and sanitized", async () => {
-    const client = {
-      async generateSectionReviewNote() {
-        return reviewNoteFixture();
-      }
-    };
-    const unavailable = createHarness({ client, clipboard: null });
-    unavailable.controller.setContext(selectedContext());
-    await unavailable.controller.startAction("review");
-    await byClass(
-      unavailable.elements.assistantMessages,
-      "assistant-copy-markdown"
-    ).click();
-    equal(
-      byClass(unavailable.elements.assistantMessages, "assistant-copy-status").textContent,
-      "Clipboard unavailable."
-    );
-
-    const rejectingClipboard = {
-      async writeText() {
-        throw new Error("C:\\private\\clipboard-secret.txt");
-      }
-    };
-    const rejected = createHarness({ client, clipboard: rejectingClipboard });
-    rejected.controller.setContext(selectedContext());
-    await rejected.controller.startAction("review");
-    await byClass(rejected.elements.assistantMessages, "assistant-copy-markdown").click();
-    const rejectionStatus = byClass(
-      rejected.elements.assistantMessages,
-      "assistant-copy-status"
-    ).textContent;
-    equal(rejectionStatus, "Copy failed.");
-    excludes(rejectionStatus, "private");
-    excludes(rejectionStatus, "clipboard-secret");
   });
 
   test("review-note backend failure never claims that a draft was generated", async () => {
@@ -1174,38 +962,9 @@ module.exports = async function runAssistantActionsTests() {
     }
   });
 
-  test("stale clipboard completion cannot update status after context replacement", async () => {
-    const writePending = deferred();
-    const clipboard = {
-      writeText() {
-        return writePending.promise;
-      }
-    };
-    const client = {
-      async generateSectionReviewNote() {
-        return reviewNoteFixture();
-      }
-    };
-    const { controller, elements } = createHarness({ client, clipboard });
-    controller.setContext(selectedContext());
-    await controller.startAction("review");
-    const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
-    const staleCopyStatus = byClass(elements.assistantMessages, "assistant-copy-status");
-    const copyPromise = copyButton.click();
-    controller.setContext(selectedContext({
-      sectionId: "30",
-      localSectionText: "REPLACEMENT SECTION PREVIEW"
-    }));
-    writePending.resolve();
-    await copyPromise;
-    equal(staleCopyStatus.textContent, "");
-    equal(byClass(elements.assistantMessages, "assistant-copy-markdown"), null);
-    includes(elements.assistantMessages.textContent, "Context updated to CS_30");
-  });
-
   test("Tier 2 section, metric, and review clicks retain internal IDs but render only V3 labels", async () => {
     const source = String(globalThis.__assistantActionsSource || "");
-    includes(source, "response.planning_context.netrisk_lite");
+    includes(source, "planning.netrisk_lite");
     includes(source, "safeDisplayText");
     const legacyText = "NETRISK Lite, EVENT_REI, Q_min, and observed curve resilience score v0";
     const client = {
@@ -1250,11 +1009,8 @@ module.exports = async function runAssistantActionsTests() {
     excludes(rendered.toLowerCase(), "q_min");
 
     const copyButton = byClass(elements.assistantMessages, "assistant-copy-markdown");
-    await copyButton.click();
-    equal(copied.length, 1);
-    excludes(copied[0].toLowerCase(), "netrisk lite");
-    excludes(copied[0].toLowerCase(), "event_rei");
-    excludes(copied[0].toLowerCase(), "score v0");
+    equal(copyButton, null);
+    equal(copied.length, 0);
   });
 
   let passed = 0;
