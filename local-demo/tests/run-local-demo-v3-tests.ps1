@@ -73,7 +73,7 @@ function New-CheckpointFacts {
         FrontendContainsAcceptedCommit = $true
         FrontendApplicationCommitExists = $true
         FrontendContainsApplicationCommit = $true
-        BackendHead = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee"
+        BackendHead = "cc30a34dae57c2046c81c2ac9ed7d82782d50a1c"
         BackendTagTarget = "b550f11ca75b8c4921667a264ae7a3ca78710ea9"
         FrontendChanges = @()
         FrontendStatus = @()
@@ -312,7 +312,7 @@ try {
     Invoke-V3Test "v3_exact_constants_and_separate_namespace" {
         $constants = Get-LocalDemoConstants
         Assert-Equal $constants.AcceptedFrontendCommit "e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d" "V3 frontend"
-        Assert-Equal $constants.AcceptedBackendCommit "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee" "V3 backend"
+        Assert-Equal $constants.AcceptedBackendCommit "cc30a34dae57c2046c81c2ac9ed7d82782d50a1c" "V3 backend"
         Assert-Equal $constants.AcceptedFrontendTag "phase4a-v3-tier-aware-explorer-accepted" "V3 tag"
         Assert-Equal $constants.BrowserUrl "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent" "V3 browser"
         Assert-Equal $constants.RuntimeSchemaVersion 3 "V3 schema"
@@ -321,7 +321,7 @@ try {
         Assert-True ($layout.StatePath -notmatch '\\.runtime\\') "V3 must not use V2 state."
     }
     Invoke-V3Test "accepted_frontend_and_backend_checkpoint" {
-        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "7404d47f906c5143fc35c54697f9665d6e83d846" "Phase 4B content pin"
+        Assert-Equal (& $script:windowsModule { Get-V3DemoApplicationCheckpoint }) "da43b427f829e0e46d618277650ae1861fffb5d5" "Phase 4C content pin"
         $facts = New-CheckpointFacts
         Assert-V3DemoCheckpointFacts @facts
     }
@@ -333,6 +333,7 @@ try {
             @{ Name = "unrelated_frontend_head"; Key = "FrontendContainsAcceptedCommit"; Value = $false },
             @{ Name = "wrong_backend_head"; Key = "BackendHead"; Value = "5edc4688514f2c47ae3e8c03f50b853c0f5d8108" },
             @{ Name = "old_backend_baseline_runtime_rejected"; Key = "BackendHead"; Value = "b550f11ca75b8c4921667a264ae7a3ca78710ea9" },
+            @{ Name = "old_phase4b_runtime_rejected"; Key = "BackendHead"; Value = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee" },
             @{ Name = "moved_backend_baseline_tag_rejected"; Key = "BackendTagTarget"; Value = "e289aeb9ecf92d8d3d2f937dbc2d693342a35bee" },
             @{ Name = "wrong_backend_tag"; Key = "BackendTagTarget"; Value = "wrong" }
         )) {

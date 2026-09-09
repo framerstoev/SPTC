@@ -51,19 +51,19 @@ repository branch names, or a browser preference.
 
 ## Accepted application checkpoints
 
-- Reviewed Phase 4B frontend content: `7404d47f906c5143fc35c54697f9665d6e83d846`
+- Reviewed Phase 4C frontend content: `da43b427f829e0e46d618277650ae1861fffb5d5`
 - Immutable Phase 4A frontend baseline: `e8d5cf801fb6f7fdeae0bc4a60406f76ba217b7d`
 - Immutable frontend tag: `phase4a-v3-tier-aware-explorer-accepted`
-- Backend runtime with reviewed response-contract fix:
-  `e289aeb9ecf92d8d3d2f937dbc2d693342a35bee`
+- Backend runtime with reviewed response-contract fixes and analytical depth:
+  `cc30a34dae57c2046c81c2ac9ed7d82782d50a1c`
 - Immutable Phase 4A backend baseline:
   `b550f11ca75b8c4921667a264ae7a3ca78710ea9`
 - Immutable backend baseline tag: `phase4a-v3-network-assistant-accepted`
 
 Adding the launcher necessarily advances frontend HEAD. V3 therefore verifies
-the immutable Phase 4A baseline/tag ancestry and the exact reviewed Phase 4B
+the immutable Phase 4A baseline/tag ancestry and the exact reviewed Phase 4C
 application commit ancestry. It compares the **entire repository** against the
-Phase 4B content commit with renames disabled. The only
+Phase 4C content commit with renames disabled. The only
 permitted committed differences are the exact launcher, launcher-test,
 launcher-documentation and ignore-file paths returned by
 `Get-V3DemoAllowedChanges` in `lib/LocalDemo.V3.ps1`. No application path is

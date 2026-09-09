@@ -2,8 +2,8 @@
 # Lifecycle/process primitives stay in the shared, regression-tested modules.
 
 function Get-V3DemoApplicationCheckpoint {
-    # Reviewed Phase 4B content; immutable Phase 4A tags remain independently checked.
-    "7404d47f906c5143fc35c54697f9665d6e83d846"
+    # Reviewed Phase 4C content; immutable Phase 4A tags remain independently checked.
+    "da43b427f829e0e46d618277650ae1861fffb5d5"
 }
 
 function Get-V3DemoAllowedChanges {
@@ -44,9 +44,9 @@ function Assert-V3DemoCheckpointFacts {
         throw "V3 frontend does not match the accepted Phase 4A checkpoint/tag ancestry."
     }
     if (-not $FrontendApplicationCommitExists -or -not $FrontendContainsApplicationCommit) {
-        throw "V3 frontend does not match the reviewed Phase 4B application checkpoint/tag ancestry."
+        throw "V3 frontend does not match the reviewed Phase 4C application checkpoint/tag ancestry."
     }
-    # The reviewed response-contract fix advances runtime HEAD, never the Phase 4A tag.
+    # Reviewed analytical depth advances runtime HEAD, never the Phase 4A tag.
     if ($BackendHead -cne $constants.AcceptedBackendCommit -or
         $BackendTagTarget -cne "b550f11ca75b8c4921667a264ae7a3ca78710ea9") {
         throw "V3 backend does not match the exact reviewed runtime checkpoint/tag baseline."
