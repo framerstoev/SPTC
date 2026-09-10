@@ -86,8 +86,11 @@ def build(output):
                 continue
             write_new(output, member.name, stream.extractfile(member).read())
             legacy_count += 1
-    source_files = list(RUNTIME) + [p.relative_to(REPO / V3).as_posix()
-                                  for p in sorted((REPO / V3 / "data").rglob("*")) if p.is_file()]
+    # app.js fetches only map, summary and curve_file paths. QA data and the
+    # unused curve index are not runtime dependencies and must not be published.
+    source_files = list(RUNTIME) + ["data/data_driven_resilience_map_v0.geojson", "data/summary.json"]
+    source_files += [p.relative_to(REPO / V3).as_posix()
+                     for p in sorted((REPO / V3 / "data/curves").glob("*.json"))]
     accepted_blobs = {}
     for entry in git("ls-tree", "-r", SOURCE, "--", V3).decode().splitlines():
         metadata, name = entry.split("\t", 1)

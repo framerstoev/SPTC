@@ -57,6 +57,15 @@ serve that directory directly to test `/coldwave-demo-v3/`. Both must work.
 Never serve the repository directory as the public artifact. Tests, launchers,
 diagnostics, local paths, credentials and caches are excluded.
 
+The V3 source inventory is 3,849 data files / 137,767,781 bytes. Browser delivery
+includes only 3,842 curves, the map and summary (3,844 data files); four QA JSONs
+and the unused curve index remain in source, not in the new V3 public artifact.
+Local full-AI regression passed 113 browser checks, including a real Qwen concept
+answer (1.745s), then safe stop/unload. Existing frontend tests passed 122 checks
+and 12 local resources; original V3/V2 launcher suites passed 134/92 respectively.
+The initial static artifact passed 153 real-browser checks across root/nested
+paths and six viewports. Final runtime-only artifact is rechecked before push.
+
 Redeploy only reviewed, tested changes on the dedicated branch. The workflow runs
 builder invariants before uploading. Existing accepted tags and main are not moved.
 No backend or K3s deployment belongs to this workflow.
