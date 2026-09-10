@@ -112,7 +112,7 @@ def build(output):
         elif relative == "js/app.js":
             raw = static_app(raw)
         write_new(output, f"{V3}/{relative}", raw)
-    config = (REPO / V3 / "static-review/deployment-config.js").read_bytes()
+    config = (REPO / V3 / "static-review/deployment-config.js").read_bytes().replace(b"\r\n", b"\n")
     write_new(output, f"{V3}/js/deployment-config.js", config)
     release = {"release": "V3 static web review", "source_commit": SOURCE,
                "source_tag": TAG, "deployment_commit": git("rev-parse", "HEAD").decode().strip(),

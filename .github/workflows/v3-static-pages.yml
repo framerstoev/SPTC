@@ -12,6 +12,9 @@ jobs:
   build:
     if: github.ref == 'refs/heads/feature/v3-static-github-review'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v6
         with:
