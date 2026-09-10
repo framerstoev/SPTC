@@ -1,0 +1,37 @@
+name: V3 static web review
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/v3-static-github-review]
+permissions:
+  contents: read
+concurrency:
+  group: v3-static-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/feature/v3-static-github-review'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/configure-pages@v5
+      - name: Build and audit allowlisted static artifact
+        run: python3 coldwave-demo-v3/tests/build_static_review.py --output "$RUNNER_TEMP/v3-pages"
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/v3-pages
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
