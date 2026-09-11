@@ -1,0 +1,23 @@
+{
+  "namespace": "sptc-trans-resilience",
+  "public_host": "sptc.geos.tamu.edu",
+  "public_base_path": "/trans-resilience",
+  "storage_class": "local-path",
+  "gpu_node_name": "REQUIRED_ACTUAL_WORKER3_NODE_NAME",
+  "gpu_runtime_class_name": "",
+  "ollama_pvc_size": "20Gi",
+  "frontend_image": "REQUIRED_GHCR_FRONTEND_DIGEST",
+  "backend_image": "REQUIRED_GHCR_BACKEND_DIGEST",
+  "ollama_image": "ollama/ollama:0.32.1@sha256:1d9f0b83b852efef42435e65fd53d0dc4f462a60dabf5c719058c99d47f32e36",
+  "ghcr_pull_secret_name": "",
+  "traefik_entrypoint": "web",
+  "api_average": 60,
+  "api_burst": 10,
+  "assistant_average": 6,
+  "assistant_burst": 2,
+  "rate_period": "1m",
+  "trusted_proxy_depth": 0,
+  "frontend_resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "1", "memory": "512Mi"}},
+  "backend_resources": {"requests": {"cpu": "500m", "memory": "512Mi"}, "limits": {"cpu": "2", "memory": "2Gi"}},
+  "ollama_resources": {"requests": {"cpu": "1", "memory": "8Gi", "nvidia.com/gpu": 1}, "limits": {"cpu": "4", "memory": "16Gi", "nvidia.com/gpu": 1}}
+}
