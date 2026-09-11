@@ -1,4 +1,23 @@
-# Full-AI V3 K3s deployment handoff — DRAFT, NOT YET IMAGE-VALIDATED
+# Full-AI V3 K3s deployment handoff
+
+## Final release (2026-09-11)
+
+Both linux/amd64 images have now been built, smoke-tested and published by
+GitHub Actions. `published-images.json` records real digests and successful runs.
+Backend source/snapshots are in PRIVATE `framerstoev/SPTC-backend-private`, never
+in this public repository. Backend GHCR is PRIVATE; frontend GHCR is PUBLIC.
+Publishing used GITHUB_TOKEN, not a newly created PAT or encryption secret.
+
+Use `FINAL_RUNBOOK.md` and the output of `finalize.py` for the current image-based
+administrator handoff. Jinyu must supply the real Worker 3 node name, pull secret
+and cluster-specific routing settings before rollout. No K3s rollout occurred.
+
+The material below describes the retained historical draft/source-context path;
+its unbuilt-image status, PAT publishing procedure and included-source statements
+are superseded by this final release. Do not use `package.py` to replace the final
+image-based bundle; it intentionally remains the legacy draft generator.
+
+## Historical draft reference
 
 This packages the accepted Phase 4C1 **full-AI** application, not the independent
 GitHub Pages static review. No cluster access or deployment is performed by the

@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
+    parser.add_argument("--image-only", action="store_true")
     args = parser.parse_args()
     denied = {
         ".git",
@@ -55,8 +56,29 @@ def main():
             for i in archive.infolist()
             if i.filename.startswith("docker/frontend/site/data/")
         ]
-        assert len(data) == 3844
-        assert sum(i.file_size for i in data) == 137602131
+        if args.image_only:
+            assert not data
+            assert not any(
+                n.endswith(".parquet") or "/src/" in n or "/snapshot/" in n
+                for n in names
+            )
+            images = json.loads(archive.read("IMAGE_MANIFEST.txt"))
+            assert images["backend"]["visibility"] == "private"
+            for order, kind in ((50, "backend"), (60, "frontend")):
+                ref = images[kind]["reference"]
+                assert re.fullmatch(
+                    rf"ghcr.io/framerstoev/sptc-resilience-{kind}@sha256:[0-9a-f]{{64}}",
+                    ref,
+                )
+                deployment = json.loads(
+                    archive.read(f"k3s/{order}-{kind}-deployment.json")
+                )
+                pod = deployment["spec"]["template"]["spec"]
+                assert pod["containers"][0]["image"] == ref
+                assert pod["imagePullSecrets"] == [{"name": "ghcr-pull"}]
+        else:
+            assert len(data) == 3844
+            assert sum(i.file_size for i in data) == 137602131
         print(
             json.dumps(
                 {

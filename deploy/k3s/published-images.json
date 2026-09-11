@@ -1,0 +1,23 @@
+{
+  "release": "v3-phase4c1",
+  "frontend": {
+    "reference": "ghcr.io/framerstoev/sptc-resilience-frontend@sha256:9a6109f8e286f55e7ca3dbe3f0e0ebda95af155b097e635238cf96da760f98e9",
+    "platform": "linux/amd64",
+    "visibility": "public",
+    "tags": ["v3-phase4c1", "git-a8be52a88ec9"],
+    "input_commit": "a8be52a88ec997ce7bf019555669963a477b580a",
+    "workflow_commit": "7c75e882f564f18704531737a2b3fe5fdc116e66",
+    "workflow_url": "https://github.com/framerstoev/SPTC/actions/runs/34615579172",
+    "workflow_result": "success"
+  },
+  "backend": {
+    "reference": "ghcr.io/framerstoev/sptc-resilience-backend@sha256:881db3bf30596fbad69097e75703e96da16e6bd268ecfa738998219d2a3b00c2",
+    "platform": "linux/amd64",
+    "visibility": "private",
+    "tags": ["v3-phase4c1", "git-829805955562"],
+    "input_commit": "8298059555625fcb5ee3cf81d41fa631a0d70391",
+    "workflow_commit": "c58b405f284e3aba71e20b6c90a2f798fd593972",
+    "workflow_url": "https://github.com/framerstoev/SPTC-backend-private/actions/runs/34614916678",
+    "workflow_result": "success"
+  }
+}

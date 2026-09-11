@@ -1,5 +1,28 @@
 # Phase 4D-K3s validation record
 
+## Final image publication, 2026-09-11
+
+- Backend private build run 34614916678: SUCCESS; byte-identical input checks,
+  read-only container health/five representative sections and absent-model/GPU
+  readiness rejection passed. Published linux/amd64 digest and PRIVATE visibility
+  verified by workflow GITHUB_TOKEN.
+- Frontend public build run 34615579172: SUCCESS; read-only container, nginx,
+  /trans-resilience assets, actual digest pulls and version-tag identity passed.
+  Platform linux/amd64; package visibility PUBLIC, unchanged by this task.
+- Actual references are in published-images.json; no image placeholders remain
+  in the final bundle's application deployments.
+- CI configuration tests: 5 passed. Existing manifest invariants: 8 passed.
+- Re-run local HTTPS browser simulation: 23 checks, 6 viewports passed;
+  automatic Assistant requests 0, localhost/11434/internal DNS browser requests 0,
+  console errors 0. This is simulation, not a cluster acceptance claim.
+- Existing backend source remains exactly 8298059555625fcb5ee3cf81d41fa631a0d70391.
+  No analytical source/data/frontend behavior was modified.
+- No new PAT, model download, K3s deployment or Pages change. Actual A30 inference,
+  node identity, TLS/proxy settings and NetworkPolicy enforcement remain Jinyu's
+  rollout gates. A CPU runner is not evidence of GPU inference performance.
+
+## Historical draft record (superseded status below)
+
 Status: DRAFT / NOT HANDOFF-READY. No application image digest, image size or Linux
 architecture result is claimed without an actual build. Workstation lacks
 Docker/Podman/installed WSL. GitHub credential account verified as framerstoev;
