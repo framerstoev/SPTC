@@ -1,0 +1,122 @@
+name: V3 full-AI container publication
+
+on:
+  workflow_dispatch:
+  # Explicit bootstrap/publication request only, because this workflow is not on main.
+  push:
+    branches: [feature/v3-k3s-deployment]
+    paths: [deploy/k3s/ci/publication-request.json]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: v3-ghcr-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'framerstoev/SPTC' && github.ref == 'refs/heads/feature/v3-k3s-deployment'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Prepare verified build contexts
+        id: context
+        env:
+          BACKEND_CONTEXT_KEY: ${{ secrets.V3_BACKEND_CONTEXT_KEY_829805955562 }}
+        run: |
+          python -m pip install cryptography==45.0.5
+          python deploy/k3s/ci/prepare_contexts.py
+          python deploy/k3s/test_render.py
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reject existing release tags before publishing
+        run: |
+          for image in sptc-resilience-frontend sptc-resilience-backend; do
+            if docker manifest inspect "ghcr.io/framerstoev/${image}:v3-phase4c1" >/dev/null 2>&1; then
+              echo 'Release tag already exists: inspect it; do not overwrite an immutable release.'
+              exit 1
+            fi
+          done
+      - name: Build frontend for smoke
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ci-context/frontend
+          platforms: linux/amd64
+          load: true
+          tags: sptc-frontend-check:local
+          provenance: false
+          sbom: false
+      - name: Build backend for smoke
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ci-context/backend
+          platforms: linux/amd64
+          load: true
+          tags: sptc-backend-check:local
+          provenance: false
+          sbom: false
+      - name: Read-only root container smoke and GPU absence safety
+        run: |
+          docker run -d --name sptc-ci-frontend --read-only --tmpfs /tmp -p 127.0.0.1:18001:8080 sptc-frontend-check:local
+          docker run -d --name sptc-ci-backend --read-only --tmpfs /tmp -p 127.0.0.1:18080:8080 \
+            -e RESILIENCE_DEPLOYMENT_MODE=k3s -e RESILIENCE_OLLAMA_BASE_URL=http://ollama:11434 \
+            -e RESILIENCE_ASSISTANT_ENABLED=true sptc-backend-check:local
+          python deploy/k3s/ci/container_smoke.py
+      - name: Publish frontend
+        id: frontend
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ci-context/frontend
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/framerstoev/sptc-resilience-frontend:v3-phase4c1
+            ghcr.io/framerstoev/sptc-resilience-frontend:git-${{ steps.context.outputs.frontend_short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/framerstoev/SPTC
+            org.opencontainers.image.revision=a8be52a88ec997ce7bf019555669963a477b580a
+      - name: Publish backend
+        id: backend
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ci-context/backend
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/framerstoev/sptc-resilience-backend:v3-phase4c1
+            ghcr.io/framerstoev/sptc-resilience-backend:git-${{ steps.context.outputs.backend_short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/framerstoev/SPTC
+            org.opencontainers.image.revision=8298059555625fcb5ee3cf81d41fa631a0d70391
+      - name: Verify actual registry digests, tags and platforms
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+        run: python deploy/k3s/ci/record_images.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: v3-published-image-manifest
+          path: ci-results/published-images.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Cleanup only this job's smoke containers
+        if: always()
+        run: docker rm -f sptc-ci-frontend sptc-ci-backend >/dev/null 2>&1 || true
