@@ -1,17 +1,11 @@
-"""Runner-only allowlisted contexts; decrypt privately and verify every backend file."""
+"""Prepare only the public frontend context; backend builds in its private repository."""
 
-import base64
-import hashlib
-import io
-import json
 import os
 import shutil
 import subprocess
 import sys
-import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from package import Assets  # noqa: E402
@@ -19,30 +13,11 @@ from package import Assets  # noqa: E402
 
 def main():
     repo = Path.cwd()
-    ci = repo / "deploy/k3s/ci"
     output = repo / "ci-context"
     output.mkdir(exist_ok=False)
-    metadata = json.loads((ci / "backend-context.json").read_text())
-    raw = (ci / "backend-context.aesgcm").read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == metadata["ciphertext_sha256"]
-    key = base64.b64decode(os.environ.pop("BACKEND_CONTEXT_KEY"), validate=True)
-    plaintext = AESGCM(key).decrypt(raw[:12], raw[12:], b"SPTC-v3-backend-context-v1")
-    assert hashlib.sha256(plaintext).hexdigest() == metadata["context_zip_sha256"]
-    with zipfile.ZipFile(io.BytesIO(plaintext)) as archive:
-        assert set(archive.namelist()) == set(metadata["files"])
-        for name in archive.namelist():
-            path = PurePosixPath(name)
-            assert (
-                not path.is_absolute() and ".." not in path.parts and "\\" not in name
-            )
-            data = archive.read(name)
-            assert hashlib.sha256(data).hexdigest() == metadata["files"][name]
-            target = output / "backend" / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
     site = repo / "coldwave-demo-v3"
     assets = Assets()
-    assets.feed((site / "index.html").read_text())
+    assets.feed((site / "index.html").read_text(encoding="utf-8"))
     names = [
         Path("index.html"),
         *assets.paths,
@@ -76,12 +51,8 @@ def main():
         check=True,
     )
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-        handle.write(
-            f"frontend_short={digest[:12]}\nbackend_short={metadata['backend_deployment_commit'][:12]}\n"
-        )
-    print(
-        "Verified allowlisted frontend and encrypted backend build contexts; no source payload logged"
-    )
+        handle.write(f"frontend_short={digest[:12]}\n")
+    print("Verified public frontend context; no backend assets accessed")
 
 
 if __name__ == "__main__":

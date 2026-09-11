@@ -43,9 +43,11 @@ class WorkflowTests(unittest.TestCase):
         for step in steps:
             if step.get("uses", "").startswith("docker/build-push-action"):
                 self.assertEqual(step["with"]["platforms"], "linux/amd64")
-        smoke = names.index("Read-only root container smoke and GPU absence safety")
+        smoke = names.index("Read-only frontend container smoke")
         self.assertLess(smoke, names.index("Publish frontend"))
-        self.assertLess(smoke, names.index("Publish backend"))
+        self.assertNotIn("Publish backend", names)
+        self.assertNotIn("BACKEND_CONTEXT", self.text)
+        self.assertNotIn("ci-context/backend", self.text)
 
     def test_only_metadata_artifact(self):
         artifact = next(

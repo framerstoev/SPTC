@@ -11,7 +11,6 @@ from github_api import REPOSITORY, api
 
 
 def main():
-    metadata = json.loads(Path("deploy/k3s/ci/backend-context.json").read_text())
     report = {
         "workflow_run_id": os.environ["GITHUB_RUN_ID"],
         "workflow_run_url": f"https://github.com/{REPOSITORY}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
@@ -25,12 +24,6 @@ def main():
             "a8be52a88ec997ce7bf019555669963a477b580a",
             "345fe7a4d4f4bd4299c027d0c2cd7e1254b2819b",
             "phase4c1-v3-plain-language-ai-accepted",
-        ),
-        (
-            "backend",
-            metadata["backend_deployment_commit"],
-            metadata["backend_accepted_commit"],
-            metadata["accepted_tag"],
         ),
     ):
         digest = os.environ[kind.upper() + "_DIGEST"]

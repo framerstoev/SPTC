@@ -1,3 +1,2 @@
 /docker/** text eol=lf
 /deploy/k3s/*.sh text eol=lf
-/deploy/k3s/ci/backend-context.aesgcm binary

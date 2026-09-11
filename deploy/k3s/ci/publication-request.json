@@ -1,0 +1,7 @@
+{
+  "release": "v3-phase4c1",
+  "scope": "frontend-only",
+  "frontend_input_commit": "a8be52a88ec997ce7bf019555669963a477b580a",
+  "backend_build_repository": "framerstoev/SPTC-backend-private",
+  "backend_assets_in_public_repository": false
+}

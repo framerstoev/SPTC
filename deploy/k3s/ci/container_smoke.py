@@ -13,10 +13,7 @@ def get(url):
 
 def main():
     checks = 0
-    for base, health in (
-        ("http://127.0.0.1:18001", "/healthz"),
-        ("http://127.0.0.1:18080", "/health"),
-    ):
+    for base, health in (("http://127.0.0.1:18001", "/healthz"),):
         for attempt in range(60):
             try:
                 assert get(base + health)[0] == 200
@@ -43,29 +40,17 @@ def main():
     config = get(site + "js/deployment-config.js")[1].decode()
     assert 'mode: "server"' in config and 'base_path: "/trans-resilience"' in config
     checks += 1
-    for cs in ("CS_1081", "CS_257", "CS_3597", "CS_1", "CS_583693"):
-        status, body = get("http://127.0.0.1:18080/api/v1/sections/" + cs)
-        assert status == 200 and json.loads(body)
-        checks += 1
     subprocess.run(
         ["docker", "exec", "sptc-ci-frontend", "nginx", "-t"],
         check=True,
         capture_output=True,
     )
     checks += 1
-    result = subprocess.run(
-        ["docker", "exec", "sptc-ci-backend", "python", "readiness.py"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0 and result.stdout.strip() == "NOT_READY"
-    checks += 1
     print(
         json.dumps(
             {
                 "container_checks_passed": checks,
                 "real_model_on_runner": False,
-                "no_gpu_model_fail_closed": True,
                 "read_only_root_containers": True,
             }
         )
