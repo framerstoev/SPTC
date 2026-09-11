@@ -36,7 +36,7 @@ def main():
         for name in names:
             path = PurePosixPath(name)
             assert not path.is_absolute() and ".." not in path.parts
-            assert not (denied & set(path.parts)) and not path.suffix.lower() in {
+            assert not (denied & set(path.parts)) and path.suffix.lower() not in {
                 ".pem",
                 ".key",
                 ".gguf",
