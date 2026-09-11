@@ -47,6 +47,23 @@
     const keys = supplied && typeof supplied === "object"
       ? Object.keys(supplied)
       : [];
+    // Explicit image-owned server profile. Query parameters cannot set a host/path.
+    if (supplied && supplied.mode === "server") {
+      const serverKeys = ["mode", "backend_target", "base_path"];
+      const valid = keys.length === serverKeys.length
+        && keys.every(key => serverKeys.includes(key))
+        && supplied.backend_target === deploymentTargets.sameOrigin
+        && supplied.base_path === "/trans-resilience"
+        && pageUrl !== null && pageUrl.protocol === "https:"
+        && pageUrl.username === "" && pageUrl.password === ""
+        && pageUrl.pathname.startsWith(`${supplied.base_path}/`);
+      return {
+        valid,
+        serverMode: valid,
+        backendTarget: valid ? deploymentTargets.sameOrigin : null,
+        backendBaseUrl: valid ? `${pageUrl.origin}${supplied.base_path}` : null
+      };
+    }
     if (
       !supplied
       || keys.length !== 1
@@ -98,9 +115,10 @@
       };
     }
     if (modeEntries.length === 0) {
+      const defaultMode = deployment.serverMode ? modes.backendAgent : modes.localTemplate;
       return {
-        requestedMode: modes.localTemplate,
-        effectiveMode: modes.localTemplate,
+        requestedMode: defaultMode,
+        effectiveMode: defaultMode,
         fallbackReason: null
       };
     }
