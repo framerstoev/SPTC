@@ -2,7 +2,7 @@
 
 Integration branch in both repositories: `feature/v3-gemma-planning-left-integration`.
 Frontend application checkpoint: `e9b1e9cf14ccde0a03534f8cce70a38853403d2f`.
-Backend integration: `b8f8bf48458aa7acebdde29bafe55e3d8d0e3930`.
+Backend integration: `61726c9890526a5dd79a79ab3ed40c83a3ae9bb3`.
 
 The previously stashed four-file Planning-left change was inspected and applied
 without dropping its stash. Desktop Planning / Potential is physically left;
