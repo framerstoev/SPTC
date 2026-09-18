@@ -30,6 +30,9 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
         self.wait_js("typeof planningControlLayer !== 'undefined' && Boolean(planningControlLayer && workspaceController)", "both shared-data layers")
         self.report.check(not self.api_requests(mark), "page load makes zero Assistant requests")
         self.report.check(self.evaluate("document.querySelectorAll('.leaflet-container').length === 2 && document.querySelectorAll('#csSearch').length === 1"), "exactly two maps and one shared search")
+        self.report.check(self.evaluate("Array.from(document.querySelector('#comparativeWorkspace').children).map(e=>e.id).join(',') === 'planningWorkspace,workspaceSplitter,observedWorkspace'"), "Planning precedes Observed in DOM reading order")
+        self.report.check(self.evaluate("document.querySelector('#planningWorkspace').getBoundingClientRect().right <= document.querySelector('#observedWorkspace').getBoundingClientRect().left"), "Planning left and Observed right")
+        self.report.check(self.evaluate("document.querySelectorAll('#observedWorkspace #curvePanel').length === 1 && !document.querySelector('#planningWorkspace #curvePanel')"), "Q(t) belongs only to Observed")
         self.report.check(self.evaluate("document.querySelectorAll('[data-analysis-layer]').length === 3 && !document.querySelector('[data-analysis-layer=tier3]')"), "only planning offers a tier selector")
         self.select_section("1081")
         self.wait_js("Boolean(curveChart) && !document.querySelector('#curveChartWrap').hidden", "observed curve")
@@ -42,7 +45,7 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
             self.report.check(self.evaluate("document.querySelectorAll('#tierMetrics .metric-card').length === 4 && !document.querySelector('#curvePanel').hidden"), f"{tier} leaves four observed KPIs and Q(t) visible")
             self.report.check(self.evaluate("curveRequestId") == original_chart, f"{tier} does not fetch or reconstruct Q(t)")
         self.report.check(self.evaluate("controlLayer.options.style(mapData.features[0]).color === featureColor(mapData.features[0].properties,'tier3')"), "observed map remains fixed to Tier 3")
-        self.report.check(self.evaluate("document.querySelector('#legend').textContent.includes('Higher = more favorable observed resilience') && document.querySelector('#planningLegend').textContent.includes('Higher = more favorable planning context')"), "independent correct legends")
+        self.report.check(self.evaluate("document.querySelector('#legend').textContent.includes('Higher = more favorable observed resilience') && document.querySelector('#planningLegend').textContent.includes('Higher = stronger results from the planning indicators')"), "independent correct legends")
         self.report.check(len([r for r in self.all_requests() if r['request']['url'].endswith('data_driven_resilience_map_v0.geojson')]) == 1, "large geometry fetched only once")
         self.report.check(self.evaluate("controlLayer.getLayers().length === 10029 && planningControlLayer.getLayers().length === 10029"), "both Canvas layers reuse the reviewed network")
         for name in ("map", "planningMap"):
@@ -84,6 +87,8 @@ class Phase4BBrowserQA(Phase4ABrowserQA):
             self.page.command("Input.dispatchMouseEvent", {"type": "mouseMoved", **moved, "button": "left", "buttons": 1})
             self.page.command("Input.dispatchMouseEvent", {"type": "mouseReleased", **moved, "button": "left", "clickCount": 1})
             self.report.check(self.evaluate(f"Number(document.querySelector('{selector}').getAttribute('aria-valuenow'))") not in (43, 50), f"{selector} pointer drag changes ratio")
+            if axis == "x":
+                self.report.check(self.evaluate("document.querySelector('#planningWorkspace').getBoundingClientRect().width > document.querySelector('#observedWorkspace').getBoundingClientRect().width"), "drag right expands left Planning panel")
             for key, expected in (("Home", 35 if axis == "x" else 25), ("End", 65)):
                 self.evaluate(f"document.querySelector('{selector}').dispatchEvent(new KeyboardEvent('keydown',{{key:'{key}',bubbles:true}}))")
                 self.report.check(self.evaluate(f"document.querySelector('{selector}').getAttribute('aria-valuenow')") == str(expected), f"{selector} keyboard {key} clamps")
