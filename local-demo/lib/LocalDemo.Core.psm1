@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("v2", "v3")]
+    [ValidateSet("v2", "v3", "v3-dev")]
     [string]$LauncherProfile = "v2"
 )
 
@@ -21,6 +21,16 @@ if ($LauncherProfile -eq "v3") {
     $script:AcceptedBackendCommit = "e6b0ad5600e1d0056cd927ba9034bda6243b6030"
     $script:BrowserUrl = "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent"
     $script:RuntimeSchemaVersion = 3
+}
+
+if ($LauncherProfile -eq "v3-dev") {
+    $script:DevProfile = Import-PowerShellDataFile (Join-Path $PSScriptRoot "../v3-dev-checkpoints.psd1")
+    $script:AcceptedFrontendCommit = $script:DevProfile.FrontendApplicationCommit
+    $script:AcceptedBackendCommit = $script:DevProfile.BackendCommit
+    $script:AcceptedFrontendTag = "phase4c1-v3-plain-language-ai-accepted"
+    $script:BrowserUrl = "http://127.0.0.1:8001/coldwave-demo-v3/?assistantMode=backend-agent"
+    $script:ModelName = $script:DevProfile.Model
+    $script:RuntimeSchemaVersion = 4
 }
 
 function Get-LocalDemoConstants {
@@ -79,7 +89,7 @@ function Get-LocalDemoLayout {
             )
         }
     }
-    $runtimeName = if ($LauncherProfile -eq "v3") { ".runtime-v3" } else { ".runtime" }
+    $runtimeName = if ($LauncherProfile -eq "v3-dev") { ".runtime-v3-dev" } elseif ($LauncherProfile -eq "v3") { ".runtime-v3" } else { ".runtime" }
     $runtimeRoot = Join-Path $demoRoot $runtimeName
 
     [pscustomobject]@{
@@ -309,6 +319,14 @@ function Get-DemoOllamaAllocation {
     if ($null -eq $modelLine) {
         throw "$ModelName is not resident after warm-up."
     }
+    if ($LauncherProfile -eq "v3-dev" -and $modelLine -notmatch "\b100%\s+GPU\b") {
+        if ($modelLine -notmatch '\b(\d+)%/(\d+)%\s+CPU/GPU\b') {
+            throw "Development model must have verified GPU residency; CPU-only is forbidden."
+        }
+        $label = "$($Matches[1])% CPU / $($Matches[2])% GPU (development offload)"
+        if (-not (Test-DemoGpuAllocationLabel $label)) { throw "Development GPU allocation below reviewed 50% floor." }
+        return $label
+    }
     if ($modelLine -notmatch "\b100%\s+GPU\b") {
         throw (
             "$ModelName is not allocated 100% to GPU. If Ollama started before GPU " +
@@ -337,6 +355,18 @@ function Get-DemoOllamaAllocationFromApi {
     }
     $size = [int64]$model.size
     $sizeVram = [int64]$model.size_vram
+    if ($LauncherProfile -eq "v3-dev") {
+        if ($model.digest -cne $script:DevProfile.ModelDigest -or
+            $model.context_length -ne 4096 -or $size -le 0 -or
+            $sizeVram -gt $size -or $sizeVram / $size -lt 0.5) {
+            throw "Development model identity/context/GPU residency is incompatible."
+        }
+        $gpuPercent = [int][Math]::Round(100 * $sizeVram / $size)
+        $label = if ($sizeVram -eq $size) { "100% GPU" } else {
+            "$(100 - $gpuPercent)% CPU / $gpuPercent% GPU (development offload)"
+        }
+        return [pscustomobject]@{ Allocation = $label; VramMiB = [Math]::Round($sizeVram / 1MB, 0) }
+    }
     if ($size -le 0 -or $sizeVram -ne $size) {
         throw "$ModelName is not allocated 100% to GPU."
     }
@@ -344,6 +374,14 @@ function Get-DemoOllamaAllocationFromApi {
         Allocation = "100% GPU"
         VramMiB = [Math]::Round($sizeVram / 1MB, 0)
     }
+}
+
+function Test-DemoGpuAllocationLabel {
+    param([string]$Label)
+    if ($Label -ceq "100% GPU") { return $true }
+    if ($LauncherProfile -ne "v3-dev" -or
+        $Label -cnotmatch '^(\d+)% CPU / (\d+)% GPU \(development offload\)$') { return $false }
+    ([int]$Matches[1] + [int]$Matches[2] -eq 100 -and [int]$Matches[2] -ge 50 -and [int]$Matches[2] -lt 100)
 }
 
 function Assert-DemoBackendHealth {
@@ -672,6 +710,7 @@ Export-ModuleMember -Function @(
     "Assert-DemoWarmupResult",
     "Get-DemoOllamaAllocation",
     "Get-DemoOllamaAllocationFromApi",
+    "Test-DemoGpuAllocationLabel",
     "Assert-DemoBackendHealth",
     "Assert-DemoFrontendResponse",
     "New-DemoProcessRecord",

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("v2", "v3")]
+    [ValidateSet("v2", "v3", "v3-dev")]
     [string]$LauncherProfile = "v2"
 )
 
@@ -7,8 +7,11 @@ Set-StrictMode -Version Latest
 
 $coreModule = Join-Path $PSScriptRoot "LocalDemo.Core.psm1"
 Import-Module $coreModule -ArgumentList $LauncherProfile
-if ($LauncherProfile -eq "v3") {
+if ($LauncherProfile -in @("v3", "v3-dev")) {
     . (Join-Path $PSScriptRoot "LocalDemo.V3.ps1")
+}
+if ($LauncherProfile -eq "v3-dev") {
+    . (Join-Path $PSScriptRoot "LocalDemo.V3Dev.ps1")
 }
 
 $script:AllowedDemoLogNames = @(
@@ -137,7 +140,11 @@ function Assert-DemoRepositoryCheckpoints {
         [string]$GitPath
     )
 
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -eq "v3-dev") {
+        Assert-V3DevRepositoryCheckpoints -Layout $Layout -GitPath $GitPath
+        return
+    }
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         Assert-V3DemoRepositoryCheckpoints -Layout $Layout -GitPath $GitPath
         return
     }
@@ -1535,7 +1542,7 @@ function Read-DemoState {
             (Test-DemoNonNegativeNumber $state.startup_seconds) -and
             (Test-DemoNonNegativeNumber $state.warmup_seconds) -and
             (Test-DemoNonNegativeNumber $state.gpu_vram_used_mib) -and
-            $state.gpu_allocation -eq "100% GPU" -and
+            (Test-DemoGpuAllocationLabel $state.gpu_allocation) -and
             ($state.model_preexisting_resident -eq $true -or
                 $state.model_loaded_by_launcher -eq $true) -and
             $parsedReadyAt -ge $parsedCreatedAt
@@ -1845,11 +1852,14 @@ Export-ModuleMember -Function @(
     "Remove-OldDemoLogSessions",
     "Open-DemoBrowser"
 )
-if ($LauncherProfile -eq "v3") {
+if ($LauncherProfile -in @("v3", "v3-dev")) {
     Export-ModuleMember -Function @(
         "Get-V3DemoAllowedChanges", "Assert-V3DemoCheckpointFacts",
         "Assert-V3DemoRepositoryCheckpoints", "Enter-V3DemoCompatibilityLock",
         "Assert-V3DemoAvailablePorts", "Assert-V3DemoServiceContracts",
         "Open-V3DemoBrowser", "Write-V3DemoStatus"
     )
+}
+if ($LauncherProfile -eq "v3-dev") {
+    Export-ModuleMember -Function @("Assert-V3DevRepositoryCheckpoints", "Assert-V3DevCheckpointFacts", "Write-V3DevStatus")
 }

@@ -14,7 +14,7 @@ param(
     [int]$ServiceTimeoutSeconds = 30,
 
     [Parameter(DontShow = $true)]
-    [ValidateSet("v2", "v3")]
+    [ValidateSet("v2", "v3", "v3-dev")]
     [string]$LauncherProfile = "v2"
 )
 
@@ -35,10 +35,14 @@ $stage = "initialization"
 $startupWatch = [Diagnostics.Stopwatch]::StartNew()
 $activeExistingState = $null
 $preservedExistingSession = $false
-$supervisorName = if ($LauncherProfile -eq "v3") {
+$supervisorName = if ($LauncherProfile -eq "v3-dev") {
+    "supervise_service_v3_dev.py"
+} elseif ($LauncherProfile -eq "v3") {
     "supervise_service_v3.py"
 } else { "supervise_service.py" }
-$stopScriptName = if ($LauncherProfile -eq "v3") {
+$stopScriptName = if ($LauncherProfile -eq "v3-dev") {
+    "stop-local-chatbot-demo-v3-dev.ps1"
+} elseif ($LauncherProfile -eq "v3") {
     "stop-local-chatbot-demo-v3.ps1"
 } else { "stop-local-chatbot-demo.ps1" }
 
@@ -361,7 +365,7 @@ function Invoke-LaunchFailureRollback {
                 Reason = "unloaded"
             }
         } catch {
-            Write-Warning "The launcher could not safely unload qwen3:8b during rollback."
+            Write-Warning "The launcher could not safely unload $($constants.ModelName) during rollback."
             return [pscustomobject]@{
                 Attempted = $true
                 Succeeded = $false
@@ -412,7 +416,7 @@ function Invoke-LaunchFailureRollback {
 }
 
 try {
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         $compatibilityLock = Enter-V3DemoCompatibilityLock -Layout $layout
     }
     Initialize-DemoRuntime -Layout $layout
@@ -465,7 +469,7 @@ try {
     }
     $gitPath = Resolve-DemoExecutable -CommandName "git.exe"
     Assert-DemoRepositoryCheckpoints -Layout $layout -GitPath $gitPath
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         Assert-V3DemoAvailablePorts
     }
 
@@ -477,7 +481,7 @@ try {
         -Candidates $ollamaCandidates
     $modelManifest = Get-DemoOllamaManifestPath -ModelName $constants.ModelName
     Assert-RequiredDemoPath -Path $modelManifest -PathType Leaf `
-        -Label "Installed qwen3:8b manifest" `
+        -Label "Installed $($constants.ModelName) manifest" `
         -Exists (Test-Path -LiteralPath $modelManifest -PathType Leaf)
 
     if ($null -eq $activeExistingState) {
@@ -536,7 +540,7 @@ try {
         if ($tags.HttpStatus -ne 200 -or
             -not (Test-DemoModelInstalledFromApi -TagsBody $tags.Body `
                 -ModelName $constants.ModelName)) {
-            throw "The active session no longer has the fixed qwen3:8b model installed."
+            throw "The active session no longer has the fixed $($constants.ModelName) model installed."
         }
         $ollamaPs = Invoke-DemoOllamaCommand -OllamaPath $ollamaPath `
             -Arguments @("ps")
@@ -547,6 +551,10 @@ try {
         }
         $allocation = Get-DemoOllamaAllocation -Output $ollamaPs.Output `
             -ModelName $constants.ModelName
+        if ($LauncherProfile -eq "v3-dev") {
+            $residency = Wait-DemoHttpJson -Url "$($constants.OllamaUrl)/api/ps" -TimeoutSeconds 5
+            $allocation = (Get-DemoOllamaAllocationFromApi -Body $residency.Body).Allocation
+        }
         $health = Wait-DemoHttpJson -Url "$($constants.BackendUrl)/health" `
             -TimeoutSeconds $ServiceTimeoutSeconds
         Assert-DemoBackendHealth -Health $health
@@ -554,7 +562,7 @@ try {
             -TimeoutSeconds $ServiceTimeoutSeconds
         Assert-DemoFrontendResponse -HttpStatus $frontendStatus
         if (-not $NoBrowser) {
-            if ($LauncherProfile -eq "v3") {
+            if ($LauncherProfile -in @("v3", "v3-dev")) {
                 Open-V3DemoBrowser -Url $constants.BrowserUrl
             } else { Open-DemoBrowser -Url $constants.BrowserUrl }
         }
@@ -633,7 +641,7 @@ try {
     if ($tags.HttpStatus -ne 200 -or
         -not (Test-DemoModelInstalledFromApi -TagsBody $tags.Body `
             -ModelName $constants.ModelName)) {
-        throw "qwen3:8b is not installed. The launcher will not pull it automatically."
+        throw "$($constants.ModelName) is not installed. The launcher will not pull it automatically."
     }
     $residentBefore = Invoke-DemoOllamaCommand -OllamaPath $ollamaPath `
         -Arguments @("ps")
@@ -654,8 +662,12 @@ try {
         }) | Select-Object -First 1
     [void](Assert-DemoOllamaServiceIdentity -Record $ollamaRecordForWarmup)
 
-    $stage = "qwen3:8b explicit warm-up"
-    Write-Host "Warming qwen3:8b before any browser question is allowed..."
+    if ($LauncherProfile -eq "v3-dev") {
+        $stage = "$($constants.ModelName) explicit warm-up"
+    } else {
+        $stage = "qwen3:8b explicit warm-up"
+    }
+    Write-Host "Warming $($constants.ModelName) before any browser question is allowed..."
     $backendEnvironment = Get-DemoBackendEnvironment `
         -SnapshotDirectory $layout.SnapshotDirectory
     $warmupStdout = Join-Path $logDirectory "warmup.stdout.log"
@@ -720,6 +732,10 @@ try {
     }
     $allocation = Get-DemoOllamaAllocation -Output $ollamaPs.Output `
         -ModelName $constants.ModelName
+    if ($LauncherProfile -eq "v3-dev") {
+        $residency = Wait-DemoHttpJson -Url "$($constants.OllamaUrl)/api/ps" -TimeoutSeconds 5
+        $allocation = (Get-DemoOllamaAllocationFromApi -Body $residency.Body).Allocation
+    }
     $postWarmNvidia = Invoke-DemoNvidiaSmi -NvidiaSmiPath $nvidiaSmiPath
     Register-FailedDemoHelper -Role "nvidia_smi" -Result $postWarmNvidia
     $gpuAfterWarmup = Assert-DemoGpuFacts -Controllers (Get-DemoGpuControllers) `
@@ -778,7 +794,7 @@ try {
         -TimeoutSeconds $ServiceTimeoutSeconds
     Assert-DemoFrontendResponse -HttpStatus $frontendStatus
     $frontendSeconds = $frontendWatch.Elapsed.TotalSeconds
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         Assert-V3DemoServiceContracts -Layout $layout
     }
 
@@ -789,12 +805,12 @@ try {
 
     $stage = "browser open"
     if (-not $NoBrowser) {
-        if ($LauncherProfile -eq "v3") {
+        if ($LauncherProfile -in @("v3", "v3-dev")) {
             Open-V3DemoBrowser -Url $constants.BrowserUrl
         } else { Open-DemoBrowser -Url $constants.BrowserUrl }
     }
     Write-Host ""
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         Write-Host "V3 Roadway Resilience demo is READY"
         Write-Host ("Backend startup: {0:F3} sec; frontend startup: {1:F3} sec" -f
             $backendSeconds, $frontendSeconds)

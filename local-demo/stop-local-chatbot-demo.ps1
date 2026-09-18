@@ -7,7 +7,7 @@ param(
     [int]$GraceSeconds = 3,
 
     [Parameter(DontShow = $true)]
-    [ValidateSet("v2", "v3")]
+    [ValidateSet("v2", "v3", "v3-dev")]
     [string]$LauncherProfile = "v2"
 )
 
@@ -143,7 +143,7 @@ try {
     }
 
     if ($state.model_preexisting_resident -eq $true) {
-        Write-Host "Leaving the pre-existing qwen3:8b residency unchanged."
+        Write-Host "Leaving the pre-existing $($constants.ModelName) residency unchanged."
     }
 
     $ollamaCandidates = @()
@@ -253,14 +253,14 @@ try {
             if (-not $unload.Succeeded) {
                 throw "The bounded Ollama model-unload command failed."
             }
-            Write-Host "Unloaded launcher-resident qwen3:8b; the model remains installed."
+            Write-Host "Unloaded launcher-resident $($constants.ModelName); the model remains installed."
             return [pscustomobject]@{
                 Attempted = $true
                 Succeeded = $true
                 Reason = "unloaded"
             }
         } catch {
-            Write-Warning "qwen3:8b could not be safely unloaded: $($_.Exception.Message)"
+            Write-Warning "$($constants.ModelName) could not be safely unloaded: $($_.Exception.Message)"
             return [pscustomobject]@{
                 Attempted = $true
                 Succeeded = $false
@@ -322,11 +322,11 @@ try {
 
     $manifest = Get-DemoOllamaManifestPath -ModelName $constants.ModelName
     if (Test-Path -LiteralPath $manifest -PathType Leaf) {
-        Write-Host "qwen3:8b remains installed."
+        Write-Host "$($constants.ModelName) remains installed."
     } else {
-        Write-Warning "The qwen3:8b manifest is no longer present; the launcher did not remove it."
+        Write-Warning "The $($constants.ModelName) manifest is no longer present; the launcher did not remove it."
     }
-    if ($LauncherProfile -eq "v3") {
+    if ($LauncherProfile -in @("v3", "v3-dev")) {
         Write-Host "V3 Roadway Resilience demo is stopped."
     } else { Write-Host "Jason local chatbot demo is stopped." }
 } finally {

@@ -287,7 +287,7 @@ def supervise(
 
 
 def main(runtime_name: str = ".runtime") -> int:
-    if runtime_name not in {".runtime", ".runtime-v3"}:
+    if runtime_name not in {".runtime", ".runtime-v3", ".runtime-v3-dev"}:
         raise ValueError("Unsupported launcher runtime namespace.")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--executable", required=True)
