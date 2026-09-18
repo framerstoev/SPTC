@@ -47,11 +47,40 @@
               <div class="badge-row" id="statusBadges"></div>
             </section>
             <div class="workspace-visibility" role="group" aria-label="Visible workspaces">
-              <button id="toggleObserved" type="button" aria-pressed="true" aria-controls="observedWorkspace">Observed</button>
               <button id="togglePlanning" type="button" aria-pressed="true" aria-controls="planningWorkspace">Planning</button>
+              <button id="toggleObserved" type="button" aria-pressed="true" aria-controls="observedWorkspace">Observed</button>
             </div>
         </div>
         <div class="app-shell" id="comparativeWorkspace" data-mobile-side="observed">
+          <section class="comparison-side" id="planningWorkspace" aria-label="Planning workspace">
+            <header class="workspace-side-heading planning-heading">
+              <div><p class="eyebrow">Planning context</p><h2>Planning / Potential</h2></div>
+              <fieldset class="tier-control" id="analysisTierControl">
+                <legend class="visually-hidden">Planning tier</legend>
+                <div class="tier-segments" role="radiogroup" aria-label="Planning tier">
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier1">Tier 1</button>
+                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier2">Tier 2</button>
+                  <button type="button" role="radio" aria-checked="true" tabindex="0" data-analysis-layer="potential">Potential</button>
+                </div>
+              </fieldset>
+              <select id="tierSelect" class="tier-select" aria-label="Planning tier">
+                <option value="tier1">Tier 1 — Weather</option><option value="tier2">Tier 2 — Network</option><option value="potential" selected>Potential</option>
+              </select>
+            </header>
+            <div class="side-content" id="planningSideContent">
+              <section class="map-shell" aria-label="Planning context map">
+                <div id="planningMap"></div>
+                <details class="map-legend-control" id="planningMapLegend"><summary id="planningMapLegendToggle" aria-controls="planningLegend" aria-expanded="false">Planning legend</summary><div class="legend" id="planningLegend"></div></details>
+              </section>
+              <div id="planningSplitter" class="workspace-splitter horizontal-splitter" role="separator" tabindex="0" aria-label="Resize planning map and analysis" aria-orientation="horizontal" aria-controls="planningSideContent" aria-valuemin="25" aria-valuemax="65" aria-valuenow="43"></div>
+              <section id="planningAnalysis" class="workspace-analysis" aria-live="polite" aria-labelledby="planningPanelHeading">
+                <header class="module-heading"><div><p class="eyebrow" id="planningPanelEyebrow">Tier 1+2</p><h2 id="planningPanelHeading">Potential Resilience</h2></div></header>
+                <div class="tier-empty-state" id="planningEmptyState">Select a control section to view planning context.</div>
+                <div class="metric-grid" id="planningMetrics" hidden></div>
+              </section>
+            </div>
+          </section>
+          <div id="workspaceSplitter" class="workspace-splitter vertical-splitter" role="separator" tabindex="0" aria-label="Resize planning and observed workspaces" aria-orientation="vertical" aria-controls="planningWorkspace observedWorkspace" aria-valuemin="35" aria-valuemax="65" aria-valuenow="50"></div>
           <section class="comparison-side" id="observedWorkspace" aria-label="Observed workspace">
             <header class="workspace-side-heading"><p class="eyebrow">Observed performance</p><h2>Tier 3 — Observed Resilience</h2></header>
             <div class="side-content" id="observedSideContent">
@@ -76,35 +105,6 @@
               </div>
             </section>
               </div>
-            </div>
-          </section>
-          <div id="workspaceSplitter" class="workspace-splitter vertical-splitter" role="separator" tabindex="0" aria-label="Resize observed and planning workspaces" aria-orientation="vertical" aria-controls="observedWorkspace planningWorkspace" aria-valuemin="35" aria-valuemax="65" aria-valuenow="50"></div>
-          <section class="comparison-side" id="planningWorkspace" aria-label="Planning workspace">
-            <header class="workspace-side-heading planning-heading">
-              <div><p class="eyebrow">Planning / Potential context</p><h2>Tier 1 / 2</h2></div>
-              <fieldset class="tier-control" id="analysisTierControl">
-                <legend class="visually-hidden">Planning tier</legend>
-                <div class="tier-segments" role="radiogroup" aria-label="Planning tier">
-                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier1">Tier 1</button>
-                  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-analysis-layer="tier2">Tier 2</button>
-                  <button type="button" role="radio" aria-checked="true" tabindex="0" data-analysis-layer="potential">Potential</button>
-                </div>
-              </fieldset>
-              <select id="tierSelect" class="tier-select" aria-label="Planning tier">
-                <option value="tier1">Tier 1 — Weather</option><option value="tier2">Tier 2 — Network</option><option value="potential" selected>Potential</option>
-              </select>
-            </header>
-            <div class="side-content" id="planningSideContent">
-              <section class="map-shell" aria-label="Planning context map">
-                <div id="planningMap"></div>
-                <details class="map-legend-control" id="planningMapLegend"><summary id="planningMapLegendToggle" aria-controls="planningLegend" aria-expanded="false">Planning legend</summary><div class="legend" id="planningLegend"></div></details>
-              </section>
-              <div id="planningSplitter" class="workspace-splitter horizontal-splitter" role="separator" tabindex="0" aria-label="Resize planning map and analysis" aria-orientation="horizontal" aria-controls="planningSideContent" aria-valuemin="25" aria-valuemax="65" aria-valuenow="43"></div>
-              <section id="planningAnalysis" class="workspace-analysis" aria-live="polite" aria-labelledby="planningPanelHeading">
-                <header class="module-heading"><div><p class="eyebrow" id="planningPanelEyebrow">Tier 1+2</p><h2 id="planningPanelHeading">Potential Resilience</h2></div></header>
-                <div class="tier-empty-state" id="planningEmptyState">Select a control section to view planning context.</div>
-                <div class="metric-grid" id="planningMetrics" hidden></div>
-              </section>
             </div>
           </section>
         </div>

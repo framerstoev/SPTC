@@ -44,7 +44,7 @@ const analysisLayerConfig = Object.freeze({
     ramp: riskRamp,
     min: 0,
     max: 1,
-    description: "Higher = stronger weather/pavement exposure concern"
+    description: "Higher = more weather-related concern"
   }),
   tier2: Object.freeze({
     label: "Tier 2 — Network Resilience Context",
@@ -57,7 +57,7 @@ const analysisLayerConfig = Object.freeze({
     ramp: riskRamp,
     min: 0,
     max: 1,
-    description: "Higher = stronger network-context concern"
+    description: "Traffic demand, connectivity, and redundancy; higher = more concern"
   }),
   potential: Object.freeze({
     label: "Tier 1+2 — Potential Resilience",
@@ -70,7 +70,7 @@ const analysisLayerConfig = Object.freeze({
     ramp: scoreRamp,
     min: 0,
     max: 1,
-    description: "Higher = more favorable planning context"
+    description: "Higher = stronger results from the planning indicators"
   }),
   tier3: Object.freeze({
     label: "Tier 3 — Observed Resilience",

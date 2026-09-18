@@ -58,7 +58,7 @@
     }
 
     const splitters = [
-      { id: "workspaceSplitter", key: "width", variable: "--observed-width", area: "comparativeWorkspace", vertical: true, min: 35, max: 65 },
+      { id: "workspaceSplitter", key: "width", variable: "--planning-width", area: "comparativeWorkspace", vertical: true, min: 35, max: 65 },
       { id: "observedSplitter", key: "observed", variable: "--observed-map-height", area: "observedSideContent", min: 25, max: 65 },
       { id: "planningSplitter", key: "planning", variable: "--planning-map-height", area: "planningSideContent", min: 25, max: 65 }
     ];

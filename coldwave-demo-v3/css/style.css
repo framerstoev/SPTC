@@ -59,7 +59,7 @@ input, select, textarea { min-width: 0; width: 100%; border: 1px solid #aeb2b5; 
 .workspace-visibility { display: flex; gap: 4px; }
 .workspace-visibility button { background: #fff; color: var(--maroon); font-size: 12px; }
 .workspace-visibility button[aria-pressed="true"] { background: var(--maroon); color: #fff; }
-.app-shell { --observed-width: 50%; --observed-map-height: 43%; --planning-map-height: 43%; display: grid; grid-template-columns: minmax(0,calc(var(--observed-width) - 4px)) 8px minmax(0,1fr); min-height: 0; padding: 8px 10px 0; overflow: hidden; }
+.app-shell { --planning-width: 50%; --observed-map-height: 43%; --planning-map-height: 43%; display: grid; grid-template-columns: minmax(0,calc(var(--planning-width) - 4px)) 8px minmax(0,1fr); min-height: 0; padding: 8px 10px 0; overflow: hidden; }
 .comparison-side { display: grid; grid-template-rows: 58px minmax(0,1fr); min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #fff; }
 .workspace-side-heading { display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; border-bottom: 2px solid var(--maroon); }
 .planning-heading { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
