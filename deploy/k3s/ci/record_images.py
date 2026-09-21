@@ -21,9 +21,9 @@ def main():
     for kind, commit, accepted, tag in (
         (
             "frontend",
-            "a8be52a88ec997ce7bf019555669963a477b580a",
-            "345fe7a4d4f4bd4299c027d0c2cd7e1254b2819b",
-            "phase4c1-v3-plain-language-ai-accepted",
+            "7a63e305143cac9a5947825ebb66b253027872cc",
+            "7a63e305143cac9a5947825ebb66b253027872cc",
+            "phase4eb-v3-gemma-planning-left-accepted",
         ),
     ):
         digest = os.environ[kind.upper() + "_DIGEST"]
@@ -36,7 +36,7 @@ def main():
         ]
         assert info["Os"] == "linux" and info["Architecture"] == "amd64"
         assert ref in info["RepoDigests"]
-        for version in ("v3-phase4c1", "git-" + commit[:12]):
+        for version in ("v3-phase4eb", "git-" + commit[:12]):
             subprocess.run(
                 ["docker", "pull", "--platform", "linux/amd64", name + ":" + version],
                 check=True,
@@ -58,7 +58,7 @@ def main():
             "name": name,
             "digest": digest,
             "reference": ref,
-            "version_tags": ["v3-phase4c1", "git-" + commit[:12]],
+            "version_tags": ["v3-phase4eb", "git-" + commit[:12]],
             "platform": "linux/amd64",
             "image_size_bytes": info["Size"],
             "visibility": visibility,

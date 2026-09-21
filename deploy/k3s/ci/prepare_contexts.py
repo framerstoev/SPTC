@@ -36,7 +36,7 @@ def main():
         shutil.copyfile(source, target)
     for name in ("Dockerfile", "nginx.conf"):
         shutil.copyfile(repo / "docker/frontend" / name, output / "frontend" / name)
-    digest = "a8be52a88ec997ce7bf019555669963a477b580a"
+    digest = "7a63e305143cac9a5947825ebb66b253027872cc"
     subprocess.run(
         [
             "git",

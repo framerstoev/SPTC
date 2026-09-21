@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   # Explicit bootstrap/publication request only, because this workflow is not on main.
   push:
-    branches: [feature/v3-k3s-deployment]
+    branches: [build/phase4eb-k3s-update]
     paths: [deploy/k3s/ci/publication-request.json]
 
 permissions:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.repository == 'framerstoev/SPTC' && github.ref == 'refs/heads/feature/v3-k3s-deployment'
+    if: github.repository == 'framerstoev/SPTC' && github.ref == 'refs/heads/build/phase4eb-k3s-update'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -42,7 +42,7 @@ jobs:
       - name: Reject existing release tags before publishing
         run: |
           for image in sptc-resilience-frontend; do
-            if docker manifest inspect "ghcr.io/framerstoev/${image}:v3-phase4c1" >/dev/null 2>&1; then
+            if docker manifest inspect "ghcr.io/framerstoev/${image}:v3-phase4eb" >/dev/null 2>&1; then
               echo 'Release tag already exists: inspect it; do not overwrite an immutable release.'
               exit 1
             fi
@@ -70,11 +70,11 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ghcr.io/framerstoev/sptc-resilience-frontend:v3-phase4c1
+            ghcr.io/framerstoev/sptc-resilience-frontend:v3-phase4eb
             ghcr.io/framerstoev/sptc-resilience-frontend:git-${{ steps.context.outputs.frontend_short }}
           labels: |
             org.opencontainers.image.source=https://github.com/framerstoev/SPTC
-            org.opencontainers.image.revision=a8be52a88ec997ce7bf019555669963a477b580a
+            org.opencontainers.image.revision=7a63e305143cac9a5947825ebb66b253027872cc
       - name: Verify actual registry digests, tags and platforms
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
