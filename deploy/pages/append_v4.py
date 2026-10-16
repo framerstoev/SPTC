@@ -1,4 +1,4 @@
-"""Append the reviewed code-only V4 directory without changing the existing site."""
+"""Append the complete reviewed V4 research release, preserving earlier versions."""
 from __future__ import annotations
 
 import argparse
@@ -38,7 +38,7 @@ def append(artifact: Path) -> dict:
     manifest = json.loads((REPO / "deploy/pages/v4-public-files.json").read_text(encoding="utf-8"))
     source = REPO / "coldwave-demo-v4"
     files = {p.relative_to(source).as_posix() for p in source.rglob("*") if p.is_file()}
-    assert files == set(manifest["files"]) and len(files) == 26, "Unexpected V4 publication file"
+    assert files == set(manifest["files"]) and len(files) == 3871, "Unexpected V4 publication file"
     assert not any(p.is_symlink() for p in source.rglob("*")), "No symlinks in V4"
     for name, expected in manifest["preserved_html"].items():
         assert digest(artifact / name) == expected, f"Existing published HTML differs: {name}"
@@ -51,16 +51,41 @@ def append(artifact: Path) -> dict:
         assert not relative.is_absolute() and ".." not in relative.parts
         raw = (source / name).read_bytes()
         if relative.suffix.lower() in TEXT:
-            raw = raw.replace(b"\r\n", b"\n")
             assert not SECRET.search(raw) and not PRIVATE.search(raw), name
         assert hashlib.sha256(raw).hexdigest() == manifest["files"][name], f"Unreviewed V4 content: {name}"
         if relative.parts[0] == "data":
-            assert name == "data/public-manifest.json", "No analytical data files"
+            assert re.fullmatch(r"data/(?:public-manifest\.json|geometry\.json|sections\.json|summaries\.json|curves/CS_\d+\.json)", name), "Unexpected analytical product"
         payloads[name] = raw
     policy = json.loads(payloads["data/public-manifest.json"])
-    assert policy["public_only"] is True and policy["mode"] == "PUBLIC_SHOWCASE"
-    assert policy["events"] == [] and policy["status"] == "NO_PUBLIC_ANALYTICAL_PACKAGE"
-    assert policy["redistribution_approved"] is True
+    assert policy["public_only"] is True and policy["mode"] == "PUBLIC_ANALYTICAL"
+    assert policy["approval_status"] == "APPROVED" and policy["publish_allowed"] is True
+    assert policy["redistribution_approved"] is True and policy["curves_included"] is True
+    assert policy["source_status"] == "REVIEW_READY" and policy["source_approval_status"] == "NOT_APPROVED"
+    record_path = REPO / "deploy/pages/v4-release-record.json"
+    assert digest(record_path) == policy["release_record_sha256"] == manifest["release_record_sha256"]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert record["status"] == "AUTHORIZED_FOR_PUBLICATION" and record["release_id"] == policy["release_id"]
+    assert record["project_authorization"]["explicit_user_approval"] is True
+    assert record["rights_basis"] == policy["rights_basis"]
+    assert record["rights_basis"]["kind"] == "USER_AUTHORIZATION_REPRESENTATION"
+    assert record["rights_basis"]["derived_results_cleared_as_represented_by_user"] is True
+    assert record["rights_basis"]["independently_verified_third_party_license"] is False
+    assert record["explicit_applicable_prohibition_identified"] is False
+    indexed = policy["files"]
+    assert set(indexed) == {n for n in files if n.startswith("data/") and n != "data/public-manifest.json"}
+    assert len(indexed) == 3845 and policy["curve_count"] == 3842
+    payload_hash = hashlib.sha256(json.dumps(indexed, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert payload_hash == policy["payload_sha256"] == record["payload_sha256"] == policy["approval"]["approved_payload_sha256"]
+    for name, metadata in indexed.items():
+        assert hashlib.sha256(payloads[name]).hexdigest() == metadata["sha256"] and len(payloads[name]) == metadata["bytes"], name
+    rows = json.loads(payloads["data/sections.json"])
+    geometry = json.loads(payloads["data/geometry.json"])
+    summaries = json.loads(payloads["data/summaries.json"])
+    ids = {r["id"] for r in rows}
+    assert len(rows) == len(ids) == len(geometry["features"]) == policy["section_count"] == 10029
+    assert ids == {f["properties"]["id"] for f in geometry["features"]}
+    assert {f"data/curves/CS_{r['id']}.json" for r in rows if r["has_curve"]} == {n for n in indexed if n.startswith("data/curves/")}
+    assert len(summaries["counties"]) == policy["county_count"] == 223
     for name in ["index.html", "docs.html"]:
         parser = Resources()
         parser.feed(payloads[name].decode("utf-8"))
@@ -80,7 +105,7 @@ def append(artifact: Path) -> dict:
     total = sum(p.stat().st_size for p in artifact.rglob("*") if p.is_file())
     assert total < 1000 * 1000**2
     return {"status": "V4_APPEND_VERIFIED", "source_commit": manifest["source_commit"],
-            "preserved_files": len(before), "v4_files": len(files), "v4_analytical_data_files": 0,
+            "preserved_files": len(before), "v4_files": len(files), "v4_analytical_data_files": len(indexed),
             "existing_files_unchanged": True, "artifact_bytes": total}
 
 

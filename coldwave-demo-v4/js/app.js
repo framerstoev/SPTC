@@ -4,9 +4,9 @@
   const store = C.store({ workspace: "explore", panel: null, inspectorOpen: false, area: "texas", layer: "potential", planningLayer: "potential", observedLayer: "observed", temperatureWindow: "legacy_labels", selectedId: null, inspectorTab: "observed" });
   const empty = { mode: V4Data.PUBLIC, manifest: {}, rows: [], byId: new Map(), geometry: { type: "FeatureCollection", features: [] }, counties: [], countySummaries: {}, eventSummary: null, curveCache: new Map() };
   let data;
-  try { data = await V4Data.load(); } catch (error) { data = { ...empty, note: "Data package unavailable. Prepare the local preview package or use the public showcase." }; $("loadStatus").dataset.error = "true"; }
-  const local = data.mode === V4Data.LOCAL;
-  $("modeBadge").textContent = local ? "Local research preview" : "Public showcase";
+  try { data = await V4Data.load(); } catch (error) { data = { ...empty, note: "Data package unavailable or invalid. No analytical values have been loaded." }; $("loadStatus").dataset.error = "true"; }
+  const local = data.rows.length > 0;
+  $("modeBadge").textContent = V4Data.label(data);
   $("loadStatus").textContent = local ? "" : data.note;
   data.counties.forEach(county => $("areaSelect").append(new Option(county.name, county.id)));
   $("areaSelect").disabled = !local;
@@ -23,7 +23,7 @@
     if (focus) requestAnimationFrame(() => maps.focus(id));
   }
   const maps = V4Maps.create(data, store, select), inspector = V4Inspector.create(data, store);
-  if (local) $("docsLink").href = "./docs.html?mode=LOCAL_RESEARCH_PREVIEW";
+  if (data.mode === V4Data.LOCAL) $("docsLink").href = "./docs.html?mode=LOCAL_RESEARCH_PREVIEW";
   const navigation = V4Navigation.create(data, store, {
     layer: key => store.set({ workspace: "explore", layer: key }),
     workspace,
@@ -37,7 +37,7 @@
     $("impactArea").textContent = areaName();
     $("areaCost").textContent = C.format(row?.expected_demand_mobility_delay_cost_2024usd, { money: true, compact: true });
     $("areaHours").textContent = C.format(row?.total_vehicle_delay_hours, { compact: true });
-    $("impactReview").textContent = local ? "Review-ready · not approved" : "Public result unavailable";
+    $("impactReview").textContent = local ? V4Data.reviewLabel(data) : "Public result unavailable";
     for (const [id, field] of [["areaCost", "expected_demand_mobility_delay_cost_2024usd"], ["areaHours", "total_vehicle_delay_hours"]]) $(id).title = row?.[field] == null ? "Unavailable" : String(row[field]);
   }
   function renderHeader() {
@@ -125,7 +125,7 @@
       ];
       groups.forEach(([title, fields]) => { body.append(V4Inspector.text("h3", title)); const grid = document.createElement("div"); grid.className = "metric-pair"; fields.forEach(([label, field, unit, money]) => grid.append(V4Inspector.card(label, row[field], unit, { compact: true, money }))); body.append(grid); });
       body.append(V4Inspector.text("p", `Support: ${C.format(row.contributing_tmc_hours, { digits: 0 })} contributing TMC-hours; ${C.format(row.unique_contributing_tmcs, { digits: 0 })} contributing TMCs. Represented profile exposure: ${C.format(row.represented_profile_exposure, { digits: 0 })}.`, "evidence-note"));
-      body.append(V4Inspector.text("p", "REVIEW_READY / NOT_APPROVED · Jan 22–27, 2026. Expected/profile demand, not observed event-day volume. Not total economic loss.", "evidence-note"));
+      body.append(V4Inspector.text("p", `${V4Data.reviewLabel(data)} · Jan 22–27, 2026. Expected/profile demand, not observed event-day volume. Not total economic loss.`, "evidence-note"));
     }
     $("impactDrawer").showModal(); $("impactDetails").setAttribute("aria-expanded", "true");
   }

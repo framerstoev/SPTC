@@ -1,0 +1,4 @@
+# Preserve reviewed V4 bytes, including analytical JSON integrity hashes.
+coldwave-demo-v4/** -text
+deploy/pages/*.json text eol=lf
+deploy/pages/*.py text eol=lf

@@ -42,7 +42,7 @@
       keys.forEach(key => {
         const metric = C.metrics[key], button = T("button", "", "layer-option"); button.type = "button"; button.dataset.layer = key; button.setAttribute("role", "radio"); button.setAttribute("aria-checked", "false");
         button.append(T("span", metric.label.replace(/^Experimental · /, "")), T("small", metric.unit));
-        button.disabled = Boolean(metric.temp) && data.mode !== root.V4Data.LOCAL;
+        button.disabled = Boolean(metric.temp) && !data.rows.length;
         button.addEventListener("click", () => actions.layer(key)); group.append(button);
       }); $("layerGroups").append(group);
     });
@@ -70,28 +70,36 @@
       const row = summary(), host = $("overviewContext"), metric = C.metrics[store.get().layer]; host.replaceChildren();
       const windows = data.manifest.windows;
       const dates = windows ? `${windows.economic_impact_start.slice(0, 10)} → ${windows.economic_impact_end.slice(0, 10)} (end exclusive)` : "No approved public event window";
-      host.append(T("p", data.mode === root.V4Data.LOCAL ? "January 2026 · Texas winter weather" : "Public event package unavailable", "context-event"), T("p", `Registered impact window · ${dates}`, "evidence-note"), T("p", `Current Explore layer: ${metric.label} · ${metric.unit}`, "panel-lead"));
+      host.append(T("p", data.rows.length > 0 ? "January 2026 · Texas winter weather" : "Public event package unavailable", "context-event"), T("p", `Registered impact window · ${dates}`, "evidence-note"), T("p", `Current Explore layer: ${metric.label} · ${metric.unit}`, "panel-lead"));
       const totals = T("div", "", "overview-totals");
       totals.append(root.V4Inspector.card("Expected-Demand Mobility Delay Cost", row?.expected_demand_mobility_delay_cost_2024usd, "2024 USD", { money: true, compact: true }), root.V4Inspector.card("Vehicle Delay Hours", row?.total_vehicle_delay_hours, "vehicle-hours", { compact: true })); host.append(totals);
-      host.append(T("p", data.mode === root.V4Data.LOCAL ? "REVIEW_READY / NOT_APPROVED · matched reporting domain" : "No approved public result is bundled.", "evidence-note"));
+      host.append(T("p", data.rows.length > 0 ? `${root.V4Data.reviewLabel(data)} · matched reporting domain` : "No approved public result is bundled.", "evidence-note"));
       const selected = data.byId.get(store.get().selectedId), selection = $("overviewSelection"); selection.replaceChildren();
       selection.append(T("h2", selected ? `Selected · CS_${selected.id}` : "Select a roadway", "module-title"), T("p", selected ? `${selected.county_name} County · ${C.statusLabel(selected)}` : "Click a line or search by control-section ID, route or county.", "panel-lead"));
       if (selected) action(selection, "Open selected-section evidence ↗", () => actions.inspect("observed"));
     }
     function renderData() {
       const host = $("module-data"); host.replaceChildren();
-      const local = data.mode === root.V4Data.LOCAL;
+      const local = data.rows.length > 0;
       const network = heading(host, "PACKAGE / COVERAGE", "Supported roadway domain", []);
       const dl = document.createElement("dl"); dl.className = "coverage-list";
       const entries = local ? [["Control sections", data.rows.length], ["Observed Q(t) support", data.rows.filter(r => r.has_curve).length], ["County filters", data.counties.length], ["County impact summaries", Object.keys(data.countySummaries).length], ["Sections with impact evidence", data.rows.filter(r => C.number(r.total_vehicle_delay_hours) !== null).length]] : [["Public analytical package", "Unavailable"]];
       entries.forEach(([label, value]) => dl.append(T("dt", label), T("dd", typeof value === "number" ? C.format(value, { digits: 0 }) : value))); network.append(dl);
       heading(host, "SOURCES / VINTAGE", "A linked evidence package", ["TxDOT control-section network; PRISM daily weather; NPMRDS speed / travel time; expected/profile traffic exposure; frozen economic valuation method in 2024 USD.", "Temperature: PRISM D2 release 8. Existing precipitation retains its earlier frozen vintage. No raw probe records or ledgers are served.", "Coverage is uneven. County filtering uses the accepted primary-county attribution; missing summaries are unavailable."]);
+      if (data.manifest.attribution) {
+        const sources = heading(host, "SOURCE ATTRIBUTION", "Research inputs", [
+          "Roadway geometry and context: Texas Department of Transportation (TxDOT).",
+          "Traffic evidence: NPMRDS, sourced from INRIX. Only derived control-section research products are served.",
+          "PRISM Group, Oregon State University, https://prism.oregonstate.edu. Temperature: D2 release 8. Original data-access date is not recorded in the available provenance."
+        ]);
+        const link = T("a", "PRISM source and terms ↗", "text-action"); link.href = "https://prism.oregonstate.edu/terms/"; sources.append(link);
+      }
       if (local) {
-        const provenance = heading(host, "AUTHORITATIVE LOCAL PACKAGE", data.manifest.event_id, [`Run: ${data.manifest.run_id}`, `${data.manifest.status} / ${data.manifest.approval_status}`]);
+        const provenance = heading(host, "PACKAGE / PROVENANCE", data.manifest.event_id, [`Run: ${data.manifest.run_id}`, `${data.manifest.status} / ${data.manifest.approval_status}`, `Source computation: ${data.manifest.source_status || data.manifest.status} / ${data.manifest.source_approval_status || data.manifest.approval_status}`]);
         const details = document.createElement("details"); details.append(T("summary", "Method versions and registered windows"));
         const pre = T("pre", JSON.stringify({ method_versions: data.manifest.method_versions, windows: data.manifest.windows, temperature_windows: data.manifest.temperature_windows }, null, 2)); details.append(pre); provenance.append(details);
       }
-      heading(host, "PUBLICATION / QUALITY", "Know the boundary", [local ? "Authorized local review preview. Results are not approved for public redistribution." : "PUBLIC_SHOWCASE contains interface code and empty approved metadata. Analytical values are unavailable pending publication review.", "No observed support is not zero resilience. No sustained drop does not prove no impact. Censored recovery is not confirmed recovery. Daily air temperature is not measured pavement icing."]);
+      heading(host, "PUBLICATION / QUALITY", "Know the boundary", [local ? root.V4Data.label(data) + ". " + root.V4Data.reviewLabel(data) : "PUBLIC_SHOWCASE contains interface code and empty approved metadata. Analytical values are unavailable pending publication review.", "No observed support is not zero resilience. No sustained drop does not prove no impact. Censored recovery is not confirmed recovery. Daily air temperature is not measured pavement icing."]);
     }
     renderData(); renderOverview();
     function render(state, previous = {}) {

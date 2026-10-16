@@ -41,7 +41,7 @@
       } else if (state.inspectorTab === "impact") {
         body.append(text("h3", "Mobility Impact", "evidence-heading"), text("p", "Section-level expected-demand delay evidence during the authoritative impact window.", "evidence-description"));
         body.append(card("Vehicle Delay Hours", row.total_vehicle_delay_hours, "vehicle-hours"), card("Expected-Demand Mobility Delay Cost", row.expected_demand_mobility_delay_cost_2024usd, "2024 USD", { money: true, compact: true }));
-        body.append(text("p", "REVIEW_READY / NOT_APPROVED · Local research preview. Expected/profile demand, not observed event-day volume or total economic loss. Section-level passenger/commercial breakdowns are not available.", "evidence-note"));
+        body.append(text("p", `${root.V4Data.reviewLabel(data)}. Expected/profile demand, not observed event-day volume or total economic loss. Section-level passenger/commercial breakdowns are not available.`, "evidence-note"));
       } else {
         body.append(text("h3", "Observed Performance", "evidence-heading"), text("p", C.statusLabel(row), "evidence-description"));
         grid.append(card("Score", C.value(row, "observed"), "experimental index · 0–1"), card("Minimum Q", row.q_min, "Q ratio"), card("Loss Area", row.resilience_loss_area, "Q-hours"), card("Recovery", row.recovery_duration_hours, "hours")); body.append(grid);
