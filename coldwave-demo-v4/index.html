@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#173b3d" />
+  <meta name="description" content="Explore Texas roadway planning, observed performance and weather evidence in their own context." />
+  <link rel="icon" href="data:," />
+  <title>SPTC · Roadway Resilience Explorer</title>
+  <link rel="stylesheet" href="./vendor/leaflet.css" />
+  <link rel="stylesheet" href="./css/app.css" />
+  <script defer src="./vendor/leaflet.js"></script>
+  <script defer src="./vendor/chart.umd.js"></script>
+  <script defer src="./js/core.js"></script>
+  <script defer src="./js/data.js"></script>
+  <script defer src="./js/maps.js"></script>
+  <script defer src="./js/charts.js"></script>
+  <script defer src="./js/inspector.js"></script>
+  <script defer src="./js/methods.js"></script>
+  <script defer src="./js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="Roadway Resilience Explorer home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 27 12 5h8l5 22M16 7v5m0 4v5m0 3v4" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><span><strong>SPTC <span class="brand-divider">/</span> Roadway Resilience</strong><small>Texas roadway research explorer</small></span></a>
+    <nav class="workspace-nav" aria-label="Workspaces"><button data-workspace="explore" aria-current="page"><span aria-hidden="true">◈</span> Explore</button><button data-workspace="compare"><span aria-hidden="true">◫</span> Compare</button><button data-workspace="methods"><span aria-hidden="true">≡</span> Methods &amp; Data</button></nav>
+    <div class="header-status"><span class="status-dot"></span><span id="modeBadge">Public showcase</span><span class="version-tag">V4</span></div>
+  </header>
+  <div id="loadStatus" class="load-status" role="status" aria-live="polite">Opening the evidence workspace…</div>
+  <div class="app-layout" id="appLayout">
+    <aside class="filter-panel" id="filterPanel" aria-label="Event and map filters">
+      <div class="panel-intro"><p class="eyebrow">ROADWAY RESILIENCE EXPLORER</p><h1>One network.<br>Different evidence.</h1><p>Explore the event. Compare the context.</p></div>
+      <button id="filterToggle" class="mobile-filter-toggle" aria-expanded="false" aria-controls="filterBody">Event &amp; map filters <span>⌄</span></button>
+      <div id="filterBody" class="filter-body">
+        <label class="field">Area<select id="areaSelect" disabled><option value="texas">Texas matched domain</option></select></label>
+        <div class="paired-fields"><label class="field">Hazard Type<select id="hazardSelect"><option value="winter_weather">Winter Weather</option><option disabled>Flood · Planned</option><option disabled>Hurricane · Planned</option><option disabled>Extreme Heat · Planned</option><option disabled>Wildfire · Planned</option><option disabled>Other Hazards · Planned</option></select></label></div>
+        <label class="field">Event<select id="eventSelect" disabled><option value="">Awaiting a data package</option></select></label>
+        <div class="field-heading"><span>MAP LAYER</span><span class="mini-label" id="layerGroupLabel">Planning</span></div>
+        <label class="sr-only" for="layerSelect">Map Layer</label><select id="layerSelect"></select>
+        <div id="temperatureControl" class="temperature-control" hidden><span class="research-label">EXPERIMENTAL WEATHER</span><label class="field">PRISM date labels<select id="temperatureWindow"><option value="legacy_labels">Jan 22–27 · legacy labels</option><option value="temporal_overlap_labels">Jan 22–28 · temporal overlap</option></select></label><p>Daily air-temperature attributes. Separate from Tier 1.</p></div>
+        <div class="search-box"><label class="field" for="sectionSearch">Find a control section</label><div class="search-input"><span aria-hidden="true">⌕</span><input id="sectionSearch" placeholder="ID, route or county" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list" /><kbd>↵</kbd></div><div id="searchResults" class="search-results" role="listbox" aria-label="Matching control sections" hidden></div><p id="searchHint" class="hint">Select a road on the map to inspect its evidence.</p></div>
+        <details class="reading-note"><summary>How to read this map</summary><p id="layerDescription"></p><p>Unavailable values remain unavailable. Planning and observed metrics describe different evidence.</p></details>
+        <div class="coverage-box"><p class="eyebrow">PACKAGE COVERAGE</p><div><span>Planning sections</span><strong id="planningCount">—</strong></div><div><span>Observed support</span><strong id="observedCount">—</strong></div><div class="coverage-track"><i id="supportBar"></i></div></div>
+        <p class="project-attribution">SPTC research project<br><span>Texas A&amp;M Transportation Institute</span></p>
+      </div>
+    </aside>
+    <main id="main" class="main-workspace" tabindex="-1">
+      <section id="exploreWorkspace" class="map-workspace" aria-label="Explore workspace">
+        <div id="exploreMap" class="map-canvas" aria-label="Interactive roadway evidence map"></div>
+        <div class="map-heading"><span class="eyebrow" id="exploreEyebrow">PLANNING / POTENTIAL</span><h2 id="mapTitle">Potential Resilience</h2><p id="mapSubtitle">Texas · select a road to inspect</p></div>
+        <button class="map-reset" id="resetExplore" title="Reset map to selected area" aria-label="Reset map extent">⌖ <span>Reset extent</span></button>
+        <div class="map-legend" id="exploreLegend"></div>
+        <div id="publicEmpty" class="map-empty" hidden><span class="empty-symbol">◈</span><h2>Ready for the next evidence release.</h2><p>Public analytical data are awaiting publication review. Explore the framework in Methods &amp; Data.</p><button id="emptyMethods">View methods <span>↗</span></button></div>
+      </section>
+      <section id="compareWorkspace" class="compare-workspace" aria-label="Planning versus Observed comparison" hidden>
+        <div class="comparison-intro"><div><p class="eyebrow">TWO VIEWS · ONE SELECTED ROAD</p><h2>Compare evidence, keep the distinction.</h2></div><span class="sync-badge">↔ Views synchronized</span></div>
+        <div class="comparison-maps"><article class="compare-map-shell"><header><span class="side-dot planning-dot"></span><div><h3>Planning / Potential</h3><p>What do the planning indicators show?</p></div><label class="sr-only" for="planningLayer">Planning map layer</label><select id="planningLayer"><option value="potential">Potential</option><option value="weather">Tier 1 · Weather</option><option value="network">Tier 2 · Network</option></select></header><div id="planningMap" class="map-canvas"></div><div id="planningLegend" class="map-legend compact-legend"></div></article><article class="compare-map-shell"><header><span class="side-dot observed-dot"></span><div><h3>Observed / Tier 3</h3><p>What did matched traffic observations show?</p></div><label class="sr-only" for="observedLayer">Observed map layer</label><select id="observedLayer"><option value="observed">Score</option><option value="minimum">Minimum Q</option><option value="loss">Loss Area</option><option value="recovery">Recovery</option></select></header><div id="observedMap" class="map-canvas"></div><div id="observedLegend" class="map-legend compact-legend"></div></article></div>
+        <button id="resetCompare" class="compare-reset">⌖ Reset both maps</button><p class="compare-caption">Select either map to update the same section inspector. Planning is context; observed performance is separate evidence.</p>
+      </section>
+      <section id="methodsWorkspace" class="methods-workspace" aria-labelledby="methodsTitle" hidden></section>
+      <section id="impactBar" class="impact-bar" aria-label="Area Mobility Impact summary"><div class="impact-context"><span class="eyebrow">MOBILITY IMPACT</span><strong id="impactArea">Texas matched domain</strong><small id="impactReview">Publication status unavailable</small></div><div class="impact-number"><span>Expected-demand delay cost</span><strong id="areaCost">Unavailable</strong><small>2024 USD</small></div><div class="impact-number"><span>Vehicle Delay Hours</span><strong id="areaHours">Unavailable</strong><small>vehicle-hours</small></div><button id="impactDetails" class="outline-button" aria-controls="impactDrawer" aria-expanded="false">Area details ↗</button></section>
+      <footer class="map-footer"><span><i class="live-dot"></i><span id="visibleCount">0</span> roadway sections in selected area</span><span id="eventWindow">Event window unavailable</span></footer>
+    </main>
+    <aside id="sectionInspector" class="section-inspector" aria-labelledby="sectionTitle" hidden><div class="inspector-top"><p class="eyebrow">SELECTED CONTROL SECTION</p><button id="clearSelection" class="icon-button" aria-label="Clear section selection">×</button><h2 id="sectionTitle" tabindex="-1"></h2><p id="sectionContext"></p><span id="sectionStatus" class="section-status"></span></div><div class="inspector-tabs" role="tablist" aria-label="Section evidence"><button role="tab" data-inspector-tab="weather" aria-selected="false">Weather</button><button role="tab" data-inspector-tab="planning" aria-selected="false">Planning</button><button role="tab" data-inspector-tab="observed" aria-selected="true">Observed</button><button role="tab" data-inspector-tab="impact" aria-selected="false">Impact</button></div><div id="inspectorBody" class="inspector-body" role="tabpanel" aria-live="polite"></div><div class="inspector-bottom">One road · separate lines of evidence</div></aside>
+  </div>
+  <dialog id="impactDrawer" class="impact-dialog" aria-labelledby="impactDrawerTitle"><header><div><p class="eyebrow">AREA / EVENT EVIDENCE</p><h2 id="impactDrawerTitle">Mobility Impact details</h2></div><button id="closeImpact" class="icon-button" aria-label="Close area impact details">×</button></header><div id="impactDrawerBody"></div></dialog>
+  <noscript>This explorer requires JavaScript to display maps and evidence.</noscript>
+</body>
+</html>

@@ -1,0 +1,5 @@
+.local-preview/
+.public-build/
+.qa/
+__pycache__/
+*.pyc

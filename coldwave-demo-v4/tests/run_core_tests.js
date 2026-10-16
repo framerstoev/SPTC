@@ -1,0 +1,22 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+require("../js/core.js");
+const C = globalThis.V4Core;
+let checks = 0;
+function check(name, fn) { fn(); checks++; process.stdout.write(`PASS ${name}\n`); }
+check("null and missing metrics never become zero", () => { for (const x of [null, undefined, "", "0", NaN, Infinity]) assert.equal(C.number(x), null); assert.equal(C.number(0), 0); assert.equal(C.format(null), "Unavailable"); });
+check("small nonzero section delay remains visible", () => { assert.equal(C.format(.034), "0.034"); assert.notEqual(C.format(.00005), "0"); });
+check("temperature windows are distinct and zero days are valid", () => { const r = { temperature: { legacy_labels: { tmax_below_zero_days: 0 }, temporal_overlap_labels: { tmax_below_zero_days: 1 } } }; assert.equal(C.value(r, "temp_tmax_days"), 0); assert.equal(C.value(r, "temp_tmax_days", "temporal_overlap_labels"), 1); });
+check("accepted score quantiles exclude no-sustained-drop and unsupported scores", () => { const rows = [0, .2, .4, .6, .8, 1].map(n => ({ has_curve: true, status: "detected", observed_curve_resilience_score_v0: n })); rows.push({ has_curve: true, status: "no_sustained_drop", observed_curve_resilience_score_v0: 100 }, { has_curve: false, status: "no_observed_support", observed_curve_resilience_score_v0: 100 }); assert.deepEqual(C.scoreBreaks(rows), [0, .2, .4, .6, .8, 1]); });
+check("censored numeric scores remain eligible", () => { assert.equal(C.value({ status: "recovery_endpoint_censored", has_curve: true, observed_curve_resilience_score_v0: .5 }, "observed"), .5); assert.equal(C.value({ status: "no_sustained_drop", has_curve: true, observed_curve_resilience_score_v0: .5 }, "observed"), null); });
+check("quantile ties follow the accepted epsilon rule", () => { const b = C.scoreBreaks([{ has_curve: true, status: "detected", observed_curve_resilience_score_v0: .5 }]); for (let i = 1; i < b.length; i++) assert.equal(b[i], b[i - 1] + .000001); });
+check("one store shares selected ID across workspaces", () => { const store = C.store({ selectedId: null, workspace: "explore" }); store.set({ selectedId: "12" }); store.set({ workspace: "compare" }); assert.equal(store.get().selectedId, "12"); assert.ok(Object.isFrozen(store.get())); });
+check("bounds preserve coordinate order and full multi-line support", () => { assert.deepEqual(C.bounds([{ geometry: { coordinates: [[[-101, 28], [-99, 33]], [[-104, 31], [-96, 29]]] } }]), [[28, -104], [33, -96]]); });
+const sandbox = { window: {}, URL, Map, Set, location: {}, document: {} };
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../js/data.js"), "utf8"), sandbox);
+check("local-only mode host gate", () => { assert.ok(sandbox.window.V4Data.localHost("127.0.0.1")); assert.ok(!sandbox.window.V4Data.localHost("example.github.io")); });
+check("one-to-one join rejects duplicate and orphan geometry keys", () => { const validate = sandbox.window.V4Data.validate; assert.throws(() => validate({ type: "FeatureCollection", features: [{ properties: { id: "2" }, geometry: { type: "LineString" } }] }, [{ id: "1" }], 1), /join/); assert.throws(() => validate({ type: "FeatureCollection", features: [] }, [{ id: "1" }, { id: "1" }], 2), /coverage/); });
+process.stdout.write(`${checks} core checks passed\n`);
