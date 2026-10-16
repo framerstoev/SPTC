@@ -1,0 +1,38 @@
+{
+  "source_commit": "22362ed45930c2e90852a385b11f982ef5a3f5ef",
+  "preserved_pages_commit": "192d13b1e27d566a87f29ad74fcd0b99e62f89ac",
+  "files": {
+    ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs.html": "3c2b34a9831cc446517e67f46b1ae52af5bbdeb551cb7be16ac5c1cfd76edaaa",
+    "index.html": "bed1a13dbb28c1d0954e84f6be9da48789314fc853e969e01c2c4a7dd6e368ab",
+    "css/app.css": "5c4a933594be23826a3498ea22f983af92a7b5636de08a6c0e9b9afac95a59c5",
+    "css/docs.css": "fdaf5d1f736f2cce6861c6e8b5525009020b72a92c4b7f8ccaabe16b941f5a29",
+    "data/public-manifest.json": "ac3fab5f8f91ed4e122db502d2b68017f22aeb18c7dbcf1151c023715cea0913",
+    "js/app.js": "12adcfc8fad859bcf5da1e378ce01c75960ae8132621e8bd5a3b7a0aa75f7483",
+    "js/charts.js": "6ca5e201435291a77fd8ea37c437bf894dfd6034faa3a4acfa6c470509662afd",
+    "js/core.js": "087cbb40a2c9ce3b7625d811985e8509e6f6bdbca8fa4d37b460244f6a7462b7",
+    "js/data.js": "11e901e8ec7cae4546c82d05cb0387285d1670307cac367551379f3528e7c57f",
+    "js/docs.js": "8cf3f871db74728c26e1eb0be35122f9d25d7dcf87145267a1b0e91cac0ce9c6",
+    "js/guide.js": "2c10d7635c8c859cd4109b02ba8a2e8611b10c55fa84b8d7508f0f406d90ae86",
+    "js/inspector.js": "ca734a721f2a8b9d709811036559413700ab9dcfc440577cc9ff7b3963fd2392",
+    "js/maps.js": "d818212d8fffea0b8c1b11ca3a7151180d353090a5c6284a844cc4a6548ca532",
+    "js/navigation.js": "159b033bb7bf7fbfa1e49e7b3063082410096e35fb83be42e1ea37a234ce41df",
+    "js/timeseries.js": "07f8a248d61b6329eb21898c9c446ade3e69990e76da35b41cbcfa05a4094849",
+    "vendor/CHART-LICENSE.md": "5a0877ad6d818529be4f33009d0942cdf7e2ed7656156f4aba7308459a546030",
+    "vendor/chart.umd.js": "d2af8974e95271638772e9e9524db5b9a6f58d6ec2d5d781400447b4a31c681e",
+    "vendor/LEAFLET-LICENSE.txt": "bbc959aaef7488b38942e7f05cfd1244351f8bce54261951ea17dd7cf60f894b",
+    "vendor/leaflet.css": "337bfca5cabd03b39815b2700febe2b3b7edf55921c59cd49f88ecb328212303",
+    "vendor/leaflet.js": "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a",
+    "vendor/images/layers-2x.png": "066daca850d8ffbef007af00b06eac0015728dee279c51f3cb6c716df7c42edf",
+    "vendor/images/layers.png": "1dbbe9d028e292f36fcba8f8b3a28d5e8932754fc2215b9ac69e4cdecf5107c6",
+    "vendor/images/marker-icon-2x.png": "00179c4c1ee830d3a108412ae0d294f55776cfeb085c60129a39aa6fc4ae2528",
+    "vendor/images/marker-icon.png": "574c3a5cca85f4114085b6841596d62f00d7c892c7b03f28cbfa301deb1dc437",
+    "vendor/images/marker-shadow.png": "264f5c640339f042dd729062cfc04c17f8ea0f29882b538e3848ed8f10edb4da"
+  },
+  "preserved_html": {
+    "index.html": "a90738ee05bc100b02d458b23d38fecca7ff4b59ff1475bdb987afc9ff2807fe",
+    "coldwave-demo/index.html": "682c583459897f55e0a04702eab45b1b64fec959411f59e8e37f36ecbda4fe0a",
+    "coldwave-demo-v2/index.html": "c69ce14ede6bfe042f81f2a4b6e22f2e372481dfd2ad6cc24420c3a6612ccd64",
+    "coldwave-demo-v3/index.html": "ee606c5d892a48b3701ece130fad1db54351b594ab4c7ff55e2fbd5ea9228853"
+  }
+}

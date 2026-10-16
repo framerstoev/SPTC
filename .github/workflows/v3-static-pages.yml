@@ -21,8 +21,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/configure-pages@v5
-      - name: Build and audit allowlisted static artifact
-        run: python3 coldwave-demo-v3/tests/build_static_review.py --output "$RUNNER_TEMP/v3-pages"
+      - name: Rebuild the unchanged existing Pages artifact
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/existing-pages-source" 192d13b1e27d566a87f29ad74fcd0b99e62f89ac
+          python3 "$RUNNER_TEMP/existing-pages-source/coldwave-demo-v3/tests/build_static_review.py" --output "$RUNNER_TEMP/v3-pages"
+      - name: Append the reviewed V4 public version
+        run: python3 deploy/pages/append_v4.py --artifact "$RUNNER_TEMP/v3-pages"
       - uses: actions/upload-pages-artifact@v4
         with:
           path: ${{ runner.temp }}/v3-pages
