@@ -70,7 +70,7 @@ def main(root, public):
     policy = json.loads((public / "data/public-manifest.json").read_text())
     assert policy["public_only"] and policy["events"] == [] and policy["redistribution_approved"]
     public_files = [p for p in public.rglob("*") if p.is_file()]
-    assert len(public_files) == 21
+    assert len(public_files) == 26
     forbidden_values = [str(summaries["event"]["expected_demand_mobility_delay_cost_2024usd"]),
                         str(summaries["event"]["total_vehicle_delay_hours"]), manifest["run_id"]]
     for path in public_files:

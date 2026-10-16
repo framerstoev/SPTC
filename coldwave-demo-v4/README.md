@@ -1,6 +1,8 @@
 # SPTC Roadway Resilience Explorer V4
 
-Standalone static design-review frontend: Explore, Compare, and Methods & Data.
+Standalone static design-review frontend: Explore and Compare, seven contextual
+modules, an eight-step Guide and a separate Docs page. The default map opens
+with its contextual panel collapsed.
 It requires no Assistant, model, backend, package manager or compilation step.
 V3 and all accepted analytical methods remain separate.
 
@@ -44,7 +46,7 @@ python data/front-end/sptc-demo/coldwave-demo-v4/tools/build_public.py --output 
 ```
 
 The builder requires a fresh destination and copies an explicit runtime
-allowlist. The result contains 21 files and zero analytical data files. Its
+allowlist. The result contains 26 files and zero analytical data files. Its
 manifest forces `PUBLIC_SHOWCASE`, even if a local-preview query is supplied.
 Research values, geometry, curves, temperature products, economic packages,
 ledgers and raw probe records are absent. Empty public data is intentional:
@@ -67,5 +69,19 @@ screenshots/reports, and closes only its own browser. Fidelity tests require
 authorized local source data. Keep screenshots containing review-only results
 outside the public repository.
 
-See [architecture](docs/ARCHITECTURE.md), [reference audit](docs/REFERENCE_DESIGN_AUDIT.md)
-and [design acceptance](docs/DESIGN_ACCEPTANCE.md).
+Use Overview for event/area filters, Analysis for evidence-family actions, Layers
+for Explore shading, Time Series for the selected road's accepted Q(t), Data for
+actual package coverage and About for scope. Forecast is a navigable research
+roadmap with computation disabled. Panel collapse preserves filters, selection,
+layer and geographic center/zoom. Hiding the inspector preserves the selected
+road; Clear selection removes it. Time Series can expand without reloading its
+curve. Docs preserves local-preview mode when returning to the map, while reading
+no research data itself.
+
+Guide offers Next, Previous, Skip, Finish and Escape. A dismissible first-visit
+invitation uses optional browser storage; the full tour is never forced. The
+application remains usable if storage is unavailable.
+
+See [architecture](docs/ARCHITECTURE.md), [modular component plan](docs/MODULAR_ARCHITECTURE.md),
+[reference audit](docs/REFERENCE_DESIGN_AUDIT.md), [initial acceptance](docs/DESIGN_ACCEPTANCE.md)
+and [modular UX acceptance](docs/MODULAR_ACCEPTANCE.md).

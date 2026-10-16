@@ -15,7 +15,7 @@ def build(destination: Path) -> None:
         raise FileExistsError("Public output must be a new directory")
     if destination.resolve().is_relative_to(HERE.resolve()) and destination.name != ".public-build":
         raise ValueError("Use .public-build or a separate new distribution directory")
-    files = [HERE / "index.html", *sorted((HERE / "css").glob("*.css")),
+    files = [HERE / "index.html", HERE / "docs.html", *sorted((HERE / "css").glob("*.css")),
              *sorted((HERE / "js").glob("*.js")), *sorted(p for p in (HERE / "vendor").rglob("*") if p.is_file())]
     destination.mkdir(parents=True)
     for source in files:

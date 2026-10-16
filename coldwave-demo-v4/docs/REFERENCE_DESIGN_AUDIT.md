@@ -25,3 +25,20 @@ classifier/SHAP outputs, wetland pixels, logos, images, code and model claims ar
 not transferred. No claim is made that every reference interaction or touch gesture
 was exhaustively tested. Its mobile panel/nav layout and visible behavior were
 observed; V4's interactions are tested independently.
+
+## Modular architecture revision
+
+The reference was re-inspected in isolated real Chrome on 2026-10-16. Its visible
+header includes Guide and Docs; navigation exposes Overview, Analysis, Layers &
+Display, Time Series, Forecast, Data & Methods and About. The documentation link
+points to a separate /docs/ location. Desktop/module/mobile screenshots and DOM
+observations are retained privately under .local/v4-modular-audit/reference.
+The web-reader tool could not access the site; the browser inspection succeeded.
+
+V4 now adapts the persistent seven-module rail, one collapsible contextual panel,
+map-first landing, separate Docs, contextual Time Series and guided highlighting.
+Its equivalents are Overview, Analysis, Layers, Time Series, Forecast, Data and
+About. Unlike the reference's operational forecast controls, V4 Forecast is
+explicitly planned, with no model, numerical output, playback or map layer.
+The ivory/teal/ochre V4 branding is retained. Original SVG rail symbols are drawn
+in V4; no reference source, logos, artwork, model claims or assets are copied.

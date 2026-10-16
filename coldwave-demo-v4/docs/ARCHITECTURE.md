@@ -1,5 +1,10 @@
 # V4 architecture and V3 separation
 
+Current UI: Explore / Compare, a seven-module rail and one collapsible contextual
+panel, shared section inspector, optional Guide, independent docs.html. The
+[component plan](MODULAR_ARCHITECTURE.md) records reuse decisions made before
+the information-architecture refactor from f9edd46.
+
 V4 is a standalone static application. There is no Assistant button, model client,
 readiness check, API server, model startup or V3 script import. Pinned Leaflet 1.9.4
 and Chart.js 4.4.1 are vendored with their MIT licenses. OpenStreetMap basemap tiles are
@@ -16,7 +21,7 @@ the only external runtime resources; the evidence package is same-origin static 
 | Shared selection | One selected ID for Explore, search and both comparison maps | immutable central store |
 | County reset fix | Cancel map movement; latest generation wins; no animated fits | js/maps.js |
 | Impact B+ | Two area headline values, details on demand, only two available section fields | js/app.js, js/inspector.js |
-| Long explanations | Progressive disclosure outside the default map | js/methods.js |
+| Long explanations | Contextual Data/About and independent user Docs | js/navigation.js, docs.html, js/docs.js |
 
 The V3 script tail imports deployment/Assistant configuration, Assistant clients,
 actions, chat/window modules and backend event clients. Its old local development
@@ -26,8 +31,25 @@ by V4. V3 and the backend remain unchanged.
 Maps share one fetched geometry object; comparison maps are created lazily. Area
 filtering reuses existing layers and cached bounds; it does not reload geometry.
 The shared state has one workspace, area, selected ID, inspector tab, layer choices
-and experimental PRISM window. Curve requests use a generation check so a stale
+and experimental PRISM window, plus open panel and inspector visibility. Curve requests use a generation check so a stale
 response cannot overwrite the currently selected section.
+
+Navigation changes panel state without fitting or recreating maps. A coalesced
+ResizeObserver calls maps.resize, preserving geographic centers and zoom while
+temporarily suppressing comparison feedback. First opening Compare copies the
+Explore viewport; thereafter each workspace retains its viewport. Explicit area
+changes and Reset still use the guarded, nonanimated fit operation.
+
+Time Series reuses V4Data.curve and unchanged V4Charts.draw. Hidden chart views
+are destroyed; the expanded dialog and module share cached payloads and stale
+generation protection. Forecast is static planned-research content: it has no
+model client, loader, layer, numerical output or enabled computation action.
+
+Guide uses a native modal dialog for focus containment, actual component bounds
+for highlighting, and optional localStorage solely for invitation dismissal.
+It restores workspace/panel/inspector visibility when closed. Docs is a separate
+static page with fourteen chapters, anchor navigation and local text filtering;
+it loads no research packages. The old top-level Methods workspace is removed.
 
 Q(t) is plotted on a linear delivered-clock axis without timezone conversion.
 Display-only null separators reveal missing hourly intervals; original Q and

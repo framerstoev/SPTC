@@ -13,9 +13,9 @@
     function render() {
       const token = ++generation, state = store.get(), row = data.byId.get(state.selectedId);
       chart?.destroy(); chart = null;
-      panel.hidden = !row || state.workspace === "methods";
-      document.getElementById("appLayout").classList.toggle("has-inspector", Boolean(row) && state.workspace !== "methods");
-      if (!row) { body.replaceChildren(); return; }
+      panel.hidden = !row || !state.inspectorOpen || state.panel === "timeseries";
+      document.getElementById("appLayout").classList.toggle("has-inspector", !panel.hidden);
+      if (!row || panel.hidden) { body.replaceChildren(); return; }
       document.getElementById("sectionTitle").textContent = `CS_${row.id}`;
       document.getElementById("sectionContext").textContent = `${row.route?.replaceAll("_", " ").trim() || "Route unavailable"} · ${row.county_name} County`;
       document.getElementById("sectionStatus").textContent = C.statusLabel(row);
@@ -45,6 +45,8 @@
       } else {
         body.append(text("h3", "Observed Performance", "evidence-heading"), text("p", C.statusLabel(row), "evidence-description"));
         grid.append(card("Score", C.value(row, "observed"), "experimental index · 0–1"), card("Minimum Q", row.q_min, "Q ratio"), card("Loss Area", row.resilience_loss_area, "Q-hours"), card("Recovery", row.recovery_duration_hours, "hours")); body.append(grid);
+        const seriesButton = text("button", "Open Time Series module ↗", "text-action"); seriesButton.dataset.action = "timeseries";
+        seriesButton.addEventListener("click", () => store.set({ panel: "timeseries", inspectorOpen: false })); body.append(seriesButton);
         if (!row.has_curve) { body.append(text("p", "No observed Q(t) support is available. Missing evidence is not zero resilience.", "evidence-note")); return; }
         body.append(text("h3", "Q(t) · operational window", "evidence-heading"));
         const wrap = document.createElement("div"); wrap.className = "chart-wrap"; const canvas = document.createElement("canvas"); canvas.setAttribute("role", "img"); canvas.setAttribute("aria-label", `Accepted Q(t) curve for CS_${row.id}`); wrap.append(canvas);

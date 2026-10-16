@@ -82,8 +82,25 @@
       entries.forEach((e, name) => { const range = limits(currentMetric(name)); e.byId.forEach((layer, id) => { layer.closeTooltip(); layer.options.interactive = visible(data.byId.get(id)); layer.setStyle(style(data.byId.get(id), name, range)); }); const selected = e.byId.get(store.get().selectedId); selected?.bringToFront(); legend(name); });
     }
     function activate(workspace) {
-      if (workspace === "compare" && !entries.has("planning")) { add("planning", "planningMap"); add("observed", "observedMap"); }
-      if (workspace !== "methods") fit();
+      if (workspace === "compare" && !entries.has("planning")) {
+        const source = entries.get("explore").map, center = source.getCenter(), zoom = source.getZoom();
+        add("planning", "planningMap"); add("observed", "observedMap");
+        synchronizing = true;
+        ["planning", "observed"].forEach(name => entries.get(name).map.setView(center, zoom, { animate: false }));
+        synchronizing = false;
+      }
+      resize();
+    }
+    function resize() {
+      // Preserve geographic center when the rail panel changes available width.
+      synchronizing = true;
+      entries.forEach(e => {
+        if (!e.map.getContainer().getClientRects().length) return;
+        const center = e.map.getCenter(), zoom = e.map.getZoom();
+        e.map.stop(); e.map.invalidateSize({ animate: false, pan: false });
+        e.map.setView(center, zoom, { animate: false });
+      });
+      synchronizing = false;
     }
     function focus(id) {
       const f = featureById.get(id); if (!f) return;
@@ -93,7 +110,7 @@
       synchronizing = false;
     }
     add("explore", "exploreMap");
-    return { activate, render, fit, focus, entries, limits, areaBounds };
+    return { activate, render, fit, focus, resize, entries, limits, areaBounds };
   }
   root.V4Maps = Object.freeze({ create });
 })(window);
