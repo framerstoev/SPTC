@@ -137,8 +137,9 @@
   let resizeFrame = 0;
   new ResizeObserver(() => { cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(() => maps.resize()); }).observe($("main"));
   navigation.render(store.get());
+  const layout = V4Layout.create(store);
   V4Guide.create(store);
   renderImpact(); renderHeader(); maps.fit();
   rootReady();
-  function rootReady() { window.v4App = Object.freeze({ store, data, maps, select, workspace, navigation, timeSeries, ready: true }); }
+  function rootReady() { window.v4App = Object.freeze({ store, data, maps, select, workspace, navigation, timeSeries, layout, ready: true }); }
 })();

@@ -4,7 +4,7 @@
   function create(data, store, select) {
     const entries = new Map(), countyBounds = new Map();
     const allBounds = C.bounds(data.geometry.features), breaks = C.scoreBreaks(data.rows);
-    let synchronizing = false, fitGeneration = 0;
+    let synchronizing = false, resizing = false, fitGeneration = 0;
     const featureById = new Map(data.geometry.features.map(f => [String(f.properties.id), f]));
     function visible(row) { return store.get().area === "texas" || row.county_fips === store.get().area; }
     function currentMetric(name) { const s = store.get(); return name === "explore" ? s.layer : name === "planning" ? s.planningLayer : s.observedLayer; }
@@ -53,8 +53,10 @@
         path.on("mouseover", () => { if (visible(row)) path.setStyle({ weight: 4, opacity: 1 }); });
         path.on("mouseout", () => path.setStyle(style(row, name, limits(currentMetric(name)))));
       } }).addTo(map);
-      entries.set(name, { map, layer, byId });
+      const entry = { map, layer, byId, view: { center: map.getCenter(), zoom: map.getZoom() } };
+      entries.set(name, entry);
       map.on("moveend", () => {
+        if (!resizing) entry.view = { center: map.getCenter(), zoom: map.getZoom() };
         if (name === "explore" || store.get().workspace !== "compare" || synchronizing) return;
         const other = entries.get(name === "planning" ? "observed" : "planning");
         if (other) { synchronizing = true; other.map.stop(); other.map.setView(map.getCenter(), map.getZoom(), { animate: false }); synchronizing = false; }
@@ -94,12 +96,15 @@
     function resize() {
       // Preserve geographic center when the rail panel changes available width.
       synchronizing = true;
+      resizing = true;
       entries.forEach(e => {
         if (!e.map.getContainer().getClientRects().length) return;
-        const center = e.map.getCenter(), zoom = e.map.getZoom();
+        // Retain the last deliberate view across fractional-pixel resize steps.
+        const { center, zoom } = e.view;
         e.map.stop(); e.map.invalidateSize({ animate: false, pan: false });
         e.map.setView(center, zoom, { animate: false });
       });
+      resizing = false;
       synchronizing = false;
     }
     function focus(id) {

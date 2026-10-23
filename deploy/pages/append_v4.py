@@ -38,7 +38,7 @@ def append(artifact: Path) -> dict:
     manifest = json.loads((REPO / "deploy/pages/v4-public-files.json").read_text(encoding="utf-8"))
     source = REPO / "coldwave-demo-v4"
     files = {p.relative_to(source).as_posix() for p in source.rglob("*") if p.is_file()}
-    assert files == set(manifest["files"]) and len(files) == 3871, "Unexpected V4 publication file"
+    assert files == set(manifest["files"]) and len(files) == 3872, "Unexpected V4 publication file"
     assert not any(p.is_symlink() for p in source.rglob("*")), "No symlinks in V4"
     for name, expected in manifest["preserved_html"].items():
         assert digest(artifact / name) == expected, f"Existing published HTML differs: {name}"
