@@ -1,0 +1,32 @@
+.nhc-controls { background: #fff; padding: 7px; color: var(--ink, #173b3d); font: 11px/1.4 inherit; display: grid; gap: 5px; }
+.nhc-controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.nhc-controls button { padding: 3px 7px; background: #f4f6f2; border: 1px solid #d7dfd7; border-radius: 4px; font-size: 11px; cursor: pointer; color: #173b3d; }
+.nhc-popup .coverage-list { font-size: 11px; }
+.nhc-popup p { margin: 6px 0; }
+.basemap-failure { background: #fff8e7; padding: 5px 8px; max-width: 190px; font-size: 11px; color: #5b451c; }
+.layer-subgroup { font-size: 10px; color: var(--muted); margin: 10px 2px 4px; }
+.area-support { margin: 4px 0 16px; font-size: 10px; line-height: 1.6; }
+.legend-scope { margin-top: 6px; font-size: 9px; line-height: 1.4; color: var(--muted); }
+.compare-map-shell > header { flex-wrap: wrap; align-content: center; min-height: 91px; }
+.compare-map-shell > header select { max-width: none; width: 100%; flex-basis: 100%; margin: 2px 0 0; min-height: 33px; font-size: 11px; }
+.phase-scope { margin: 10px 0 5px; font-size: 10px; color: var(--muted); }
+.phase-chip { margin: 0 0 10px; font-size: 10px; color: var(--teal); line-height: 1.5; }
+.series-ranges { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.series-ranges button { padding: 6px 9px; min-height: 31px; font-size: 10px; }
+.series-ranges button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: white; }
+.series-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; margin: 8px 0; font-size: 9px; color: var(--muted); }
+.series-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.series-legend i { width: 14px; height: 3px; display: inline-block; }
+.phase-cards { margin: 12px 0; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.phase-cards .metric-card { min-width: 0; }
+.phase-cards .metric-card strong { font-size: 21px; overflow-wrap: anywhere; }
+.phase-cards .metric-card small { line-height: 1.5; }
+.metric-card.current-metric { border-color: var(--teal); }
+.series-dialog .phase-cards { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.core-context { margin: 8px 0; }
+@media(max-width:700px) {
+  .series-dialog .phase-cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .series-ranges button { font-size: 10px; }
+  .compare-map-shell > header select { min-width: 0; }
+  .map-legend { max-width: min(250px,calc(100% - 125px)); }
+}

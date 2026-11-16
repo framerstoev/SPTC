@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#500000" />
+  <meta name="description" content="Explore Texas roadway planning, observed performance and weather evidence in their own context." />
+  <link rel="icon" href="data:," />
+  <title>SPTC · Roadway Resilience Explorer</title>
+  <link rel="stylesheet" href="./vendor/leaflet.css" />
+  <link rel="stylesheet" href="./css/app.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/events.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/o1.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/v5g.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/v5h.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/aggie.css?v=v5n-public-f142a7b32af3" />
+  <script defer src="./vendor/leaflet.js"></script>
+  <script defer src="./vendor/chart.umd.js"></script>
+  <script defer src="./js/o1.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/v5h.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/visual.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/v5j.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/metrics.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/core.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/data.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/release.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/events.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/track.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/evacuation.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/beryl-content.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/maps.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/charts.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/presentation.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/evidence.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/inspector.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/navigation.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/timeseries.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/guide.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/layout.js?v=v5n-public-f142a7b32af3"></script>
+  <script defer src="./js/app.js?v=v5n-public-f142a7b32af3"></script>
+  <link rel="stylesheet" href="./css/v5j.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/v5k.css?v=v5n-public-f142a7b32af3" />
+  <link rel="stylesheet" href="./css/v5l.css?v=v5n-public-f142a7b32af3" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="Roadway Resilience Explorer home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 27 12 5h8l5 22M16 7v5m0 4v5m0 3v4" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><span><strong>SPTC <span class="brand-divider">/</span> Roadway Resilience</strong><small>Texas roadway research explorer</small></span></a>
+    <nav class="workspace-nav" aria-label="Evidence views"><button type="button" data-view="planning" aria-pressed="true"><span aria-hidden="true">◈</span> Planning</button><button type="button" data-view="observation" aria-pressed="true"><span aria-hidden="true">◫</span> Observation</button></nav>
+    <div class="header-tools"><button id="resetLayout" class="header-link layout-reset" title="Reset panel sizes and inspector position" aria-label="Reset layout"><span aria-hidden="true">↺</span><span class="layout-reset-label"> Reset layout</span></button><button id="startGuide" class="header-link">Guide</button><a id="docsLink" class="header-link" href="./docs.html">Docs ↗</a></div>
+    <div class="header-status"><span class="status-dot"></span><span id="modeBadge">Loading</span><span class="version-tag">V5</span></div>
+  </header>
+  <div id="loadStatus" class="load-status" role="status" aria-live="polite">Loading maps…</div>
+  <div class="app-layout" id="appLayout">
+    <nav id="moduleRail" class="module-rail" aria-label="Research modules"></nav>
+    <aside id="contextPanel" class="context-panel" aria-labelledby="panelTitle" hidden>
+      <header class="context-header"><div><p class="eyebrow" id="panelEyebrow">RESEARCH EXPLORER</p><h1 id="panelTitle">Overview</h1></div><button id="collapsePanel" class="icon-button" aria-label="Collapse contextual panel">×</button></header>
+      <div class="context-scroll">
+        <section id="module-overview" data-module-content="overview" hidden><p class="panel-lead">Choose an event and area.</p>        <label class="field">Area<select id="areaSelect" disabled><option value="texas">Texas Study Area</option></select></label>
+        <div class="paired-fields"><label class="field">Hazard Type<select id="hazardSelect"><option value="winter_weather">Winter Weather</option><option disabled>Flood · Planned</option><option value="hurricane">Hurricane</option><option disabled>Extreme Heat · Planned</option><option disabled>Wildfire · Planned</option><option disabled>Other Hazards · Planned</option></select></label></div>
+        <label class="field">Event<select id="eventSelect" disabled><option value="">Awaiting a data package</option></select></label>
+<div class="search-box" id="mapSearch"><label class="field" for="sectionSearch">Find a road, route, or county</label><div class="search-input"><span aria-hidden="true">⌕</span><input id="sectionSearch" placeholder="Find a road, route, or county" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list"/><kbd>↵</kbd></div><div id="searchResults" class="search-results" role="listbox" aria-label="Matching control sections" hidden></div></div>
+<section id="overviewEconomics" class="overview-economics" aria-label="Area Mobility Impact summary"><h2>Mobility Impact</h2><p id="impactArea"></p><div class="overview-economic-values"><div class="impact-number"><span>Expected-Demand Delay Cost</span><strong id="areaCost">Unavailable</strong><small>2024 USD</small></div><div class="impact-number"><span>Vehicle Delay Hours</span><strong id="areaHours">Unavailable</strong><small>vehicle-hours</small></div></div><button id="impactDetails" class="outline-button" aria-controls="impactDrawer" aria-expanded="false">Area details</button><details class="overview-valuation"><summary>Valuation and sources</summary><p>Conditional expected-demand delay accounting, not total economic loss.</p><p id="impactReview"></p><a id="overviewImpactMethods" class="text-action" href="./docs.html#impact">Methods and sources</a></details></section>
+<p id="areaSupport" class="evidence-note area-support" aria-live="polite"></p><div id="overviewContext"></div><div id="overviewSelection"></div></section>
+        <section id="module-analysis" data-module-content="analysis" hidden></section>
+        <section id="module-layers" data-module-content="layers" hidden><p class="panel-lead">Choose the metric for either map.</p><button id="resetComparison" type="button" class="outline-button">Reset default comparison</button><div id="layerGroups"></div><fieldset id="evacuationControls" class="layer-group" hidden><legend>Map Overlays</legend><p class="evidence-note">Use the shared Map Overlays toolbar directly above the maps.</p></fieldset><div id="temperatureControl" class="temperature-control" hidden><span class="research-label">EXPERIMENTAL WEATHER</span><label class="field">PRISM date labels<select id="temperatureWindow"><option value="legacy_labels">Jan 22–27 · legacy labels</option><option value="temporal_overlap_labels">Jan 22–28 · temporal overlap</option></select></label><p>Daily air-temperature attributes. Separate from accepted Tier 1.</p></div><p id="layerDescription" class="evidence-note"></p></section>
+        <section id="module-timeseries" data-module-content="timeseries" hidden><div id="timeSeriesBody" aria-live="polite"></div></section>
+        <section id="module-forecast" data-module-content="forecast" hidden></section>
+        <section id="module-data" data-module-content="data" hidden></section>
+        <section id="module-about" data-module-content="about" hidden></section>
+      </div>
+      <div id="sidebarResize" class="sidebar-resize layout-handle" role="separator" tabindex="0" aria-label="Resize navigation panel" aria-orientation="vertical" aria-controls="contextPanel" title="Drag to resize panel; arrow keys adjust width"></div>
+    </aside>
+    <main id="main" class="main-workspace" tabindex="-1">
+      <button id="reopenInspector" class="selection-chip" hidden>Selected road · inspect ↗</button>
+      <section id="compareWorkspace" class="compare-workspace" aria-label="Planning and Observation evidence views">
+        <div class="comparison-intro"><div><p class="eyebrow">TWO VIEWS · ONE SELECTED ROAD</p><h2>Planning and Observation</h2><span id="activeEvent"></span></div></div>
+        <div id="berylToolbar" class="comparison-tools" role="group" aria-label="Beryl display and map overlays" hidden>
+          <div class="shared-overlay-tools"><strong>Map Overlays</strong><label><input type="checkbox" data-overlay="track" aria-label="NHC Track" />NHC Track</label><label><input type="checkbox" data-overlay="evacuation" aria-label="TxDOT Evacuation Routes" /><i class="toolbar-route-key" aria-hidden="true"></i>TxDOT Evacuation Routes</label><button type="button" data-overlay-fit="texas">Texas View</button><button type="button" data-overlay-fit="full">Full Track</button><span data-evacuation-status role="status"></span></div>
+          <div class="impact-focus-tools"><label><input type="checkbox" id="impactFocus" aria-describedby="focusSummary" />Beryl Impact Focus</label><output id="focusSummary" aria-live="polite"></output><details class="focus-help"><summary aria-label="Impact Focus information">INFO</summary><p>Exploratory weather and slowdown screen; not proof of hurricane causality. <a href="./docs.html?event=beryl_2024_07#impact-focus">Methods</a></p></details></div><span id="displayModeNotice" role="status"></span><div class="shared-comparison-tools"><label><input type="checkbox" id="commonSupport" aria-describedby="pairedSupport" />Compare on Common Support</label><output id="pairedSupport" aria-live="polite"></output></div>
+        </div>
+        <div class="comparison-maps"><article class="compare-map-shell"><header><span class="side-dot planning-dot"></span><div><h3>Planning</h3><p>What do the planning indicators show?</p></div></header><div id="planningMap" class="map-canvas"></div><div id="planningLegend" class="map-legend compact-legend"></div></article><article class="compare-map-shell"><header><span class="side-dot observed-dot"></span><div><h3>Observation</h3><p>What did matched traffic observations show?</p></div></header><div id="observedMap" class="map-canvas"></div><div id="observedLegend" class="map-legend compact-legend"></div></article></div>
+        <button id="resetCompare" class="compare-reset">⌖ Reset both maps</button><p class="compare-caption">Select either map to update the same section inspector. Planning is context; observed performance is separate evidence.</p>
+      </section>
+      <footer class="map-footer"><span><i class="live-dot"></i><span id="visibleCount">0</span> roadway sections in selected area</span><span id="eventWindow">Event window unavailable</span></footer>
+      <aside id="sectionInspector" class="section-inspector" aria-labelledby="sectionTitle" hidden><div id="inspectorDrag" class="inspector-top" tabindex="0" aria-label="Move section inspector; use arrow keys to reposition" title="Drag here to move inspector"><span class="inspector-grip" aria-hidden="true">⠿</span><p class="eyebrow">SELECTED CONTROL SECTION</p><button id="hideInspector" class="icon-button" aria-label="Hide section inspector">×</button><h2 id="sectionTitle" tabindex="-1"></h2><p id="sectionContext"></p><span id="sectionStatus" class="section-status"></span></div><div class="inspector-tabs" role="tablist" aria-label="Section evidence"><button role="tab" data-inspector-tab="weather" aria-selected="false">Weather</button><button role="tab" data-inspector-tab="planning" aria-selected="false">Planning</button><button role="tab" data-inspector-tab="observed" aria-selected="true">Observation</button><button role="tab" data-inspector-tab="impact" aria-selected="false">Impact</button></div><div id="inspectorBody" class="inspector-body" role="tabpanel" aria-live="polite"></div><div class="inspector-bottom"><button id="clearSelection" class="text-action">Clear selection</button><span>One road · separate evidence</span></div><div id="inspectorResizeWidth" class="inspector-resize-width layout-handle" role="separator" tabindex="0" aria-label="Resize inspector width" aria-orientation="vertical" aria-controls="sectionInspector" title="Drag to resize inspector width"></div><div id="inspectorResizeHeight" class="inspector-resize-height layout-handle" role="separator" tabindex="0" aria-label="Resize inspector height" aria-orientation="horizontal" aria-controls="sectionInspector" title="Drag to resize inspector height"></div><button id="inspectorResizeCorner" class="inspector-resize-corner layout-handle" aria-label="Resize inspector width and height" title="Drag to resize inspector; arrow keys adjust size"></button></aside>
+    </main>
+  </div>
+  <dialog id="impactDrawer" class="impact-dialog" aria-labelledby="impactDrawerTitle"><header><div><p class="eyebrow">AREA / EVENT EVIDENCE</p><h2 id="impactDrawerTitle">Mobility Impact details</h2></div><button id="closeImpact" class="icon-button" aria-label="Close area impact details">×</button></header><div id="impactDrawerBody"></div></dialog>
+  <dialog id="seriesDialog" class="series-dialog" aria-labelledby="seriesDialogTitle"><header><div><p class="eyebrow">OBSERVED TIME SERIES</p><h2 id="seriesDialogTitle">Traffic Performance Over Time</h2></div><button id="closeSeries" class="icon-button" aria-label="Close expanded time series">×</button></header><div id="expandedSeriesBody"></div></dialog>
+  <aside id="guideInvitation" class="guide-invitation" aria-label="Explorer guide invitation" hidden><div><strong>New to this explorer?</strong><p>Take a short tour of the evidence.</p></div><button id="acceptGuide" class="solid-button">Take the guide</button><button id="dismissGuide" class="text-action">Skip</button></aside>
+  <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideTitle" aria-describedby="guideDescription"><div id="guideHighlight" class="guide-highlight" aria-hidden="true"></div><div class="guide-card"><p id="guideProgress" class="eyebrow" aria-live="polite"></p><h2 id="guideTitle"></h2><p id="guideDescription"></p><div class="guide-actions"><button id="guideSkip" class="text-action">Skip tour</button><button id="guidePrevious" class="outline-button">Previous</button><button id="guideNext" class="solid-button">Next</button></div></div></dialog>
+  <noscript>This explorer requires JavaScript to display maps and evidence.</noscript>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "working_CS": 5763,
+  "Q_any_CS": 5698,
+  "formal_curve_coverage_CS": 5573,
+  "accepted_valid_phase_CS": 3805,
+  "raw_censored_CS": 135,
+  "valid_phase_with_clock_gap_CS": 1742,
+  "clock_contiguous_return_baseline_reference_supported_CS": 2738,
+  "entire_detected_phase_clock_contiguous_and_return_supported_CS": 1785,
+  "valid_phases_overlapping_core": 587,
+  "core_overlap_clock_return_supported": 450,
+  "valid_phase_full_period_Q0_fallback_CS": 17,
+  "Q0_method_counts_including_no_detection": {
+    "baseline_period_median_q": 5537,
+    "not_estimated_insufficient_rows": 190,
+    "full_period_median_q_fallback": 36
+  },
+  "recovery_evidence_classes": {
+    "observed_sustained_threshold_return": 2738,
+    "no_detected_sustained_drop_not_proof_of_no_impact": 1768,
+    "accepted_row_return_sampling_ambiguous": 922,
+    "insufficient_observations": 190,
+    "right_censored_sampling_tail_incomplete": 110,
+    "right_censored_at_acquisition_boundary": 18,
+    "baseline_reference_uncertain_full_period_Q0_fallback": 17
+  },
+  "onset_timing_counts": {
+    "after_core": 2245,
+    "not_detected": 1958,
+    "before_core": 1010,
+    "within_core_or_mixed_clock_boundary": 550
+  }
+}

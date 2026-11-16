@@ -2,3 +2,6 @@
 coldwave-demo-v4/** -text
 deploy/pages/*.json text eol=lf
 deploy/pages/*.py text eol=lf
+
+# Preserve every reviewed V5 runtime and scientific payload byte.
+roadway-resilience-v5/** -text

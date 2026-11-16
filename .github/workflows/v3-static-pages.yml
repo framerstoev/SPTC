@@ -27,6 +27,8 @@ jobs:
           python3 "$RUNNER_TEMP/existing-pages-source/coldwave-demo-v3/tests/build_static_review.py" --output "$RUNNER_TEMP/v3-pages"
       - name: Append the reviewed V4 public version
         run: python3 deploy/pages/append_v4.py --artifact "$RUNNER_TEMP/v3-pages"
+      - name: Append the authorized V5 multi-event research version
+        run: python3 deploy/pages/append_v5.py --artifact "$RUNNER_TEMP/v3-pages"
       - uses: actions/upload-pages-artifact@v4
         with:
           path: ${{ runner.temp }}/v3-pages

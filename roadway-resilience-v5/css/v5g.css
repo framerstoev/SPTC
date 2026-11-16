@@ -1,0 +1,30 @@
+/* Compact Beryl-only chrome. No controls are placed over either Leaflet canvas. */
+.comparison-tools {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;padding:9px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--white);font-size:11px;}
+.shared-overlay-tools,.shared-comparison-tools {display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px;}
+.shared-overlay-tools>strong {color:var(--aggie-maroon);font-size:11px;}
+.comparison-tools label {display:inline-flex;align-items:center;gap:6px;cursor:pointer;line-height:1.4;}
+.comparison-tools input {margin:0;min-width:14px;min-height:14px;}
+.comparison-tools button {border:1px solid var(--line);border-radius:4px;padding:5px 8px;background:var(--paper);color:var(--aggie-maroon);font-size:10px;}
+.comparison-tools button:hover {border-color:var(--aggie-maroon);}
+.toolbar-route-key {display:inline-block;width:17px;border-top:2px dashed #7C3AED;}
+#pairedSupport {font-weight:600;color:var(--aggie-maroon);font-size:10px;max-width:380px;}
+.shared-comparison-tools small {font-size:9px;color:var(--muted);}
+[data-evacuation-status]:empty {display:none;}
+[data-evacuation-status] {font-size:10px;color:var(--muted);}
+.observation-details {margin:6px 0 13px;}
+.observation-details>summary {padding:7px 2px;color:var(--aggie-maroon);font-size:11px;cursor:pointer;}
+.compare-map-shell[data-beryl=true]>header {min-height:95px;}
+@media(max-width:1000px){
+  .comparison-tools {gap:6px;padding:7px 10px;font-size:10px;}
+  .shared-comparison-tools {gap:5px 10px;}
+}
+@media(max-width:700px){
+  .comparison-tools {padding:7px 9px;font-size:9px;gap:7px;}
+  .shared-overlay-tools {gap:6px 9px;}
+  .shared-overlay-tools>strong {font-size:10px;}
+  .comparison-tools button {padding:4px 6px;font-size:9px;}
+  .shared-comparison-tools {gap:5px 8px;}
+  #pairedSupport {font-size:9px;max-width:100%;}
+  .shared-comparison-tools small {font-size:8px;}
+  .compare-map-shell[data-beryl=true]>header {min-height:96px;}
+}
