@@ -73,46 +73,6 @@
       q0: b.baseline_reference_Q0, q0_method: b.baseline_reference_method, method_warning_text: status(b.evidence_status)?.label,
       o1_context: true, followup_exclusive: b.followup_exclusive_UTC_conservative } };
   }
-  const T = (...args) => V4Inspector.text(...args);
-  function detail(host, label, value) { const p = T("p", "", "evidence-note"); p.append(T("strong", label + ": "), document.createTextNode(value ?? "Unavailable")); host.append(p); }
-  const fmt = n => V4Core.format(n);
-  function phaseCards(row) {
-    const b = row.o1b, grid = T("div", "", "metric-pair o1b-phase-cards");
-    for (const [label, value, unit] of [["Qualified episode Score", b.qualified_observed_return_episode_score, "943 strong-return cases"],
-      ["Selected minimum Q · raw", b.q_min_smoothed, "Q ratio · see evidence status"], ["Selected Loss Area · raw", b.raw_observed_row_loss_area, "observed-row Q-hours"],
-      ["Threshold Return Time", b.qualified_return_evidence ? b.minimum_to_endpoint_elapsed_hours : null, "hours · clock-supported only"]]) grid.append(V4Inspector.card(label, value, unit));
-    return grid;
-  }
-  function summary(host, row) {
-    const a = row.o1a, b = row.o1b;
-    host.append(T("h3", "Event-Core Performance · O1-A", "evidence-heading"));
-    const grid = T("div", "", "metric-pair o1a-summary");
-    grid.append(V4Inspector.card("Primary-qualified Index", a.primary_qualified_performance_index, "Index · 0–1 · supported core hours"),
-      V4Inspector.card("Raw conditional Index", a.event_core_performance_index_raw_conditional, a.primary_qualified ? "Supported-hour diagnostic" : "Diagnostic only · not a primary map score"),
-      V4Inspector.card("Core Deficit · conditional", a.core_deficit_raw_conditional, a.primary_qualified ? "Positive supported-hour deficit" : "Diagnostic only · partial support"));
-    host.append(grid);
-    detail(host, "Primary qualification", a.primary_qualified ? "Qualified · G75-D12-G12" : unavailable(row).label);
-    detail(host, "Core support", `${fmt(a.valid_core_Q_count)} / ${fmt(a.expected_core_hour_count)} hours; coverage ${fmt(a.core_coverage_fraction)}; longest missing run ${fmt(a.core_longest_missing_gap_hours)} h`);
-    detail(host, "Daily support", a.daily_eligibility_uncertain ? `Unassigned mixed-clock daily eligibility; per-offset diagnostic ${a.native_day_counts_by_offset_json}` : [a.core_day1_Q_count, a.core_day2_Q_count, a.core_day3_Q_count].map(fmt).join(" / ") + " hours · July 7 / 8 / 9");
-    detail(host, "Source clocks / exclusion", `${a.source_clock_offsets_add_to_local} h added to local. ${a.exclusion_or_uncertainty_reason || "No primary exclusion"}`);
-    host.append(T("p", "Accepted O1-V1 · supported-hour speed performance, not complete resilience. Missing hours, demand and probe composition limit interpretation; not calibrated to P2 or January Candidate B.", "evidence-note"));
-    host.append(T("h3", "Event-Anchored Decline & Return · O1-B", "evidence-heading"), T("p", status(b.evidence_status)?.label || b.evidence_status, "phase-chip"));
-    host.append(phaseCards(row));
-    const details = T("details", "", "o1-evidence-details"); details.append(T("summary", "Selected episode, raw Score and uncertainty"));
-    detail(details, "Selected episode", b.selected_episode ? "Yes · accepted event-anchored selection" : "No eligible selected episode; not proof of no impact");
-    detail(details, "Raw selected-episode Score", b.raw_experimental_episode_score === null ? "Unavailable" : `${b.raw_experimental_episode_score} · diagnostic; see qualifications`);
-    detail(details, "Onset / relation to core", `${b.onset_time_UTC || "Unavailable"} · ${b.onset_group || "Unavailable"}`);
-    detail(details, "Minimum timestamp", b.minimum_time_UTC);
-    detail(details, b.qualified_return_evidence ? "Confirmed threshold-return endpoint" : "Raw return / censor endpoint · not confirmed", b.return_or_censor_endpoint_UTC);
-    detail(details, "Primary follow-up", `${b.followup_exclusive_UTC_conservative} exclusive · July 17 native local`);
-    detail(details, "Clock continuity", `Onset ${b.onset_first3_clock_contiguous}; return ${b.return_first3_clock_contiguous}; entire phase ${b.entire_phase_clock_contiguous ?? "Unavailable"}; maximum gap ${fmt(b.phase_maximum_gap_hours)} h`);
-    detail(details, "Censor / provisional minimum", `${b.right_censored} / ${b.minimum_provisional_decline_incomplete}`);
-    detail(details, "Baseline reference", `${b.baseline_reference_method} · Q0 ${fmt(b.baseline_reference_Q0)} · ${fmt(b.baseline_CS_observed_hours)} baseline observations`);
-    detail(details, "Horizon / support", `${fmt(b.full_supported_Q_hours)} full-history Q rows; ${fmt(b.horizon_supported_Q_rows)} in horizon, ${fmt(b.horizon_context_safe_Q_rows)} context-safe; ${fmt(b.horizon_excluded_smoother_context_rows)} excluded smoother-context rows`);
-    detail(details, "B4 comparison", `O1 onset matches historical B4: ${b.selected_onset_matches_accepted_full_period}; historical B4 onset ${b.accepted_full_period_onset_UTC || "Unavailable"}. Selections remain separate.`);
-    host.append(details);
-    host.append(T("p", "Secondary evidence only. Ambiguous or censored endpoints are not confirmed return durations; threshold return is not physical restoration or hurricane causality.", "evidence-note"));
-  }
   function docs(sections) {
     const set=(id,title,paragraphs)=>{const old=sections.find(s=>s[0]===id);if(old){old[1]=title;old[2]=paragraphs;}else sections.push([id,title,paragraphs]);};
     set("quick-start","Quick Start",["Beryl opens with Potential Resilience Score in Planning and Event-Core Observed Performance Index (O1-A) in Observation. Use independent view toggles, Layers or map metric dropdowns. Search/click a road for the shared Inspector and Time Series.","O1-B is secondary Event-Anchored Decline & Return evidence. Full-Period Candidate B remains historical/exploratory. January retains its original Candidate B default, scientific values and display behavior."]);
@@ -125,5 +85,5 @@
     set("version","V5G Local Presentation Review",["V5G organizes the accepted O1-V1 presentation, adds an honest common-support display mask, moves overlays outside the maps and changes only the authorized Beryl score colors. Frozen scientific outputs, all served scientific assets and published January are untouched. This is not a public release or deployment."]);
     const recovery=sections.find(s=>s[0]==="recovery");if(recovery)recovery[1]="Historical B4 Recovery Evidence";
   }
-  root.V4O1 = Object.freeze({ statuses, status, metrics, load, unavailable, context, valid, payload, summary, phaseCards, docs });
+  root.V4O1 = Object.freeze({ statuses, status, metrics, load, unavailable, context, valid, payload, docs });
 })(window);

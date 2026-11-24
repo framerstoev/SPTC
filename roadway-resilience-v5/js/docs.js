@@ -21,7 +21,7 @@
     document.querySelector(".docs-lead").textContent = "A guide to the interface, accepted methods and limits of the Hurricane Beryl July 2024 case study.";
     ["returnMap", "backToMap"].forEach(id => document.getElementById(id).href = "./?event=beryl_2024_07");
   }
-  sections.push(["public-release", "Public Research Release and Sources", ["V5N public research release: processed CS-level indices, trajectories and conditional summaries, authorized by the researcher as covered by institutional publication permissions. This record is not an independently verified third-party license exception. Original research manifests and qualifications remain unchanged.", "INRIX is the source of the NPMRDS traffic observations used to derive these research summaries. This material is based upon work supported by the Federal Highway Administration under contract number 693JJ3-22-C-000008. Any opinions, findings and conclusions or recommendations expressed in this publication are those of the author(s) and do not necessarily reflect the views of the Federal Highway Administration.", "TxDOT control-section geometry and roadway context: Texas Department of Transportation, Transportation Planning and Programming, Data Management. Source-vintage/download metadata is incomplete; the accepted historical geometry is preserved, without substituting current public services. The researcher confirms the project holds the institutional permissions for these roadway visualizations. No commercial resale or official agency endorsement is claimed.", "PRISM Group, Oregon State University, https://prism.oregonstate.edu. Original access dates not established in available provenance are explicitly unresolved metadata; a processing date is not an access date. ERA5: Copernicus Climate Change Service (C3S); NOAA/NHC best-track context. No raw TMC speed/travel-time tables, volume-profile archives or economic ledgers are served."]]);
+  sections.push(["public-release", "Public Research Release and Sources", ["V5 public research release: processed CS-level indices, trajectories and conditional summaries, authorized by the researcher as covered by institutional publication permissions. This record is not an independently verified third-party license exception. Original research manifests and qualifications remain unchanged.", "INRIX is the source of the NPMRDS traffic observations used to derive these research summaries. This material is based upon work supported by the Federal Highway Administration under contract number 693JJ3-22-C-000008. Any opinions, findings and conclusions or recommendations expressed in this publication are those of the author(s) and do not necessarily reflect the views of the Federal Highway Administration.", "TxDOT control-section geometry and roadway context: Texas Department of Transportation, Transportation Planning and Programming, Data Management. Source-vintage/download metadata is incomplete; the accepted historical geometry is preserved, without substituting current public services. The researcher confirms the project holds the institutional permissions for these roadway visualizations. No commercial resale or official agency endorsement is claimed.", "PRISM Group, Oregon State University, https://prism.oregonstate.edu. Original access dates not established in available provenance are explicitly unresolved metadata; a processing date is not an access date. ERA5: Copernicus Climate Change Service (C3S); NOAA/NHC best-track context. No raw TMC speed/travel-time tables, volume-profile archives or economic ledgers are served."]]);
   const presentationEvent = new URL(location.href).searchParams.get("event") === "beryl_2024_07" ? "beryl_2024_07" : "coldwave_2026_01";
   const layerSection = sections.find(section => section[0] === "layers");
   const layerText = V4Metrics.docs(presentationEvent);
@@ -53,8 +53,29 @@
   sections.forEach(section => { section[2] = section[2].map(text => text.replace("Only the registered January 2026 cold-wave case is packaged. Other hazards are disabled placeholders.", "January 2026 and Hurricane Beryl July 2024 are packaged in the same native application. Other hazard types remain planned.").replace("Only January 2026 is currently supported; multi-event analyses and forecasting remain future work.", "January and Beryl have event-specific accepted methods and support; forecasting remains planned research.")); });
   V4J.docs(sections,presentationEvent);
   const publicSources=sections.find(s=>s[0]==="sources");
-  if(publicSources)publicSources[2]=publicSources[2].map(t=>t.replace("Beryl remains local research preview; January retains its separate public-release record.","January and Beryl processed research products are publicly released under the separate V5 publication record; original scientific acceptance and qualifications remain unchanged."));
-  setChapter("version","V5 Public Research Release",["The accepted V5N native dashboard is published as a separate multi-event research release. January and Beryl retain distinct accepted methods and support. Original January V4 remains available at its existing URL. Public publication does not imply official agency adoption or change scientific acceptance."]);
+  if(publicSources)publicSources[2]=publicSources[2].map(t=>t.replace(
+    "Beryl remains local research preview; January retains its separate public-release record.",
+    "The V5 publication record covers both events' processed research products."));
+  setChapter("version","V5 Public Research Dashboard",["This multi-event dashboard includes the January 2026 cold wave and Hurricane Beryl. Road comparisons show separate Planning and Observed standings for the same qualified Beryl roads. The map classifications, accepted measurements and eligibility rules follow each event's methods. The original January V4 remains available at its existing URL."]);
+  const publicTerms=[
+    [/O1-A/g,"event-core performance"], [/O1-B/g,"event-anchored slowdown"],
+    [/O1-V1/g,"accepted observed evidence"], [/Candidate B/g,"selected-phase method"],
+    [/\bB4\b/g,"the original full-history analysis"],
+    [/\bP2\b/g,"Planning Potential"], [/\bE2\b/g,"mobility impact"],
+    [/observed_curve_resilience_score_v0/g,"the selected-phase performance score"],
+    [/o1a\.primary_qualified_performance_index|primary_qualified_performance_index/g,"the qualified storm-period index"],
+    [/o1a\.core_deficit_raw_conditional/g,"average positive storm-period speed loss"],
+    [/o1b\.qualified_observed_return_episode_score/g,"the qualified slowdown score"],
+    [/o1b\.q_min_smoothed/g,"the smoothed minimum speed ratio"],
+    [/o1b\.raw_observed_row_loss_area/g,"observed-row cumulative speed loss"],
+    [/o1b\.minimum_to_endpoint_elapsed_hours/g,"the minimum-to-return interval"],
+    [/qualified_return_evidence/g,"clock-supported threshold-return evidence"]
+  ];
+  const publicText=text=>publicTerms.reduce((copy,[pattern,label])=>copy.replace(pattern,label),text);
+  for (const section of sections) {
+    section[1]=publicText(section[1]);
+    section[2]=section[2].map(publicText);
+  }
   const host = document.getElementById("docsSections"), nav = document.getElementById("docsNav"), search = document.getElementById("docsSearch");
   function text(tag, content) { const el = document.createElement(tag); el.textContent = content; return el; }
   sections.forEach(([id, title, paragraphs], i) => {

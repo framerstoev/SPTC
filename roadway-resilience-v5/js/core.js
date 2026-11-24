@@ -48,10 +48,10 @@
     return Number.isFinite(out[0][0]) ? out : [[25.5, -106.7], [36.6, -93.4]];
   }
   function statusLabel(row) { return root.V4J.status(row,row?.event_id==="beryl_2024_07"); }
-  function store(initial) {
+  function store(initial, normalize = value => value) {
     let state = Object.freeze({ ...initial });
     const listeners = new Set();
-    return { get: () => state, set(patch) { const old = state; state = Object.freeze({ ...state, ...patch }); listeners.forEach(fn => fn(state, old)); }, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
+    return { get: () => state, set(patch) { const old = state; state = Object.freeze(normalize({ ...state, ...patch })); listeners.forEach(fn => fn(state, old)); }, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
   }
   root.V4Core = Object.freeze({ metrics, number, format, percentile, scoreBreaks, bucket, value, mapValue, bounds, statusLabel, store });
 })(typeof window !== "undefined" ? window : globalThis);

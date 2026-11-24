@@ -23,12 +23,13 @@
           pointToLayer: (feature, position) => L.circleMarker(position, { pane: "nhcPoints", renderer: L.svg({ pane: "nhcPoints" }), radius: 5, color: "#7a351c", fillColor: "#f4cf87", fillOpacity: 1, weight: 1.5, className: "nhc-track-point" }),
           onEachFeature(feature, point) {
             const p = feature.properties, host = T("div", "", "nhc-popup");
-            host.append(T("strong", "NHC best-track observation"), T("p", p.timestamp_utc + " · UTC"));
+            const stamp = p.timestamp_utc.slice(0,16).replace("T"," ") + " UTC";
+            host.append(T("strong", "NHC best-track observation"), T("p", stamp));
             const list = T("dl", "", "coverage-list");
             for (const [label, value] of [["Status", p.STORMTYPE], ["Sustained wind", `${p.INTENSITY ?? "Unavailable"} kt`], ["MSLP", `${p.MSLP ?? "Unavailable"} · source value`], ["Latitude / longitude", `${p.LAT}, ${p.LON}`]]) list.append(T("dt", label), T("dd", value));
-            host.append(list, T("p", "Storm-center attributes, not roadway wind. Pressure unit is not declared in the accepted B5 display layer.", "evidence-note"));
+            host.append(list, T("p", "Wind describes the storm. The pressure source does not specify a unit.", "evidence-note"));
             const popupPadding=()=>L.point(matchMedia("(max-width:700px)").matches?10:225,10);
-            point.bindPopup(host, { maxWidth: 300, autoPanPaddingBottomRight: popupPadding() }).bindTooltip(p.timestamp_utc + " · " + p.STORMTYPE);
+            point.bindPopup(host, { maxWidth: 300, autoPanPaddingBottomRight: popupPadding() }).bindTooltip(stamp + " · " + p.STORMTYPE);
             point.on("popupopen",({popup})=>{
               const padding=popupPadding();
               if(!padding.equals(popup.options.autoPanPaddingBottomRight)){popup.options.autoPanPaddingBottomRight=padding;popup.update();}

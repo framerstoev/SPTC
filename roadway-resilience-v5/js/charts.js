@@ -36,9 +36,18 @@
     const datasets=[line("Raw Q(t)",series.q,"#a5b2b675",1),line("Accepted smoothed Q(t)",series.q_smoothed,"#176663",2),
       {label:"Q=1 baseline",data:[{x:times[0],y:1},{x:times.at(-1),y:1}],borderColor:"#8b9690",borderDash:[3,3],borderWidth:1,pointRadius:0}];
     if(Number.isFinite(meta.q0))datasets.push({label:"Detection threshold",data:[{x:times[0],y:.9*meta.q0},{x:times.at(-1),y:.9*meta.q0}],borderColor:"#b28d57",borderDash:[4,3],borderWidth:1,pointRadius:0});
-    return new Chart(canvas,{type:"line",plugins:[phaseLines],data:{labels,datasets},options:{animation:false,responsive:true,maintainAspectRatio:false,normalized:false,
-      interaction:{mode:"nearest",axis:"x",intersect:false},plugins:{legend:{display:false},phaseLines:{markers,core:core.start&&core.end?core:null},
-      tooltip:{callbacks:{title:items=>(items[0].raw.timestamp?.replace("T"," ")||dateLabel(items[0].parsed.x))+(payload.clock==="UTC"?" · UTC":" · delivered TMC-local")}}},
+    const guides = options.gapControl ? root.V5Q.chartGuides({
+      control: options.gapControl, original: options.original, row, index: options.index, times, min, max
+    }) : null;
+    const plugins = guides ? [phaseLines, guides.plugin] : [phaseLines];
+    return new Chart(canvas,{type:"line",plugins,data:{labels,datasets},options:{animation:false,responsive:true,maintainAspectRatio:false,normalized:false,
+      interaction:{mode:guides ? "v5qObservedNearest" : "nearest",axis:"x",intersect:false},plugins:{legend:{display:false},phaseLines:{markers,core:core.start&&core.end?core:null},
+      tooltip:{...(guides ? {filter: guides.filter} : {}),callbacks:{...(guides ? {label: guides.label} : {}),title:items=>{
+        const item = items[0];
+        if (!item) return "";
+        return (item.raw.timestamp?.replace("T"," ") || dateLabel(item.parsed.x)) +
+          (payload.clock === "UTC" ? " · UTC" : " · delivered TMC-local");
+      }}}},
       scales:{x:{type:"linear",min,max,ticks:{maxTicksLimit:5,maxRotation:0,font:{size:9},callback:value=>dateLabel(value).slice(0,5).replace("-","/")},grid:{display:false}},
       y:{min:0,max:1.5,title:{display:true,text:"Q(t)",font:{size:10}},ticks:{font:{size:9},maxTicksLimit:4},grid:{color:"#e5e9e4"}}}}});
   }

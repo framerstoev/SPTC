@@ -1,7 +1,7 @@
 (async function () {
   "use strict";
   const C = V4Core, $ = id => document.getElementById(id);
-  const store = C.store({ eventId: "coldwave_2026_01", seriesRange: "event", commonSupport: false, impactFocus: false, displayModeNotice: "", trackVisible: true, workspace: "compare", planningVisible: true, observationVisible: true, evacuationVisible: false, panel: null, inspectorOpen: false, area: "texas", layer: "potential", planningLayer: "potential", observedLayer: "observed", temperatureWindow: "legacy_labels", selectedId: null, inspectorTab: "observed" });
+  const store = C.store({ eventId: "coldwave_2026_01", seriesRange: "event", commonSupport: false, impactFocus: false, displayModeNotice: "", trackVisible: true, workspace: "compare", planningVisible: true, observationVisible: true, evacuationVisible: false, panel: null, inspectorOpen: false, area: "texas", layer: "potential", planningLayer: "potential", observedLayer: "observed", temperatureWindow: "legacy_labels", selectedId: null, inspectorTab: "observed" }, V5R.fallback);
   const empty = { mode: V4Data.PUBLIC, manifest: {}, rows: [], byId: new Map(), geometry: { type: "FeatureCollection", features: [] }, counties: [], countySummaries: {}, eventSummary: null, curveCache: new Map() };
   let data;
   try { data = await V4Events.load(new URL(location.href).searchParams.get("event")); } catch (error) {
@@ -103,7 +103,7 @@
   store.subscribe((state, old) => {
     if (suspended) return;
     if (state.planningVisible !== old.planningVisible || state.observationVisible !== old.observationVisible) renderViews(old);
-    if (["selectedId", "inspectorTab", "temperatureWindow", "inspectorOpen", "panel", "seriesRange", "seriesPhaseContext", "observedLayer"].some(key => state[key] !== old[key])) {
+    if (["selectedId", "inspectorTab", "temperatureWindow", "inspectorOpen", "panel", "seriesRange", "seriesPhaseContext", "observedLayer", "planningLayer"].some(key => state[key] !== old[key])) {
       inspector.render();
 
     }

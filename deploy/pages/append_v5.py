@@ -23,7 +23,10 @@ def append(artifact: Path, repo: Path | None = None):
     assert approval['authorization']['reference']=='8ff5010f-f105-4b16-ac16-2b033ebfa2d1'
     assert approval['authorization']['independently_verified_license_exception'] is False
     files = {p.relative_to(source).as_posix(): p for p in source.rglob('*') if p.is_file()}
-    assert len(files)==manifest['file_count']==9607 and set(files)==set(manifest['files'])
+    assert len(files)==manifest['file_count']==9617 and set(files)==set(manifest['files'])
+    presentation_assets = {"data/v5p/relative.json", "data/v5q/short-gaps.json", "data/v5t/percentiles.json"}
+    assert set(approval["added_presentation_data"]) == presentation_assets
+    assert presentation_assets <= set(files)
     assert not any(p.is_symlink() for p in source.rglob('*'))
     secret = re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-(?:proj-)?[A-Za-z0-9_-]{35,}')
     private = re.compile(rb'(?<![A-Za-z])[A-Za-z]:[\\/]|file://|/Users/|/home/[^/]+/|\.local/|data/tier3/',re.I)

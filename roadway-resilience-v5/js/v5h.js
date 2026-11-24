@@ -22,61 +22,20 @@
     document.getElementById("displayModeNotice").textContent=s.displayModeNotice||"";
 
   }
-  function card(label,value,unit,id){const node=V4Inspector.card(label,value,unit);if(id)node.dataset.displayField=id;return node;}
-  function observationSummary(host,row){
-    const b=row.o1b,a=row.o1a,grid=T("div","","metric-pair road-summary");host.append(T("h3","Observed Slowdown","evidence-heading"));
-    grid.append(card("Slowdown Score",b.qualified_observed_return_episode_score,"0–1 · higher = smaller selected slowdown","score"),
-      card("Lowest Speed Ratio",b.qualified_return_evidence?b.q_min_smoothed:null,"Smoothed speed ratio · baseline = 1","minimum"),
-      card("Total Observed Slowdown",b.qualified_return_evidence?b.raw_observed_row_loss_area:null,"Observed-row speed-deficit units · not money","loss"));
-    const returned=card("Time to Threshold Return",b.qualified_return_evidence?b.minimum_to_endpoint_elapsed_hours:null,"Hours from minimum to observed threshold return","return");
-    if(!b.qualified_return_evidence)returned.querySelector("strong").textContent="Return Not Confirmed";
-    grid.append(returned);host.append(grid,T("p",status(row),"phase-chip"));
-    host.append(T("p",`Data Available: ${fmt(a.valid_core_Q_count,0)} / ${fmt(a.expected_core_hour_count,0)} core hours; ${fmt(b.full_supported_Q_hours,0)} full-history observations. Missing observations remain gaps.`,"evidence-note"));
-    host.append(card("Traffic Performance",a.primary_qualified_performance_index,"Separate supported-hour core measure · 0–1","performance"));
-    host.append(T("p","Selected event slowdown evidence; not a whole-road rating, physical repair time or proof of hurricane causality. No eligible slowdown does not prove no impact.","evidence-note"));
-    host.append(T("p",row.impactFocus.focus?"In exploratory Impact Focus: period weather screen + selected event slowdown.":"Outside exploratory Impact Focus; this does not mean unaffected.","evidence-note"));
-  }
-  function planning(data,row,host){
-    host.append(T("h3","Planning Context","evidence-heading"));const grid=T("div","","metric-pair planning-main");
-    for(const [key,label] of [["potential","Planning Score"],["weather","Storm Exposure"],["network","Network Risk"],["aadt_context","Annual Average Daily Traffic"],["precipitation","Rainfall"],["gust","Peak Wind Gust"]]){
-      const node=V4Presentation.metricCard(data,row,key);node.querySelector("span").textContent=label;
-      if(key==="aadt_context"){const value=data.networkContext?.[row.id]?.AADT_CS;node.querySelector("strong").textContent=fmt(value,0);node.querySelector("small").textContent="vehicles/day · fixed inventory reference";node.dataset.aadtValue=value==null?"":String(value);}
+  function planning(data, row, host) {
+    host.append(T("h3", "Planning Context", "evidence-heading"));
+    const grid = T("div", "", "metric-pair planning-main");
+    for (const key of ["weather","network","aadt_context","precipitation","gust"]) {
+      const node = V4Presentation.metricCard(data, row, key);
+      if (key === "aadt_context") {
+        const value = data.networkContext?.[row.id]?.AADT_CS;
+        node.querySelector("strong").textContent = fmt(value, 0);
+        node.querySelector("small").textContent = "vehicles/day";
+        node.dataset.aadtValue = value == null ? "" : String(value);
+      }
       grid.append(node);
     }
-    host.append(grid,T("p","AADT uses mixed 2001–2024 inventory source years; per-road source year was not retained. It is a fixed network-planning reference, not vehicles actually observed during Beryl. Economic expected-demand inputs have separate provenance.","evidence-note"));
-    host.append(T("p","Storm Exposure is the accepted Planning rain/gust index. The exploratory Impact Focus uses a separate fixed weather-plus-slowdown screen.","evidence-note"));
-    const details=T("details","","planning-details");details.append(T("summary","How Planning Score Is Calculated"));const fields=T("div","","metric-pair");
-    for(const key of ["normalized_precipitation","normalized_gust","consequence","redundancy","network","planning_risk"])fields.append(V4Presentation.metricCard(data,row,key));
-    details.append(fields,T("p","Accepted P2: H = .50P + .50G; Risk = .65H + .35NETRISK_LITE; Potential = 1 − Risk. Tier 2 Consequence = .40 normalized endpoint connectivity + .60 normalized log AADT; Network Risk = .60 Consequence + .40(1 − Redundancy). Redundancy = .50 alternative length + .20 alternative count + .30 alternative routes in original normalized units. Original statewide normalization and weights are unchanged. AADT is not added again as a direct P2 term.","evidence-note"));host.append(details);
-  }
-  function evidence(data,store,host,row,large,current,receive,rerender,inspector){
-    host.replaceChildren();if(!row){host.append(T("h2","Choose a roadway","module-title"),T("p","Select a road to explore its observed traffic history.","panel-lead"));return;}
-    if(inspector)observationSummary(host,row);
-    if(!large)host.append(T(inspector?"h3":"h2","Traffic Performance Over Time",inspector?"evidence-heading":"module-title"));
-    host.append(T("p",`CS_${row.id} · ${row.county_name} County · UTC observations`,"curve-status"));
-    const which=V4O1.context(store),valid=V4O1.valid(row,which);
-    host.append(T("p",which==="o1b"?"Event Slowdown":"Historical Slowdown","phase-chip"));
-    const research=T("details","","research-details");research.append(T("summary","Advanced / Methods and Evidence"));
-    V4O1.summary(research,row);const core=T("div","","metric-pair");for(const key of ["observed","core_minimum","coverage"])core.append(V4Presentation.metricCard(data,row,key));research.append(core);
-    if(!row.has_curve){host.append(T("p","Limited Traffic Data · no supported curve. Unavailable evidence is not zero resilience.","evidence-note"),research);return;}
-    const controls=T("div","","series-ranges");
-    for(const [value,label] of [["event","Hurricane Period"],["full","Full History"]]){const button=T("button",label,"outline-button");button.type="button";button.dataset.seriesRange=value;button.setAttribute("aria-pressed",String(store.get().seriesRange===value));button.addEventListener("click",()=>store.set({seriesRange:value}));controls.append(button);}
-    const comparison=T("details","","episode-comparison");comparison.append(T("summary","Advanced / Compare Episodes"));const episodeButtons=T("div","","series-ranges");
-    for(const [value,label] of [["o1b","Event Slowdown"],["b4","Historical Slowdown"]]){const button=T("button",label,"outline-button");button.type="button";button.dataset.phaseContext=value;button.disabled=!V4O1.valid(row,value);button.setAttribute("aria-pressed",String(which===value));button.addEventListener("click",()=>store.set({seriesPhaseContext:value,seriesRange:"event"}));episodeButtons.append(button);}
-    comparison.append(episodeButtons,T("p","Event Slowdown uses accepted July 7–9 onset and July 17 exclusive follow-up. Historical Slowdown is the original full-acquisition selection. Display ranges do not change either selected episode.","evidence-note"));
-    const wrap=T("div","","chart-wrap"+(large?" expanded-chart":"")),canvas=document.createElement("canvas");canvas.setAttribute("role","img");canvas.setAttribute("aria-label","Traffic Performance Over Time");wrap.append(canvas);
-    const legend=T("p","Observed speed ratio · smoothed speed ratio · baseline = 1 · event period. Selected slowdown/minimum/return or censor markers retain source evidence.","evidence-note");
-    const message=T("p","Loading traffic history…","curve-status"),jump=T("button","Show Selected Slowdown ↗","text-action phase-jump");jump.type="button";jump.dataset.phaseJump="true";jump.hidden=true;jump.addEventListener("click",()=>store.set({seriesRange:"phase"}));
-    host.append(controls,jump,legend,wrap,message);
-    if(!large){const expand=T("button","Expand Traffic History ↗","outline-button");expand.type="button";expand.id=inspector?"expandInspectorSeries":"expandSeries";expand.addEventListener("click",()=>{document.getElementById("seriesDialogTitle").textContent="Traffic Performance Over Time";document.getElementById("seriesDialog").showModal();root.v4App.timeSeries.render();});host.append(expand);}
-    host.append(comparison,research);
-    V4Data.curve(data,row.id).then(original=>{
-      if(!current()||!canvas.isConnected)return;const payload=V4O1.payload(original,row,which),chart=V4Charts.draw(canvas,payload,row,{data,range:store.get().seriesRange||"event",phaseValid:valid});chart.options.scales.y.title.text="Speed Ratio";chart.update("none");receive(chart);
-      const meta=payload.metadata||{},times=[meta.onset_time,meta.min_time,meta.recovery_end_time].filter(Boolean).map(V4Charts.clock);jump.hidden=!valid||!times.some(time=>time<chart.options.scales.x.min||time>chart.options.scales.x.max);
-      research.append(T("p",which==="o1b"?"Active episode source: accepted O1-B, July 17 exclusive follow-up; right-censored/ambiguous endpoints are not confirmed recovery.":V4Events.curveNote(row),"evidence-note"));
-      research.append(T("p",`Onset: ${meta.onset_time||"Unavailable"}; minimum: ${meta.min_time||"Unavailable"}; endpoint: ${meta.recovery_end_time||"Unavailable"}. Baseline reference: ${meta.q0_method||"Unavailable"}. ${meta.method_warning_text||""}`,"evidence-note"),which==="o1b"?V4O1.phaseCards(row):V4Presentation.phaseCards(data,row,meta));
-      message.textContent=`${payload.series.q.filter(Number.isFinite).length.toLocaleString("en-US")} observed values; missing hours remain gaps. Use Show Selected Slowdown for later returns outside this display.`;
-    }).catch(()=>{if(current()){wrap.hidden=true;message.textContent="Traffic history could not be loaded; source summaries remain available.";}});
+    host.append(grid, root.V5R.docLink(data,"Planning methods", "planning"));
   }
   function docs(sections){
     const set=(id,title,paragraphs)=>{const old=sections.find(s=>s[0]===id);if(old){old[1]=title;old[2]=paragraphs;}else sections.push([id,title,paragraphs]);};
@@ -88,5 +47,5 @@
     set("curves","Traffic Performance Over Time",["Hurricane Period and Full History change only the chart viewport. Original B4 raw Q(t), six-observed-row display smoothing, calendar null gaps and 1009 original slots are reused unchanged. Accepted O1-B onset July 7–9 native local and follow-up July 17 exclusive are not recalculated or shortened by the display. Show Selected Slowdown reveals accepted later returns beyond the default core context.","Advanced / Compare Episodes switches Event Slowdown (accepted O1-B selection) and Historical Slowdown (original full-period B4). Separate source markers, timestamps, Score/phase cards and censor qualifications remain in Advanced / Methods and Evidence. Threshold return is observational evidence, not physical road repair or complete recovery."]);
     set("version","V5H Local Presentation Review",["This phase changes display defaults, language and an explicitly exploratory focus mask only. It does not amend O1/P2/economic acceptance, recompute any score or publish data. Original B4/B5/January, frozen research, AADT inputs and economic totals remain unchanged."]);
   }
-  root.V4H=Object.freeze({primary,labels,status,loadFocus,focusCounts,syncFocus,planning,observationSummary,evidence,docs});
+  root.V4H=Object.freeze({primary,labels,status,loadFocus,focusCounts,syncFocus,planning,docs});
 })(window);

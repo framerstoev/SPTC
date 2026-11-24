@@ -30,7 +30,7 @@
     return byId;
   }
   function label(data) { return data.mode === STAGED ? "Full research staging · not approved for publication" : data.mode === FULL ? "Research Dashboard" : data.mode === LOCAL ? "Local research preview" : "Public showcase"; }
-  function reviewLabel(data) { if (data.beryl) return "Qualified research · P2 / E2 / O1-V1"; return data.mode === FULL ? "Published research release" : `${data.manifest.status || "Unavailable"} / ${data.manifest.approval_status || "NOT_APPROVED"}`; }
+  function reviewLabel(data) { if (data.beryl) return "Beryl research results"; return data.mode === FULL ? "Published research release" : "Local research preview"; }
   function validatePolicy(policy) {
     if (![STAGED, FULL].includes(policy.mode)) throw new Error("Unsupported full package mode");
     if (policy.mode === STAGED) {

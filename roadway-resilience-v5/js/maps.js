@@ -52,7 +52,14 @@
         path.on("click", () => { if (visible(row)) select(row.id); });
         path.bindTooltip(() => {
           const el = document.createElement("div"); const strong = document.createElement("strong"); strong.textContent = `CS_${row.id} · ${row.route || "Roadway"}`;
-          const small = document.createElement("small"); small.textContent = `${row.county_name} County · ${C.format(C.mapValue(row, currentMetric(name), store.get().temperatureWindow))} ${C.metrics[currentMetric(name)].unit}`; el.append(strong, small); const metric=C.metrics[currentMetric(name)];if(metric.kind==="category")small.textContent=`${row.county_name} County · ${metric.categories.find(item=>item.value===V4Metrics.mapRaw(row,metric))?.label || "Unavailable"}`;else if(metric.family==="o1a"&&C.mapValue(row,metric.key)===null)small.textContent=`${row.county_name} County · ${V4O1.unavailable(row).label}`; if (currentMetric(name) === "recovery") { const p=document.createElement("small"), evidence=V4Presentation.recoveryEvidence(data,row); p.textContent=(evidence.status || evidence.note)+` · Source endpoint interval: ${C.format(C.value(row,"recovery"))} h`;el.append(p); } return el;
+          const small = document.createElement("small"); small.textContent = `${row.county_name} County · ${C.format(C.mapValue(row, currentMetric(name), store.get().temperatureWindow))} ${C.metrics[currentMetric(name)].unit}`; el.append(strong, small); const metric=C.metrics[currentMetric(name)];if(metric.kind==="category")small.textContent=`${row.county_name} County · ${metric.categories.find(item=>item.value===V4Metrics.mapRaw(row,metric))?.label || "Unavailable"}`;else if(metric.family==="o1a"&&C.mapValue(row,metric.key)===null)small.textContent=`${row.county_name} County · ${root.V5R.support(row)}`; if (data.beryl && ["potential","o1a"].includes(metric.key)) {
+            const value = C.mapValue(row, metric.key, store.get().temperatureWindow);
+            const bucket = C.bucket(value, limits(metric.key));
+            const description = bucket === null ? (metric.key==="o1a" ? root.V5R.support(row) : "Planning score unavailable") :
+              metric.label + " · Fixed map class " + (bucket + 1);
+            small.textContent = row.county_name + " County · " + description;
+          } if (currentMetric(name) === "recovery") { const p=document.createElement("small"), evidence=V4Presentation.recoveryEvidence(data,row); const interval = C.value(row,"recovery"); p.textContent = evidence.status ||
+              (interval === null ? "No supported endpoint interval" : `${C.format(interval)} h to threshold return`);el.append(p); } return el;
         }, { sticky: true });
         path.on("mouseover", () => { if (visible(row)) path.setStyle({ weight: 4, opacity: 1 }); });
         path.on("mouseout", () => path.setStyle(style(row, name, limits(currentMetric(name)))));
