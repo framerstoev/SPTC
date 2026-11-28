@@ -25,5 +25,4 @@
 .v5r-support, .v5r-status { font-size: 12px; font-weight: 600; color: var(--ink); margin: 4px 0; }
 .v5r-slowdown { margin: 10px 0; font-size: 12px; }
 .v5r-slowdown h4 { margin: 0 0 3px; font-size: 12px; }
-.v5r-context { font-size: 11px; color: var(--muted); margin: 4px 0; }
 #inspectorBody .research-details { margin-top: 8px; }

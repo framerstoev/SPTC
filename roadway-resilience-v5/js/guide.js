@@ -9,7 +9,7 @@
     const steps = [
       { title: "Explore roadway performance", description: "Compare Planning and Observation, then select a road for details. Use Docs for methods and Guide to replay this tour.", target: ".brand", panel: null },
       { title: "Start with the map", description: "Read accepted roadway evidence. Search for a road, zoom or reset the selected area. Missing values remain unavailable.", target: "#planningMap", panel: null },
-      { title: "Seven modules, one map", description: "Overview, Analysis, Layers, Time Series, Forecast, Data and About open contextual panels. Click a module again to collapse it without losing map state.", target: "#moduleRail", panel: null },
+      { title: "Explore the side panels", description: "Overview, Layers, Time Series, Forecast, Data and About open contextual panels. Click a module again to collapse it without losing map state.", target: "#moduleRail", panel: null },
       { title: "Choose your analysis context", description: "Overview selects Area, Hazard Type and Event. Choose January winter weather or Hurricane Beryl from the available events; unavailable hazards cannot run.", target: "#module-overview", panel: "overview" },
       { title: "Choose a layer; read its units", description: "Layers keeps weather, planning, observed and mobility metrics separate. Additional scientific layers and temperature context are in Advanced Analysis.", target: "#module-layers", panel: "layers" },
       { title: "Select a road and inspect its evidence", description: "Use this search or click a roadway. Weather, Planning, Observed and Impact share one selected section. Time Series shows its accepted Q(t) when supported.", target: "#mapSearch", panel: "overview" },

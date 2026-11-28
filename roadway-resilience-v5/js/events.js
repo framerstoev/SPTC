@@ -29,6 +29,7 @@
     if (!cache.has(key)) cache.set(key, (key === "beryl_2024_07" ? loadBeryl() : D.load()).then(data => ({ ...data, eventId: key })).catch(error => { cache.delete(key); throw error; }));
     const data={...await cache.get(key)};
     await root.V5P.attach(data);
+    if (data.beryl) data.peakLossById = await root.V4PeakLoss.load(data).catch(() => null);
     if(!data.networkContext){const manifest=await D.json("./data/network-context-manifest.json");data.networkContext=await D.json("./data/network-context.json",document.baseURI,manifest.file);}
     return data;
   }

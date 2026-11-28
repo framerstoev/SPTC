@@ -74,11 +74,13 @@ body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; 
 .compare-map-shell>header { min-height: 62px; }
 .compare-map-shell .map-canvas { min-height: 0; }
 .comparison-maps { min-height: 0; }
-.series-dialog { width: min(1100px, calc(100% - 32px)); max-height: 90dvh; border: 1px solid var(--line); border-radius: 8px; padding: 26px; color: var(--ink); }
+.series-dialog { width: min(1100px, calc(100% - 32px)); height: min(760px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; color: var(--ink); }
+.series-dialog[open] { display: flex; flex-direction: column; }
 .series-dialog::backdrop { background: #173b3d66; }
-.series-dialog>header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 15px; }
-.series-dialog h2 { font: 27px Georgia,serif; margin-top: 8px; }
-.expanded-chart { height: 42dvh; min-height: 220px; }
+.series-dialog>header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 5px; }
+.series-dialog h2 { font: 27px Georgia,serif; margin: 0; }
+#expandedSeriesBody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.expanded-chart { position: relative; height: auto; min-height: 0; flex: 1; margin: 0; }
 .solid-button { background: var(--ink); color: white; border-radius: 4px; min-height: 42px; padding: 10px 16px; font-size: 11px; }
 .solid-button:hover { background: var(--teal); color: white; }
 .guide-invitation { position: fixed; left: 50%; bottom: 118px; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; width: max-content; max-width: calc(100% - 32px); background: white; box-shadow: var(--shadow); border: 1px solid var(--line); border-radius: 7px; padding: 14px 18px; z-index: 1900; }
@@ -171,6 +173,5 @@ body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; 
   .guide-card h2 { font-size: 24px; } .guide-card>p:not(.eyebrow) { font-size: 11px; }
   .guide-card-top { top: 108px; bottom: auto; }
   .guide-invitation { bottom: 174px; flex-wrap: wrap; gap: 9px; padding: 14px; max-width: calc(100% - 40px); } .guide-invitation>div { width: 100%; }
-  .series-dialog { padding: 18px; max-height: 88dvh; } .series-dialog h2 { font-size: 22px; }
-  .expanded-chart { height: 34dvh; }
+  .series-dialog { padding: 12px; } .series-dialog h2 { font-size: 22px; }
 }

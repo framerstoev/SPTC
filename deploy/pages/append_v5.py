@@ -23,8 +23,8 @@ def append(artifact: Path, repo: Path | None = None):
     assert approval['authorization']['reference']=='8ff5010f-f105-4b16-ac16-2b033ebfa2d1'
     assert approval['authorization']['independently_verified_license_exception'] is False
     files = {p.relative_to(source).as_posix(): p for p in source.rglob('*') if p.is_file()}
-    assert len(files)==manifest['file_count']==9617 and set(files)==set(manifest['files'])
-    presentation_assets = {"data/v5p/relative.json", "data/v5q/short-gaps.json", "data/v5t/percentiles.json"}
+    assert len(files)==manifest['file_count']==9616 and set(files)==set(manifest['files'])
+    presentation_assets = {"data/v5p/relative.json", "data/v5t/percentiles.json", "data/v5v/peak-loss.json"}
     assert set(approval["added_presentation_data"]) == presentation_assets
     assert presentation_assets <= set(files)
     assert not any(p.is_symlink() for p in source.rglob('*'))

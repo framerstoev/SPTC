@@ -67,22 +67,7 @@
     return direction + " " + tail.toFixed(digits) + "%";
   }
 
-  function placeInfo(popup, button) {
-    const header = button.closest(".v5s-header").getBoundingClientRect();
-    const anchor = button.getBoundingClientRect();
-    const edge = 8;
-    const viewportWidth = document.documentElement.clientWidth;
-    const width = Math.min(248, viewportWidth - 2 * edge);
-    popup.style.left = Math.max(edge, Math.min(anchor.right - width, viewportWidth - width - edge)) + "px";
-    const below = window.innerHeight - header.bottom - 2 * edge;
-    const above = header.top - 2 * edge;
-    const useAbove = below < 150 && above > below;
-    popup.style.top = useAbove ? "auto" : header.bottom + edge + "px";
-    popup.style.bottom = useAbove ? window.innerHeight - header.top + edge + "px" : "auto";
-    popup.style.maxHeight = Math.max(0, useAbove ? above : below) + "px";
-  }
-
-  function classCard(row, name, title, metric, cls, rank) {
+  function classCard(name, cls, rank) {
     const badge = T("div", "", "v5s-class");
     const rated = Number.isInteger(cls) && cls >= 1 && cls <= 5 && Number.isFinite(rank);
     const relative = rated ? standing(rank) : null;
@@ -96,41 +81,6 @@
       badge.append(T("strong", "Not rated", "v5t-unrated"));
     }
 
-    const id = "standing-info-" + metric;
-    const button = T("button", "", "v5t-info");
-    button.type = "button";
-    button.setAttribute("aria-label", "About " + title);
-    button.setAttribute("popovertarget", id);
-    const mark = T("span", "i");
-    mark.setAttribute("aria-hidden", "true");
-    button.append(mark);
-
-    const popup = T("div", "", "v5t-standing-info");
-    popup.id = id;
-    popup.tabIndex = -1;
-    popup.setAttribute("popover", "auto");
-    popup.setAttribute("autofocus", "");
-    popup.setAttribute("role", "group");
-    popup.setAttribute("aria-labelledby", id + "-title");
-    popup.setAttribute("aria-describedby", id + "-content");
-    const heading = T("strong", title);
-    heading.id = id + "-title";
-    const content = T("div", "");
-    content.id = id + "-content";
-    const index = decimal(V4Core.value(row, metric));
-    content.append(keyValues([
-      ["Original index", index ?? "Unavailable"],
-      ["Relative standing", relative],
-      ["Reference", rated ? "3,097 qualified Beryl roads" : null]
-    ]), T("p", rated ? (metric === "potential" ? "Based on storm exposure and network conditions." :
-      "Based on average positive speed loss during qualified storm-period hours.") :
-      "This road is outside the qualified comparison group."));
-    popup.append(heading, content);
-
-    popup.addEventListener("beforetoggle", event => {
-      if (event.newState === "open") placeInfo(popup, button);
-    });
-    badge.append(button, popup);
     return badge;
   }
 
@@ -144,56 +94,29 @@
     const pair = row.v5p;
     const grid = T("div", "", "v5s-class-pair");
     grid.append(
-      classCard(row, "Planning", "Planning Potential", "potential", pair?.planning_class, pair?.percentiles?.[0]),
-      classCard(row, "Observed", "Observed Traffic Performance", "o1a", pair?.observation_class, pair?.percentiles?.[1])
+      classCard("Planning", pair?.planning_class, pair?.percentiles?.[0]),
+      classCard("Observed", pair?.observation_class, pair?.percentiles?.[1])
     );
-    host.append(grid, T("span", "Relative standing", "v5s-relative-label"));
+    host.append(grid);
   }
 
-  root.addEventListener("resize", () => {
-    const popup = document.querySelector(".v5t-standing-info:popover-open");
-    if (popup) placeInfo(popup, popup.previousElementSibling);
-  });
-
-  function phaseReadout(data, row, which, meta = {}) {
+  function januaryPhase(data, row, meta) {
     const core = V4Core;
-    if (data.beryl && which === "o1b") {
-      const phase = row.o1b;
-      const qualified = phase.qualified_return_evidence;
-      const selected = phase.selected_episode;
-      return {
-        selected, qualified,
-        status: qualified ? "Slowdown detected · Threshold return observed" :
-          selected ? "Slowdown detected · Return not confirmed" : episodeStatus(data,row),
-        qualifier: selected && !qualified ? episodeStatus(data,row) : null,
-        minimum: selected ? phase.q_min_smoothed : null,
-        provisional: Boolean(phase.minimum_provisional_decline_incomplete),
-        loss: selected ? phase.raw_observed_row_loss_area : null,
-        score: core.value(row,"o1b_score"),
-        returned: core.value(row,"o1b_return"),
-        onset: phase.onset_time_UTC, minTime: phase.minimum_time_UTC
-      };
-    }
     const selected = V4Presentation.phaseValid(data,row);
-    const phase = data.beryl ? row.candidate_b : meta;
-    const evidence = selected ? V4Presentation.recoveryEvidence(data,row,phase) : null;
+    const evidence = selected ? V4Presentation.recoveryEvidence(data,row,meta) : null;
     const returned = selected && !meta.unavailable && !evidence.status ? core.mapValue(row,"recovery") : null;
-    const qualified = Number.isFinite(returned);
-    const status = selected ? (qualified ? (data.beryl ?
-      "Slowdown detected · Threshold return observed" : "Slowdown detected · Threshold return recorded") :
-      "Slowdown detected · Return not confirmed") :
-      (data.beryl ? "No qualifying historical slowdown identified" : episodeStatus(data,row));
+    const status = selected ? (Number.isFinite(returned) ? "Slowdown detected · Threshold return recorded" :
+      "Slowdown detected · Return not confirmed") : episodeStatus(data,row);
     return {
-      selected, qualified, status, qualifier: selected ? (meta.unavailable ? "Return evidence unavailable" : evidence.status) : null,
-      minimum: selected ? core.value(row,"minimum") : null, provisional: false,
+      selected, status, qualifier: selected ? (meta.unavailable ? "Return evidence unavailable" : evidence.status) : null,
+      minimum: selected ? core.value(row,"minimum") : null,
       loss: selected ? core.value(row,"loss") : null,
-      score: data.beryl ? core.value(row,"phase_score") : null,
-      returned, onset: phase?.onset_time, minTime: phase?.min_time
+      returned, onset: meta.onset_time, minTime: meta.min_time
     };
   }
 
-  function stamp(value, beryl) {
-    return value ? value.slice(0,16).replace("T"," ") + (beryl ? " UTC" : " local") : null;
+  function stamp(value) {
+    return value ? value.slice(0,16).replace("T"," ") + " local" : null;
   }
 
   function cumulative(value) {
@@ -204,80 +127,46 @@
     if (value === null) return;
     const card = T("div", "", "v5s-stat");
     card.dataset.metric = metric;
-    card.append(T("span",label), T("strong",value), T("small",context));
+    card.append(T("span",label), T("strong",value));
+    if (context) card.append(T("small",context));
     cards.append(card);
   }
 
-  function slowdownDetails(phase, beryl, minimum, qualifier) {
+  function slowdownDetails(phase) {
     const extra = details("Slowdown Details", "v5s-slowdown-details");
     extra.append(keyValues([
       ["Cumulative Speed Loss", cumulative(phase.loss)],
-      ["Slowdown Score", decimal(phase.score)],
-      ["Slowdown Started", stamp(phase.onset, beryl)],
-      ["Minimum Time", stamp(phase.minTime, beryl)],
-      ["Selected Minimum (provisional)", minimum],
-      ["Evidence", qualifier]
+      ["Slowdown Started", stamp(phase.onset)],
+      ["Minimum Time", stamp(phase.minTime)],
+      ["Evidence", phase.qualifier]
     ]));
     return extra;
   }
 
-  function berylObservation(row, host, phase) {
+  function berylObservation(data, row, host) {
     host.classList.add("v5u-observation");
     const performance = T("section", "", "v5u-performance");
-    const slowdown = T("section", "", "v5u-slowdown");
-    for (const [section, id, title] of [
-      [performance, "beryl-traffic-performance", "Traffic Performance"],
-      [slowdown, "beryl-slowdown-return", "Slowdown & Return"]
-    ]) {
-      const heading = T("h3", title, "evidence-heading");
-      heading.id = id;
-      section.setAttribute("aria-labelledby", id);
-      section.append(heading);
-    }
-    host.append(performance, slowdown);
-
-    const deficit = percent(V4Core.value(row, "o1a_deficit"));
-    const hasTraffic = row.full_observed_hours > 0;
-    if (deficit === null) {
-      performance.append(T("p", hasTraffic ? support(row) : "No valid traffic observations for this road",
-        "v5r-support"));
+    const heading = T("h3", "Traffic Performance", "evidence-heading");
+    heading.id = "beryl-traffic-performance";
+    performance.setAttribute("aria-labelledby", heading.id);
+    performance.append(heading);
+    const peak = percent(data.peakLossById?.get(row.id));
+    if (peak === null) {
+      performance.append(T("p", data.peakLossById ? "Insufficient data" : "Peak Speed Loss unavailable", "v5r-support"));
     } else {
       const cards = T("div", "", "v5s-observation-cards");
-      addObservationCard(cards, "Average Speed Loss", deficit, "Storm period", "o1a_deficit");
+      addObservationCard(cards, "Peak Speed Loss", peak, null, "peak_speed_loss");
       performance.append(cards);
     }
-
-    slowdown.append(T("p", hasTraffic ? phase.status : "Slowdown evidence unavailable", "v5r-status"));
-    if (!phase.selected) {
-      if (row.o1b.evidence_status === "no_eligible_sustained_drop_not_proof_of_no_impact") {
-        slowdown.append(T("p", "No qualifying episode measurements for this road.", "v5u-episode-note"));
-      }
-      return;
-    }
-
-    // Keep recorded minima visible when independent return evidence fails. An unfinished
-    // decline has a provisional minimum and retains its qualifier inside Details.
-    const cards = T("div", "", "v5s-observation-cards");
-    if (!phase.provisional) {
-      addObservationCard(cards, "Lowest Speed Ratio", decimal(phase.minimum), "Selected slowdown", "o1b_minimum");
-    }
-    addObservationCard(cards, "Threshold Return", hours(phase.returned), "Observed threshold return", "o1b_return");
-    if (cards.childElementCount) slowdown.append(cards);
-    const evidenceNotes = {
-      row_based_sampling_ambiguous_onset_or_return: "Gaps between observations",
-      right_censored_incomplete_decline: "Slowdown still in progress at the end of follow-up",
-      right_censored_no_supported_return: "Follow-up ended before a supported return"
-    };
-    slowdown.append(slowdownDetails(phase, true, phase.provisional ? decimal(phase.minimum) : null,
-      evidenceNotes[row.o1b.evidence_status] ?? phase.qualifier));
+    host.append(performance);
   }
 
   function observation(data, row, host, meta = {}) {
-    const phase = phaseReadout(data, row, data.beryl ? "o1b" : "b4", meta);
     if (data.beryl) {
-      berylObservation(row, host, phase);
+      berylObservation(data, row, host);
       return;
     }
+    const phase = januaryPhase(data, row, meta);
 
     const score = V4Core.value(row, V4J.primary(data));
     host.append(T("h3", "Traffic Performance", "evidence-heading"));
@@ -290,21 +179,7 @@
     addObservationCard(cards, "Threshold Return", hours(phase.returned), "From the selected minimum", "recovery");
     if (cards.childElementCount) host.append(cards);
     host.append(T("p", phase.status, "v5r-status"));
-    if (phase.selected) host.append(slowdownDetails(phase, false, null, phase.qualifier));
-  }
-
-  function analysis(data,row,which,meta) {
-    const phase = phaseReadout(data,row,which,meta);
-    const group = T("section","","v5s-phase-readout");
-    group.append(T("p",phase.status,"v5r-status"), keyValues([
-      ["Lowest Speed Ratio" + (phase.provisional ? " (provisional)" : ""), decimal(phase.minimum)],
-      ["Cumulative Speed Loss", cumulative(phase.loss)],
-      ["Threshold Return", hours(phase.returned)],
-      ["Slowdown Started", stamp(phase.onset,data.beryl)],
-      ["Minimum Time", stamp(phase.minTime,data.beryl)],
-      ["Evidence",phase.qualifier]
-    ]));
-    return group;
+    if (phase.selected) host.append(slowdownDetails(phase));
   }
 
   function fallback(state) {
@@ -327,11 +202,10 @@
     metric.note = definition || (metric.kind === "category" ? "Slowdown, return and observation support." : metric.label);
     if (metric.key === "gust") metric.note = "Highest modeled gust along the road during the weather window.";
     if (metric.key === "o1a") metric.note = "Average speed performance during the hurricane period, for roads with sufficient data.";
-    if (metric.key === "o1a_deficit") metric.note = "Average speed loss relative to typical speeds in the event window.";
     if (!beryl && metric.key === "observed") metric.note = "Performance during the selected slowdown period.";
     return metric;
   }
 
-  root.V5R = Object.freeze({relativeHeader, observation, analysis, episodeStatus,
+  root.V5R = Object.freeze({relativeHeader, observation, episodeStatus,
     support, keyValues, docLink, details, fallback, metricCopy});
 })(window);

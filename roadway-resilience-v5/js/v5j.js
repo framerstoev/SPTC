@@ -10,7 +10,7 @@
     if (names[metric.key]) metric.label = names[metric.key];
     if (metric.key === (beryl ? "o1a" : "observed")) { metric.label = "Observed Traffic Performance"; metric.cardLabel = metric.label; }
     if (beryl) {
-      const aliases = {o1a_deficit:"Average Speed Loss", observed:"Core Average Speed Ratio", o1b_score:"Slowdown Episode Score", o1b_minimum:"Minimum Q", o1b_loss:"Loss Area", o1b_return:"Recovery", o1b_status:"Slowdown Evidence", phase_score:"Original Full-History Score"};
+      const aliases = {observed:"Core Average Speed Ratio", o1b_score:"Slowdown Episode Score", o1b_minimum:"Minimum Q", o1b_loss:"Loss Area", o1b_return:"Recovery", o1b_status:"Slowdown Evidence", phase_score:"Original Full-History Score"};
       if (aliases[metric.key]) metric.label = aliases[metric.key];
       if (["o1a", "o1b_score", "observed", "phase_score"].includes(metric.key)) metric.default = metric.key === "o1a";
     }
@@ -87,40 +87,29 @@
       // January's phase-reference and warning flags come from the lazy curve payload.
       if (data.beryl || !row.has_curve) showSummary();
     }
-    const methods = R.docLink(data,"Methods and sources","curves");
     if (!row.has_curve) {
       if (!inspector) host.append(T("p","No traffic history for this road.","curve-status"));
-      host.append(methods);
       return;
     }
-    const which = data.beryl ? V4O1.context(store) : "b4";
-    const valid = data.beryl ? V4O1.valid(row,which) : V4Presentation.phaseValid(data,row);
+    const valid = data.beryl ? row.o1b.selected_episode : V4Presentation.phaseValid(data,row);
     if (!large) host.append(T(inspector?"h3":"h2","Traffic Performance Over Time",inspector?"evidence-heading":"module-title"));
     const controls = T("div","","series-ranges");
-    const addChoice = (container, key, value, label, active, patch) => {
+    for (const [range,label] of [["event",data.beryl?"Hurricane Period":"Event Period"],["full","Full History"]]) {
       const button = T("button",label,"outline-button");
       button.type = "button";
-      button.dataset[key] = value;
-      button.setAttribute("aria-pressed",String(active));
-      button.addEventListener("click",()=>store.set(patch));
-      container.append(button);
-    };
-    for (const [range,label] of [["event",data.beryl?"Hurricane Period":"Event Period"],["full","Full History"]]) {
-      addChoice(controls,"seriesRange",range,label,store.get().seriesRange===range,{seriesRange:range});
+      button.dataset.seriesRange = range;
+      button.setAttribute("aria-pressed",String(store.get().seriesRange === range));
+      button.addEventListener("click",()=>store.set({seriesRange:range}));
+      controls.append(button);
     }
-    const gapControl = data.beryl ? root.V5Q.connectionControl(controls) : null;
     const wrap = T("div","","chart-wrap"+(large?" expanded-chart":""));
     const canvas = document.createElement("canvas");
     canvas.setAttribute("role","img");
     canvas.setAttribute("aria-label","Traffic Performance Over Time");
     wrap.append(canvas);
     const message = T("p","Loading traffic history…","curve-status");
-    const jump = T("button","Show Selected Slowdown ↗","text-action phase-jump");
-    jump.type = "button";
-    jump.dataset.phaseJump = "true";
-    jump.hidden = true;
-    jump.addEventListener("click",()=>store.set({seriesRange:"phase"}));
-    host.append(controls,jump,wrap,message);
+    message.setAttribute("role","status");
+    host.append(controls,wrap,message);
     if (!large) {
       const expand = T("button","Expand Traffic History ↗","outline-button");
       expand.type = "button";
@@ -131,39 +120,15 @@
       });
       host.append(expand);
     }
-    const analysis = T("section","","v5s-analysis");
-    const readout = T("div","","v5s-readout");
-    const comparison = data.beryl && row.o1b.selected_episode && row.candidate_b.valid;
-    if (!inspector || comparison) {
-      analysis.append(T("h3",inspector ? "Chart Phase" : "Slowdown Analysis"));
-      if (comparison) {
-        const buttons = T("div","","series-ranges");
-        for (const [value,label] of [["o1b","Event Slowdown"],["b4","Historical Slowdown"]]) {
-          addChoice(buttons,"phaseContext",value,label,which===value,{seriesPhaseContext:value,seriesRange:"event"});
-        }
-        analysis.append(buttons);
-      } else if (data.beryl && which === "b4") {
-        analysis.append(T("p","Historical Slowdown","v5r-context"));
-      }
-      if (!inspector) analysis.append(readout);
-      host.append(analysis);
-    }
-    host.append(methods);
-    Promise.all([V4Data.curve(data,row.id), gapControl ? root.V5Q.gapIndex() : null]).then(([original,index])=>{
+    V4Data.curve(data,row.id).then(original=>{
       if (!current() || !canvas.isConnected) return;
-      const payload = data.beryl ? V4O1.payload(original,row,which) : original;
-      const chart = V4Charts.draw(canvas,payload,row,{data,range:store.get().seriesRange||"event",phaseValid:valid,gapControl,index,original});
+      const payload = data.beryl ? V4O1.eventPayload(original,row) : original;
+      const chart = V4Charts.draw(canvas,payload,row,{data,range:store.get().seriesRange,phaseValid:valid});
       chart.options.scales.y.title.text = "Speed Ratio";
       chart.update("none");
       receive(chart);
-      const meta = payload.metadata || {};
-      const dates = [meta.onset_time,meta.min_time,meta.recovery_end_time].filter(Boolean).map(V4Charts.clock);
-      jump.hidden = !valid || !dates.some(t=>t<chart.scales.x.min||t>chart.scales.x.max);
-      const observed = chart.data.datasets[0].data.filter(point=>Number.isFinite(point.y));
-      const inView = observed.filter(point=>point.x>=chart.scales.x.min&&point.x<=chart.scales.x.max).length;
-      message.textContent = inView ? inView.toLocaleString("en-US")+" observations in view" : "No observations in this view";
-      if (inspector && !data.beryl) showSummary(meta);
-      if (!inspector) readout.replaceChildren(R.analysis(data,row,which,meta));
+      if (inspector && !data.beryl) showSummary(payload.metadata || {});
+      message.remove();
     }).catch(()=>{
       if (!current()) return;
       wrap.hidden = true;
@@ -175,11 +140,15 @@
   function docs(sections,event) {
     const beryl=event==="beryl_2024_07",set=(id,title,paragraphs)=>{const old=sections.find(s=>s[0]===id);if(old){old[1]=title;old[2]=paragraphs;}else sections.push([id,title,paragraphs]);};
     set("quick-start","Quick Start",["Both maps open with Planning — Potential Resilience Score and Observation — Observed Traffic Performance. Layers opens the shared left-side metric panel; its reset restores event-specific defaults without changing the selected road or camera. Both views and the Layers panel are independently collapsible. Legend details expand on request.","Overview contains event/area selection, the only road search and economic summary with Area details. The shared left-side Layers panel uses the existing registry and selection state; the map headers contain no metric selectors. Existing panel resizing and Inspector dragging/resizing remain available."]);
-    set("interface","Interface and Information Hierarchy",["Layers is the only map-metric selection workflow. Planning, Observation, Slowdown & Recovery, Mobility Impact and Advanced Analysis preserve all existing layers. A selected road, camera, county and contextual overlays survive metric changes. Event switching resets metrics to valid event-specific defaults.","The road header shows separate relative classes and empirical percentiles for Planning and Observation among the same 3,097 qualified Beryl roads. Each information button opens its original index. Map colors use their own fixed numerical classes. Beryl's Traffic Performance section reports qualified storm-period speed loss. Slowdown & Return reports separate evidence from the selected episode, including threshold return when supported. The Time Series links to the methodology. Docs retain complete scientific caveats. Keyboard users can open Layers, navigate metric radio buttons with arrows, expand native details and close the panel with Escape."]);
+    set("interface","Interface and Information Hierarchy",["Use Layers to change either map metric. A selected road, camera, county and contextual overlays survive metric changes. Event switching restores each event's defaults.","The Beryl road header shows Planning Class, Observed Class and their percentiles. The Inspector shows Peak Speed Loss and observed traffic history. Slowdown and return metrics remain available in Layers. Keyboard users can navigate layer choices with the arrow keys and close dialogs with Escape."]);
     set("observed","Observed Traffic Performance — Event-Specific Definitions",["The common UI name is a presentation umbrella, not an identical scientific estimand or cross-event numerical calibration. January reads original Candidate B selected-phase observed_curve_resilience_score_v0, a normalized performance-loss score for the selected sustained decline. It is not event-window mean Q. Its original source eligibility and quantile classes remain unchanged.","Beryl defaults to accepted O1-A primary_qualified_performance_index: one minus mean positive baseline-relative speed-ratio deficit over qualified observed July 7–9 native-local core hours. Exactly 3,097 qualified values retain original G75-D12-G12 qualification, mixed-clock uncertainty and missingness. It is not a complete resilience-and-recovery score.","Beryl O1-B remains secondary event-anchored slowdown and threshold-return evidence in Slowdown & Recovery: 1,464 selected episodes, 943 qualified numeric cases, 707 strong full-continuity cases. Its Slowdown Episode Score is in Advanced Analysis; Minimum Q, Loss Area and Recovery remain in Slowdown & Recovery with their existing gates. Recovery is time to observed threshold return, not infrastructure repair. Historical B4 retains 3,805 full-period scores in Advanced."]);
-    set("observation-menu","Observation Layers",["Primary Performance uses event-specific accepted fields: January observed_curve_resilience_score_v0; Beryl o1a.primary_qualified_performance_index. Advanced Analysis preserves Average Speed Loss in Beryl, reading o1a.core_deficit_raw_conditional with the existing primary qualification; no new loss quantity is calculated for January.","Beryl Slowdown & Recovery reads o1b.qualified_observed_return_episode_score, o1b.q_min_smoothed, o1b.raw_observed_row_loss_area and o1b.minimum_to_endpoint_elapsed_hours, all with qualified_return_evidence. January's Minimum Q, Loss Area and Recovery keep their original Candidate B sources. January's Performance Score is the same primary layer, so it is not duplicated as another radio button."]);
+    set("observation-menu","Observation Layers",["Primary Performance uses event-specific accepted fields: January observed_curve_resilience_score_v0; Beryl o1a.primary_qualified_performance_index.","Beryl Slowdown & Recovery uses the event-anchored selected slowdown and qualified return evidence. January's Minimum Q, Loss Area and Recovery keep their original Candidate B sources."]);
     set("compare","Planning and Observation",["Planning Potential and observed traffic measures are different constructs. Differences are not calibrated prediction errors, residuals, or investment recommendations. Neither a common name nor a common palette implies identical equations, event windows, support populations or recovery treatment.","Beryl Impact Focus preserves V5H's 827-member weather/selected-episode screen, including 22 remote rainfall overlaps. Only 485 of those 827 roads have qualified O1-A numeric performance; 342 remain unavailable in the primary performance layer. These differ from the 559 focused O1-B qualified episode values. The existing 943 O1-B total, 3,097 O1-A total and focus population must not be conflated. Common Support is an independent numerical-pairing mask; enabling either mask explicitly turns the other off."]);
-    set("curves","Traffic Performance Over Time",["Event Period (January), Hurricane Period (Beryl) and Full History are display viewports only. Original raw Q(t), smoothed arrays, null gaps, Q0 and phase timestamps are read unchanged using the existing chart renderer. January retains its delivered TMC-local labels; Beryl retains the source UTC axis and native-local onset interpretation.","Advanced / Compare Episodes exposes Beryl Event Slowdown (O1-B July 7–9 onset, July 17 exclusive follow-up) and Historical Slowdown (original B4 full-acquisition selection). January retains its original Candidate B selection. Show Selected Slowdown reveals later endpoints without moving analytical boundaries or inventing returns."]);
+    if (beryl) set("peak-speed-loss", "Peak Speed Loss and Road Comparison", [
+      "Peak Speed Loss is 100 × max(0, 1 minus the lowest three-hour median speed ratio). Every window requires three consecutive valid observed hours entirely within July 7–9 in the source's local clock. It uses the original hourly ratios, core coverage qualification and one resolved clock. Selected slowdowns and return have separate rules.",
+      "The Beryl research comparison pairs Planning Class with Peak-Loss Class on a fixed set of 3,097 roads. Greater peak loss gives lower relative standing, with identical values sharing a midrank. Class Difference is Peak-Loss Class minus Planning Class. The Inspector Observed Class ranks average storm-period performance."
+    ]);
+    set("curves","Traffic Performance Over Time",["Event Period (January), Hurricane Period (Beryl) and Full History are display viewports only. Original raw Q(t), smoothed arrays and null gaps stay intact. January retains its delivered TMC-local labels. Beryl retains the source UTC axis and native-local onset interpretation.","Beryl charts use the accepted event-anchored onset, minimum and return or censoring endpoint for a selected event episode. Markers are visible within the displayed range. Historical B4 metrics remain in Layers and the research record. January retains its original Candidate B markers."]);
     set("version","V5L Local Visual Review",["V5L continues verified V5K with shared visual semantics and compact scientific legends. Search and area economics live only in Overview; all metric selection uses the shared left Layers panel. The top search row, bottom economic strip and upper-right Layers control are removed. Explicit valid event URLs start collapsed; missing/unknown event requests open Overview with the existing January fallback. Manual panel choices stay open. Existing resizing is preserved. Accepted source fields, science, geometry, eligibility, classifications, weather-focus membership, AADT, economic results, public January V4 and research freezes are unchanged. No publication, deployment or Git mutation is part of this phase."]);
     set("visual-system","Scientific Colors and Legend Details",[
       "Both events use one legend component. Default legends show the metric, color symbols, qualitative direction and Details. Details shows full-precision class intervals, units, availability and qualification. A shared boundary belongs to the lower class; values below/above the outer bounds retain the original first/last class. Fixed classes and original January supported-sample quantiles are not recalculated or aligned across events.",
@@ -190,7 +159,7 @@
       "TAMU structural tokens are Aggie Maroon #500000, Warm Neutral #D6D3C4 and Light Surface #F7F5F2. They style navigation, active controls, panels and focus outlines independently of scientific road colors."
     ]);
     set("sources","Sources and Provenance",["Accepted TxDOT geometry/network context, PRISM weather, NPMRDS-derived traffic and expected-demand economic results retain their original hashes and vintage. Beryl additionally retains ERA5 and NHC context. Raw probe records and economic ledgers are not served. Beryl remains local research preview; January retains its separate public-release record.","PRISM Group, Oregon State University, https://prism.oregonstate.edu. January temperature uses D2 release 8; original precipitation keeps its frozen release. The original access date remains unrecorded in available provenance; none is invented. Fixed AADT is not event-day traffic and uses mixed 2001–2024 inventory years, with per-CS years unavailable."]);
-    if(!beryl)set("layers","January Layers and Scientific Aliases",["Observed Traffic Performance reads original January selected-phase Score. Slowdown & Recovery exposes the original Minimum Q, Loss Area and Recovery; Performance Score is the existing primary performance layer. Loss Area is observed-row Q-hours, not monetary loss. Accepted censored scores remain eligible where the original contract allows them; return status remains qualified.","Planning, Storm Exposure, Network Risk, Rainfall, AADT, mobility metrics and experimental temperature keep their original fields, units and classifications. AADT remains a main Planning card. Temperature stays separate from WEATHER_REI. No standalone Average Speed Loss is fabricated for January."]);
+    if(!beryl)set("layers","January Layers and Scientific Aliases",["Observed Traffic Performance reads original January selected-phase Score. Slowdown & Recovery exposes the original Minimum Q, Loss Area and Recovery; Performance Score is the existing primary performance layer. Loss Area is observed-row Q-hours, not monetary loss. Accepted censored scores remain eligible where the original contract allows them; return status remains qualified.","Planning, Storm Exposure, Network Risk, Rainfall, AADT, mobility metrics and experimental temperature keep their original fields, units and classifications. AADT remains a main Planning card. Temperature stays separate from WEATHER_REI."]);
   }
   root.V4J=Object.freeze({side,primary,title,status,metric,layers,planning,evidence,docs,methodLink});
 })(window);

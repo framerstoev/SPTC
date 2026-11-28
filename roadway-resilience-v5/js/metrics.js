@@ -9,7 +9,7 @@
   const score = ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"];
   const berylScore = ["#B2182B", "#E87D65", "#D49B98", "#6FA6CF", "#2166AC"];
   const observationGroups = [
-    { label: "Additional Traffic Analysis", keys: ["o1a", "o1a_deficit", "observed", "o1b_status"], advanced: [] },
+    { label: "Additional Traffic Analysis", keys: ["o1a", "observed", "o1b_status"], advanced: [] },
     { label: "Advanced / Research", keys: [], advanced: ["phase_score", "minimum", "loss", "recovery"] }
   ];
   const risk = ["#edf3ed", "#c4d5c2", "#9caf8e", "#c1a569", "#aa7543"];
@@ -69,7 +69,7 @@
   };
   function forEvent(eventId) {
     const isBeryl = eventId === "beryl_2024_07", entries = isBeryl ? { ...beryl, ...root.V4O1.metrics(score) } : january;
-    return Object.fromEntries(Object.entries(entries).map(([key, item]) => {
+    return Object.fromEntries(Object.entries(entries).filter(([key]) => key !== "o1a_deficit").map(([key, item]) => {
       const metric = { key, eventId, available: true, nullSemantics: "Unavailable source support; genuine zero remains zero", population: isBeryl ? "Beryl 5,763-CS working domain; support varies by field" : "January 10,029-CS planning catalog; observed/economic support varies", ...common[key], ...item };
       if (isBeryl && key === "observed") { metric.default = false; metric.subtitle = "July 7–9 native-local core · Q=1 baseline"; }
       if (isBeryl && key === "observed") metric.subtitle = "Beryl event-core traffic performance · Q ratio";
@@ -87,15 +87,13 @@
         const group = observationGroups.find(group=>[...group.keys,...group.advanced].includes(key));
         if(group){metric.observationGroup=group.label;metric.advanced=group.advanced.includes(key);metric.subgroup=group.label;}
         if(key==="o1a")metric.compareLabel="Event-Core Performance Index — O1-A";
-        if(key==="o1a_deficit")metric.compareLabel="Core Deficit — O1-A";
         if(key==="phase_score")metric.compareLabel="Full-Period Candidate B Score";
         const historicalLabels={minimum:"Full-Period Minimum Q",loss:"Full-Period Loss Area",recovery:"Full-Period Threshold Return Time"};
         if(historicalLabels[key]){metric.label=historicalLabels[key];metric.cardLabel=historicalLabels[key];}
         if(["potential","o1a","o1b_score","phase_score"].includes(key)){
           metric.ramp=[...berylScore];metric.note += " Fixed rose-centered Beryl score palette; source values and class boundaries unchanged.";
         }
-        if(key==="o1a_deficit"){metric.ramp=[...berylScore].reverse();metric.note+=" Rose-centered Beryl palette reversed: higher deficit red, lower deficit blue; source breaks unchanged.";}
-        const names={o1a:"Traffic Performance",o1a_deficit:"Average Speed Loss",observed:"Core Average Speed Ratio",o1b_status:"Slowdown Evidence",phase_score:"Original Full-History Score",o1b_score:"Slowdown Score",o1b_minimum:"Lowest Speed Ratio",o1b_loss:"Total Observed Slowdown",o1b_return:"Time to observed threshold return"};
+        const names={o1a:"Traffic Performance",observed:"Core Average Speed Ratio",o1b_status:"Slowdown Evidence",phase_score:"Original Full-History Score",o1b_score:"Slowdown Score",o1b_minimum:"Lowest Speed Ratio",o1b_loss:"Total Observed Slowdown",o1b_return:"Time to observed threshold return"};
         if(names[key])metric.label=names[key];
         if(key==="o1a")metric.default=false;
         if(key==="o1b_score")metric.default=true;

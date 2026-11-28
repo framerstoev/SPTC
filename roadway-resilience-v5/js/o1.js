@@ -63,10 +63,7 @@
     if (a.daily_eligibility_uncertain) return { label: "Mixed-clock qualification uncertain", color: "#967546", dash: "6 3" };
     return { label: a.G75_only_qualified ? "Additional qualification failed" : "Insufficient coverage", color: "#b2b8bd", dash: "3 4" };
   }
-  function context(store) { return store.get().seriesPhaseContext || (V4Core.metrics[store.get().observedLayer]?.family === "o1b" ? "o1b" : "b4"); }
-  function valid(row, which) { return which === "o1b" ? row.o1b.selected_episode : row.candidate_b.valid; }
-  function payload(original, row, which) {
-    if (which !== "o1b") return original;
+  function eventPayload(original, row) {
     const b = row.o1b;
     return { ...original, metadata: { core_start: original.metadata.core_start, core_end: original.metadata.core_end,
       onset_time: b.onset_time_UTC, min_time: b.minimum_time_UTC, recovery_end_time: b.return_or_censor_endpoint_UTC,
@@ -85,5 +82,5 @@
     set("version","V5G Local Presentation Review",["V5G organizes the accepted O1-V1 presentation, adds an honest common-support display mask, moves overlays outside the maps and changes only the authorized Beryl score colors. Frozen scientific outputs, all served scientific assets and published January are untouched. This is not a public release or deployment."]);
     const recovery=sections.find(s=>s[0]==="recovery");if(recovery)recovery[1]="Historical B4 Recovery Evidence";
   }
-  root.V4O1 = Object.freeze({ statuses, status, metrics, load, unavailable, context, valid, payload, docs });
+  root.V4O1 = Object.freeze({ statuses, status, metrics, load, unavailable, eventPayload, docs });
 })(window);

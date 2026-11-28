@@ -9,10 +9,9 @@
 .v5s-relative { flex: 1 1 136px; min-width: 0; display: grid; gap: 2px; }
 .v5s-class-pair { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px; }
 .v5s-class { border-top: 3px solid var(--class-color); border-radius: 3px; background: var(--paper); padding: 2px 4px; }
-.v5s-class span, .v5s-class small, .v5s-relative-label, .v5s-not-rated { display: block; line-height: 1.2; font-size: 9px; }
+.v5s-class span, .v5s-class small, .v5s-not-rated { display: block; line-height: 1.2; font-size: 9px; }
 .v5s-class span { text-transform: uppercase; color: var(--muted); font-weight: 650; }
 .v5s-class strong { display: block; color: var(--ink); font-size: 15px; line-height: 1.2; }
-.v5s-relative-label { text-align: right; color: var(--muted); }
 .v5s-not-rated { font-size: 12px; text-align: right; color: var(--muted); font-weight: 600; }
 .v5s-observation-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(82px,100%),1fr)); gap: 5px; margin: 6px 0; }
 .v5s-stat { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 6px; display: grid; grid-template-rows: 1fr auto auto; gap: 3px; min-width: 0; }
@@ -21,16 +20,9 @@
 .v5s-stat small { font-size: 9px; color: var(--muted); line-height: 1.25; }
 .v5s-slowdown-details { margin: 6px 0 12px; font-size: 12px; }
 .v5s-slowdown-details summary { color: #500000; cursor: pointer; font-weight: 600; }
-.v5s-analysis { margin: 8px 0; }
-.v5s-analysis h3 { margin: 0 0 5px; font-size: 14px; }
 
 .v5u-observation > section {
   padding-bottom: 6px;
-}
-
-.v5u-observation > section + section {
-  padding-top: 7px;
-  border-top: 1px solid var(--line);
 }
 
 .v5u-observation .evidence-heading {
@@ -58,23 +50,31 @@
   grid-column: 1 / -1;
 }
 
-.v5u-observation .v5s-slowdown-details {
-  margin: 5px 0 1px;
-}
-
-.v5u-observation .v5r-status,
-.v5u-observation .v5r-support {
-  margin: 0;
-}
-
-.v5u-episode-note {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-}
+.v5u-observation .v5r-support { margin: 0; }
 
 @media (max-width: 800px) {
   .v5u-observation .v5s-stat {
     max-inline-size: 180px;
   }
+}
+
+.comparison-datasets { margin-block-start: 16px; }
+.comparison-datasets h3 { margin: 0 0 6px; font-size: 14px; }
+.comparison-datasets button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.chart-wrap:has(.missing-hour-tooltip) { position: relative; }
+.missing-hour-tooltip {
+  position: absolute;
+  inset: 6px 6px auto auto;
+  max-width: calc(100% - 12px);
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  background: var(--white);
+  font-size: 11px;
+  pointer-events: none;
 }

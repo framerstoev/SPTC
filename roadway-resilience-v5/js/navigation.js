@@ -3,28 +3,46 @@
   "use strict";
   const modules=[
     ["overview","Overview","M4 4h16v16H4z M4 10h16 M10 10v10"],
-    ["analysis","Analysis","M5 20V12 M12 20V5 M19 20V9"],
     ["layers","Layers","m3 8 9-5 9 5-9 5z M3 12l9 5 9-5 M3 16l9 5 9-5"],
     ["timeseries","Time Series","M3 4v16h18 M5 14l4-5 4 7 6-11"],
     ["forecast","Forecast","M4 18l5-6 4 3 7-10 M15 5h5v5"],
     ["data","Data","M4 5h16v14H4z M4 10h16 M4 14h16 M10 5v14"],
     ["about","About","M12 10v7 M12 6v1 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"]
   ];
+  const normalizePanel = id => id === "analysis" ? "overview" : id;
   function create(data,store,actions){
     const T=V4Inspector.text,$=id=>document.getElementById(id),rail=$("moduleRail");let opener=null;
     function button(host,label,handler){const b=T("button",label,"outline-button");b.type="button";b.addEventListener("click",handler);host.append(b);return b;}
     function link(host,label,anchor){const a=T("a",label,"text-action");a.href=V4J.methodLink(data,anchor);host.append(a);return a;}
-    function open(id){if(id!==null&&!modules.some(m=>m[0]===id))return;if(id&&store.get().panel!==id)opener=document.activeElement;store.set({panel:id});if(id==="layers")requestAnimationFrame(()=>$("collapsePanel").focus());}
+    function open(id){id=normalizePanel(id);if(id!==null&&!modules.some(m=>m[0]===id))return;if(id&&store.get().panel!==id)opener=document.activeElement;store.set({panel:id});if(id==="layers")requestAnimationFrame(()=>$("collapsePanel").focus());}
     modules.forEach(([id,label,path])=>{const b=T("button");b.type="button";b.dataset.module=id;b.title=label;b.setAttribute("aria-label",label);b.setAttribute("aria-controls","contextPanel");b.setAttribute("aria-expanded","false");const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),line=document.createElementNS(svg.namespaceURI,"path");svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("aria-hidden","true");line.setAttribute("d",path);svg.append(line);b.append(svg,T("span",label));b.addEventListener("click",()=>open(store.get().panel===id?null:id));rail.append(b);});
     $("collapsePanel").addEventListener("click",()=>{const previous=store.get().panel;open(null);(opener?.isConnected?opener:rail.querySelector(`[data-module="${previous}"]`))?.focus();});
     $("contextPanel").addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();$("collapsePanel").click();}});
     $("layerGroups").addEventListener("keydown",e=>{if(!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;const owner=e.target.closest("fieldset");if(!owner)return;const buttons=[...owner.querySelectorAll("button:not(:disabled)")].filter(b=>b.getClientRects().length),i=buttons.indexOf(e.target);if(i<0)return;e.preventDefault();const n=e.key==="Home"?0:e.key==="End"?buttons.length-1:(i+(["ArrowDown","ArrowRight"].includes(e.key)?1:-1)+buttons.length)%buttons.length;buttons[n].click();buttons[n].focus();});
-    function analysis(){const h=$("module-analysis");h.replaceChildren(T("h2","Explore the result","module-title"));button(h,"Choose map layers",()=>open("layers"));button(h,"View traffic history",()=>open("timeseries"));button(h,"View mobility impact",actions.impact);link(h,"How to interpret the comparison","compare");}
     function about(){const h=$("module-about");h.replaceChildren(T("h2","Roadway Resilience Explorer","module-title"),T("p","SPTC \u00b7 Texas A&M Transportation Institute \u00b7 Texas A&M University.","panel-lead"));link(h,"Project, sources and limitations","introduction");}
     function forecast(){const h=$("module-forecast");h.replaceChildren(T("h2","Forecast","module-title"),T("p","Planned. No forecast model is available.","panel-lead"));link(h,"Research roadmap","forecast");}
     function overview(){const s=store.get();const selected=data.byId.get(s.selectedId),selection=$("overviewSelection");selection.replaceChildren(T("h2",selected?`CS_${selected.id}`:"Select a road","module-title"));if(selected){selection.append(T("p",`${selected.county_name} County`,"panel-lead"));button(selection,"Open road details",()=>actions.inspect("observed"));}else selection.append(T("p","Click a road or search by ID, route or county.","panel-lead"));}
-    function dataPanel(){const h=$("module-data");h.replaceChildren(T("h2","Data Availability","module-title"));const dl=T("dl","","coverage-list");for(const [label,value] of [["Road sections",data.rows.length],["Traffic histories",data.rows.filter(r=>r.has_curve).length],["Roads with performance scores",data.rows.filter(r=>V4Core.mapValue(r,V4J.primary(data))!==null).length],["Counties",data.counties.length]])dl.append(T("dt",label),T("dd",value.toLocaleString("en-US")));h.append(dl);link(h,"Sources, attribution and limitations","sources");}
-    function build(){analysis();V4J.layers(data,store,actions);about();forecast();dataPanel();}
+    function dataPanel(){
+      const host=$("module-data"), counts=T("dl","","coverage-list");
+      host.replaceChildren(T("h2","Data Availability","module-title"));
+      for(const [label,value] of [
+        ["Road sections",data.rows.length],
+        ["Traffic histories",data.rows.filter(row=>row.has_curve).length],
+        ["Roads with performance scores",data.rows.filter(row=>V4Core.mapValue(row,V4J.primary(data))!==null).length],
+        ["Counties",data.counties.length]
+      ]) counts.append(T("dt",label),T("dd",value.toLocaleString("en-US")));
+      host.append(counts);
+      link(host,"Sources, attribution and limitations","sources");
+      if(data.beryl){
+        const datasets=T("section","","comparison-datasets");
+        const placeholder=T("button","Planning–Observation Comparison","outline-button");
+        placeholder.type="button";
+        placeholder.disabled=true;
+        datasets.append(T("h3","Datasets"),placeholder);
+        host.append(datasets);
+      }
+    }
+    function build(){V4J.layers(data,store,actions);about();forecast();dataPanel();}
     build();
     function render(state,previous={}){
       if(state.eventId!==previous.eventId)build();
@@ -36,5 +54,5 @@
     }
     return {open,render,modules};
   }
-  root.V4Navigation=Object.freeze({create,modules});
+  root.V4Navigation=Object.freeze({create,modules,normalizePanel});
 })(window);

@@ -36,7 +36,6 @@ input[type=checkbox],input[type=radio] {accent-color:var(--aggie-maroon);}
 .planning-primary .metric-card strong {font-size:21px;}
 .planning-details {margin:15px 0;font-size:11px;line-height:1.7;}
 .planning-details summary {cursor:pointer;color:var(--aggie-maroon);padding:8px 0;}
-.phase-jump {margin:0 0 9px;color:var(--aggie-maroon);font-size:10px;}
 .series-ranges .outline-button {min-height:34px;}
 .docs-sidebar a[aria-current],.docs-nav a.active {color:var(--aggie-maroon);border-color:var(--aggie-maroon);}
 .comparison-intro {flex-wrap:wrap;gap:9px;align-items:center;}

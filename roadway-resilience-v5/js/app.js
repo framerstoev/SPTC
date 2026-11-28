@@ -1,7 +1,9 @@
 (async function () {
   "use strict";
   const C = V4Core, $ = id => document.getElementById(id);
-  const store = C.store({ eventId: "coldwave_2026_01", seriesRange: "event", commonSupport: false, impactFocus: false, displayModeNotice: "", trackVisible: true, workspace: "compare", planningVisible: true, observationVisible: true, evacuationVisible: false, panel: null, inspectorOpen: false, area: "texas", layer: "potential", planningLayer: "potential", observedLayer: "observed", temperatureWindow: "legacy_labels", selectedId: null, inspectorTab: "observed" }, V5R.fallback);
+  const store = C.store({ eventId: "coldwave_2026_01", seriesRange: "event", commonSupport: false, impactFocus: false, displayModeNotice: "", trackVisible: true, workspace: "compare", planningVisible: true, observationVisible: true, evacuationVisible: false, panel: null, inspectorOpen: false, area: "texas", layer: "potential", planningLayer: "potential", observedLayer: "observed", temperatureWindow: "legacy_labels", selectedId: null, inspectorTab: "observed" },
+    state => V5R.fallback({ ...state, panel: V4Navigation.normalizePanel(state.panel),
+      seriesRange: state.seriesRange === "full" ? "full" : "event" }));
   const empty = { mode: V4Data.PUBLIC, manifest: {}, rows: [], byId: new Map(), geometry: { type: "FeatureCollection", features: [] }, counties: [], countySummaries: {}, eventSummary: null, curveCache: new Map() };
   let data;
   try { data = await V4Events.load(new URL(location.href).searchParams.get("event")); } catch (error) {
@@ -12,7 +14,7 @@
   const requestedEvent = new URL(location.href).searchParams.get("event");
   const explicitEvent = ["coldwave_2026_01","beryl_2024_07"].includes(requestedEvent) && requestedEvent === data.eventId;
   let local = data.rows.length > 0, suspended = false, eventGeneration = 0;
-  V4Events.setMetrics(data); store.set({ eventId:data.eventId || "coldwave_2026_01", panel:explicitEvent ? null : "overview", seriesPhaseContext:data.beryl ? "o1b" : null, impactFocus:Boolean(data.beryl), ...V4Metrics.defaults(data.eventId || "coldwave_2026_01") });
+  V4Events.setMetrics(data); store.set({ eventId:data.eventId || "coldwave_2026_01", panel:explicitEvent ? null : "overview", impactFocus:Boolean(data.beryl), ...V4Metrics.defaults(data.eventId || "coldwave_2026_01") });
   function configureEventUI() {
     $("areaSelect").replaceChildren(new Option("Texas Study Area","texas"));
     data.counties.forEach(county => $("areaSelect").append(new Option(county.name,county.id)));
@@ -50,8 +52,7 @@
   const navigation = V4Navigation.create(data, store, {
     layer: chooseMetric,
     workspace,
-    inspect: tab => { if (store.get().selectedId) store.set({ inspectorTab: tab, inspectorOpen: true, panel: store.get().panel === "timeseries" ? null : store.get().panel }); else navigation.open("timeseries"); },
-    impact: showImpact
+    inspect: tab => { if (store.get().selectedId) store.set({ inspectorTab: tab, inspectorOpen: true, panel: store.get().panel === "timeseries" ? null : store.get().panel }); else navigation.open("timeseries"); }
   });
   const timeSeries = V4TimeSeries.create(data, store);
   function summary() { return store.get().area === "texas" ? data.eventSummary : data.countySummaries[store.get().area]; }
@@ -97,20 +98,19 @@
     const metric=C.metrics[key];if(!metric)return;
     const planning=["planning","hazard","network"].includes(metric.categoryId)&&!metric.temp;
     const side=planning ? "planningLayer" : "observedLayer";
-    const context = data.beryl && !planning ? {seriesPhaseContext:["phase_score","minimum","loss","recovery"].includes(key) ? "b4" : "o1b",seriesRange:"event"} : {};
-    store.set({layer:key,[side]:key,inspectorTab:V4Presentation.tabFor(key),[planning?"planningVisible":"observationVisible"]:true,...context,...(metric.kind==="category"?{commonSupport:false}:{})});
+    store.set({layer:key,[side]:key,inspectorTab:V4Presentation.tabFor(key),[planning?"planningVisible":"observationVisible"]:true,...(metric.kind==="category"?{commonSupport:false}:{})});
   }
   store.subscribe((state, old) => {
     if (suspended) return;
     if (state.planningVisible !== old.planningVisible || state.observationVisible !== old.observationVisible) renderViews(old);
-    if (["selectedId", "inspectorTab", "temperatureWindow", "inspectorOpen", "panel", "seriesRange", "seriesPhaseContext", "observedLayer", "planningLayer"].some(key => state[key] !== old[key])) {
+    if (["selectedId", "inspectorTab", "temperatureWindow", "inspectorOpen", "panel", "seriesRange", "observedLayer", "planningLayer"].some(key => state[key] !== old[key])) {
       inspector.render();
 
     }
     if (state.area !== old.area) { renderImpact(); maps.fit(); }
     if (["area", "layer", "planningLayer", "observedLayer", "temperatureWindow", "selectedId", "trackVisible", "evacuationVisible", "commonSupport", "impactFocus", "displayModeNotice"].some(k => state[k] !== old[k])) maps.render();
     navigation.render(state, old);
-    if (["selectedId","panel","seriesRange","seriesPhaseContext","observedLayer"].some(key=>state[key]!==old[key])) timeSeries.render();
+    if (["selectedId","panel","seriesRange"].some(key=>state[key]!==old[key])) timeSeries.render();
     V4Presentation.syncSelectors(data,store);
     renderHeader();
   });
@@ -127,7 +127,7 @@
       if (token !== eventGeneration) return;
       suspended=true;
       Object.keys(data).forEach(key=>delete data[key]);Object.assign(data,next);V4Events.setMetrics(data);local=data.rows.length>0;
-      store.set({eventId:id,area:"texas",selectedId:null,inspectorOpen:false,...V4Metrics.defaults(id),temperatureWindow:"legacy_labels",seriesRange:"event",seriesPhaseContext:next.beryl ? "o1b" : null,trackVisible:true,evacuationVisible:false,commonSupport:false,impactFocus:Boolean(next.beryl),displayModeNotice:""});
+      store.set({eventId:id,area:"texas",selectedId:null,inspectorOpen:false,...V4Metrics.defaults(id),temperatureWindow:"legacy_labels",seriesRange:"event",trackVisible:true,evacuationVisible:false,commonSupport:false,impactFocus:Boolean(next.beryl),displayModeNotice:""});
       suspended=false;configureEventUI();maps.refresh();renderViews();
       inspector.render();timeSeries.render();navigation.render(store.get(),{...store.get(),eventId:previous});
       input.value="";searchRows=[];closeSearch();renderImpact();renderHeader();maps.fit();
@@ -140,7 +140,7 @@
   }
   $("hazardSelect").addEventListener("change",event=>switchEvent(event.target.value === "hurricane" ? "beryl_2024_07" : "coldwave_2026_01"));
   $("eventSelect").addEventListener("change",event=>switchEvent(event.target.value));
-  $("resetComparison").addEventListener("click",()=>store.set({...V4Metrics.defaults(data.eventId),seriesRange:"event",seriesPhaseContext:data.beryl?"o1b":null,planningVisible:true,observationVisible:true}));
+  $("resetComparison").addEventListener("click",()=>store.set({...V4Metrics.defaults(data.eventId),seriesRange:"event",planningVisible:true,observationVisible:true}));
   $("commonSupport").addEventListener("change",event=>{if(data.beryl)store.set({commonSupport:event.target.checked,...(event.target.checked?{impactFocus:false,displayModeNotice:"Common Support on · Impact Focus off"}:{displayModeNotice:""})});});
   $("impactFocus").addEventListener("change",event=>{if(data.beryl)store.set({impactFocus:event.target.checked,...(event.target.checked?{commonSupport:false,displayModeNotice:"Impact Focus on · Common Support off"}:{displayModeNotice:""})});});
   for(const [kind,key] of [["track","trackVisible"],["evacuation","evacuationVisible"]]){

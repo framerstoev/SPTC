@@ -50,7 +50,7 @@
       const layer = L.geoJSON(data.geometry, { renderer, style: f => style(data.byId.get(String(f.properties.id)), name, range), onEachFeature(f, path) {
         const row = data.byId.get(String(f.properties.id)); byId.set(row.id, path);
         path.on("click", () => { if (visible(row)) select(row.id); });
-        path.bindTooltip(() => {
+        if (name !== "planning") path.bindTooltip(() => {
           const el = document.createElement("div"); const strong = document.createElement("strong"); strong.textContent = `CS_${row.id} · ${row.route || "Roadway"}`;
           const small = document.createElement("small"); small.textContent = `${row.county_name} County · ${C.format(C.mapValue(row, currentMetric(name), store.get().temperatureWindow))} ${C.metrics[currentMetric(name)].unit}`; el.append(strong, small); const metric=C.metrics[currentMetric(name)];if(metric.kind==="category")small.textContent=`${row.county_name} County · ${metric.categories.find(item=>item.value===V4Metrics.mapRaw(row,metric))?.label || "Unavailable"}`;else if(metric.family==="o1a"&&C.mapValue(row,metric.key)===null)small.textContent=`${row.county_name} County · ${root.V5R.support(row)}`; if (data.beryl && ["potential","o1a"].includes(metric.key)) {
             const value = C.mapValue(row, metric.key, store.get().temperatureWindow);

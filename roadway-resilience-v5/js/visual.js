@@ -81,6 +81,7 @@
     svg.append(line); node.append(svg); return node;
   }
   function renderLegend(box, { metric, range, rows, value, maskNote }) {
+    const beryl = metric.eventId === "beryl_2024_07";
     const previous = box.querySelector("details"), keepOpen = previous?.open && box.dataset.metric === metric.key && box.dataset.event === metric.eventId;
     box.dataset.metric = metric.key; box.dataset.event = metric.eventId;
     box.classList.toggle("o1-category-legend", metric.kind === "category");
@@ -93,13 +94,13 @@
         const symbol = mark(category.color, category.dash); symbol.title = category.label; strip.append(symbol);
       }
       summary.append(strip, T("span", "Return · uncertainty · data support", "legend-direction"));
-      body.append(T("p", "Scientific evidence categories; colors are not a numerical ranking."));
+      if (!beryl) body.append(T("p", "Scientific evidence categories; colors are not a numerical ranking."));
       for (const category of metric.categories) {
         const row = T("div", "", "legend-category-row"), description = T("div");
         description.append(T("strong", category.label), T("span", category.description));
         row.append(mark(category.color, category.dash), description, T("span", rows.filter(r => value(r) === category.value).length.toLocaleString("en-US"), "legend-count")); body.append(row);
       }
-      body.append(T("p", "No detected decline is distinct from insufficient or missing evidence. Censored and uncertain returns are not confirmed recovery."));
+      if (!beryl) body.append(T("p", "No detected decline is distinct from insufficient or missing evidence. Censored and uncertain returns are not confirmed recovery."));
     } else {
       // Reorder paired display classes only; map colors and numeric class indices stay intact.
       const displayClasses = metric.ramp.map((color, index) => ({ color, index }));
@@ -115,14 +116,19 @@
         const row = T("div", "", "legend-interval-row"), interval = `${i === 0 ? "[" : "("}${String(range[i])}, ${String(range[i + 1])}]`;
         row.append(mark(color), T("span", interval)); classes.append(row);
       });
-      body.append(classes, T("p", "Shared boundaries belong to the lower numeric class. Values below the first numeric bound use the first numeric class; above the last numeric bound use the last numeric class.", "legend-boundaries"));
-      body.append(T("p", metric.quantile ? "Original supported-event sample quantiles." : metric.breaks ? "Fixed source classification intervals." : "Original range-based classification intervals."));
+      body.append(classes);
+      if (!beryl) {
+        body.append(T("p", "Shared boundaries belong to the lower numeric class. Values below the first numeric bound use the first numeric class; above the last numeric bound use the last numeric class.", "legend-boundaries"));
+        body.append(T("p", metric.quantile ? "Original supported-event sample quantiles." : metric.breaks ? "Fixed source classification intervals." : "Original range-based classification intervals."));
+      }
       const qualification = metric.gate ? metric.family === "o1a" ? "Requires sufficient observed core hours, daily support and observation-gap coverage." : "Requires qualified onset and observed threshold-return evidence; uncertain or censored episodes remain unavailable here." : metric.mapEvidence ? "Requires clock-supported threshold-return evidence." : metric.requiresPhase ? "Requires the original selected-phase support. A censored endpoint is not confirmed recovery." : null;
-      if (qualification) body.append(T("p", qualification));
-      body.append(T("p", "Unavailable values have no quantitative stroke. Search, selection and source evidence remain available; unavailable does not mean zero or unaffected."));
+      if (!beryl) {
+        if (qualification) body.append(T("p", qualification));
+        body.append(T("p", "Unavailable values have no quantitative stroke. Search, selection and source evidence remain available; unavailable does not mean zero or unaffected."));
+      }
     }
     body.append(T("p", `${rows.filter(r => value(r) !== null).length.toLocaleString("en-US")} available / ${rows.length.toLocaleString("en-US")} roads in current view`, "legend-support"));
-    if (maskNote) body.append(T("p", maskNote));
+    if (maskNote) body.append(T("p", beryl ? (maskNote.startsWith("Impact Focus") ? "Impact Focus on" : "Common Support on") : maskNote));
     const link = T("a", "Methods and sources ↗", "text-action"); link.href = `./docs.html${metric.eventId === "beryl_2024_07" ? "?event=beryl_2024_07" : ""}#visual-system`; body.append(link);
     summary.append(T("span", "Details", "legend-details-label"));
     details.append(summary, body); box.replaceChildren(details);
